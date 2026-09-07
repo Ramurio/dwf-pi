@@ -72,6 +72,10 @@ function emitNode(graphId: string, node: Node, fn: (id: string) => string): stri
             if (typeof task !== "string") return yield* Effect.fail(new Error("Agent task must evaluate to a string"));
             const value = yield* attempt(() => node.input === undefined ? structuredClone(input) : evaluate(node.input, { input, nodes }));
             return yield* runtime.agent(context, node, task, value);`; break;
+    case "worktree": work = `const childInput = yield* attempt(() => evaluate(node.input, { input, nodes }));
+            return yield* runtime.worktree(context, node, childScope => ${fn(node.graphId)}(runtime, childInput, childScope));`; break;
+    case "integrate": work = `const sources = yield* attempt(() => evaluate(node.sources, { input, nodes }));
+            return yield* runtime.integrate(context, node, sources);`; break;
     case "check": work = "return yield* runtime.check(context, node);"; break;
     case "transform": case "end": work = "return yield* attempt(() => evaluate(node.value, { input, nodes }));"; break;
     case "branch": work = "return yield* attempt(() => node.input === undefined ? structuredClone(input) : evaluate(node.input, { input, nodes }));"; break;

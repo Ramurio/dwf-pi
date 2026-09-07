@@ -112,7 +112,8 @@ function checkNodeConfig(node: Node): void {
     case "agent": checkExpression(node.task); if (node.input) checkExpression(node.input); break;
     case "transform": case "end": checkExpression(node.value); break;
     case "branch": if (node.input) checkExpression(node.input); break;
-    case "subworkflow": checkExpression(node.input); break;
+    case "subworkflow": case "worktree": checkExpression(node.input); break;
+    case "integrate": checkExpression(node.sources); break;
     case "map": checkExpression(node.items); break;
     case "parallel": for (const child of node.children) checkExpression(child.input); break;
     case "check": break;
@@ -128,6 +129,7 @@ function checkExpression(expression: Expr): void {
     case "object": for (const child of Object.values(expression.fields)) checkExpression(child); return;
     case "array": case "all": case "any": for (const child of expression.items) checkExpression(child); return;
     case "get": case "not": case "exists": checkExpression(expression.value); return;
+    case "select": checkExpression(expression.when); checkExpression(expression.then); checkExpression(expression.otherwise); return;
     default: checkExpression(expression.left); checkExpression(expression.right);
   }
 }

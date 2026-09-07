@@ -38,6 +38,8 @@ snapshot до запуска. `parseWorkflow` валидирует, клонир
 | map | `graphId`, `items: Expr`, `concurrency?: positive integer` | Массив результатов дочернего графа в порядке исходных items |
 | parallel | `children: {id, graphId, input: Expr}[]`, `concurrency?: positive integer` | Объект с результатами по child ID |
 | subworkflow | `graphId`, `input: Expr` | Результат дочернего графа |
+| worktree | `graphId`, `input: Expr`, `base?: string` | `{result,workspace:{path,branch,base,head}}`; дочерний граф в отдельной Git-ветке |
+| integrate | `sources: Expr` | Явное слияние завершённых worktree-результатов этого run; фактический head и merged commits |
 | check | `command: string`, `args: string[]`, `cwd?: string` | Результат процесса; точную выходную форму закрепляет runtime |
 | end | `value: Expr` | Результат текущего графа |
 
@@ -80,6 +82,7 @@ Fan-out задаётся узлами map/parallel, а не нескольким
 { op: 'object', fields: Record<string, Expr> }
 { op: 'array', items: Expr[] }
 { op: 'get', value: Expr, path: string[] }
+{ op: 'select', when: Expr, then: Expr, otherwise: Expr }
 { op: 'eq' | 'ne' | 'gt' | 'gte' | 'lt' | 'lte', left: Expr, right: Expr }
 { op: 'all' | 'any', items: Expr[] }
 { op: 'not' | 'exists', value: Expr }
@@ -89,6 +92,9 @@ Fan-out задаётся узлами map/parallel, а не нескольким
 **последнего завершённого посещения** review в текущем экземпляре графа. Ссылка на
 несуществующий node ID отвергается. Ссылка на существующий, но ещё не завершённый
 узел разрешена в схеме — например, для guarded loop bindings через exists.
+`select` вычисляет только выбранную ветвь; `when` обязан быть boolean. Это позволяет
+передавать worker исходное задание в первом посещении, затем результат последнего
+review: `select(exists(nodes.review), nodes.review, input)` в форме AST выше.
 Поведение отсутствующего значения, типовые ошибки сравнения и strict boolean
 закрепляет evaluator; отсутствие нельзя молча заменять null. Путь — сегменты,
 поэтому точка внутри имени JSON-поля не является разделителем. Произвольный код,
@@ -127,9 +133,9 @@ bash и workspace-write, поскольку проверки могут писа
 от управляющих инструкций.
 
 Конфигурация с effective permission read-only и bash/edit/write отвергается с
-учётом defaults. Это проверка согласованности конфигурации; реальный filesystem
-sandbox, запрет path escape и process isolation должен обеспечить executor.
-Workspace-write нельзя гарантировать одним prompt или списком инструментов.
+учётом defaults. Workers работают отдельными процессами; permission profiles
+задают tools и инструкции, а не OS sandbox или запрет shell path escape.
+Worktrees координируют параллельные записи и интеграцию; sandbox не заявляется.
 Совместимость model/thinking проверяется по установленному каталогу pi перед
 запуском. В графе нет скрытых лимитов стоимости, времени, циклов или fan-out.
 
@@ -140,8 +146,8 @@ TypeBox authoring публикует `WorkflowSchema`, `ExprSchema`, `AgentConfi
 содержат только JSON: отклоняются undefined, NaN/Infinity, BigInt, функции,
 циклические объекты, sparse arrays, getters и нестандартные прототипы.
 `outputSchema` здесь проверяется как JSON-объект; поддерживаемые JSON Schema
-keywords и ссылки обязан валидировать runtime до запуска worker. Успешная graph
-validation пока не означает поддержку произвольного outputSchema исполнителем.
+keywords и ссылки проверяет execution-plan до запуска worker. Успешная graph
+validation сама по себе не означает поддержку произвольного outputSchema исполнителем.
 
 Проверки: `node --import tsx --test tests/graph.test.ts` и `npm run typecheck`.
 Тесты покрывают реальный repair loop, вложенный fan-out, отрицательные случаи

@@ -6,19 +6,29 @@
 
 ## Состояние
 
-Исследование и проверка pi + Effect выполнены, ответы пользователя получены.
-Работают authoring CLI, сохранение черновиков, валидатор, каталог ролей и компилятор.
-Сгенерированные программы проходят исполняемые тесты; настоящий pi вызван отдельно.
-Supervisor, pi backend графа, pause/resume, MCP, skill, presets и watch ещё в работе.
-Архитектурный черновик читать вместе с принятыми решениями.
+Работают графовый authoring, девять ролей, машинная генерация TS + Effect и отдельный
+supervisor с pi workers. Есть условия, циклы, динамический fan-out, вложенные графы,
+pause/resume/cancel, durable journal, CLI/MCP, переносимый skill, терминальный watch
+и проектные/глобальные пресеты. Граф и настройки фиксируются до запуска; закрытие
+клиента не останавливает выполнение.
+
+Настоящий Codex прошёл review→repair→review с паузой и возобновлением из другого
+клиента; Grok 4.6 проверен отдельным вызовом. Heavy ID не обнаружен в обновлённом
+каталоге аккаунта. Поддержка локальная, POSIX; модель выбирается из реального pi
+каталога. По умолчанию нет лимитов стоимости, итераций или обязательных согласований.
 
 - [Требования и критерии приёмки](docs/requirements.md)
 - [Вопросы и открытые решения](docs/questions.md)
 - [Ответы пользователя и принятые решения](docs/decisions.md)
 - [Архитектурное предложение](docs/architecture-proposal.md)
 - [Итоги и сравнительные исследования](docs/research/README.md)
-- [Состояние работы и следующий этап](docs/progress.md)
+- [Результаты реализации и проверок](docs/progress.md)
 - [Контракт графа](docs/graph-contract.md), [операции authoring](docs/authoring.md), [компилятор](docs/compiler.md)
+- [CLI/service](docs/service.md), [MCP](docs/mcp.md), [установка и skill](docs/setup.md)
+- [Диагностика и модели](docs/doctor.md), [Grok provider](docs/grok-provider.md)
+- [Пресеты](docs/presets.md), [терминальный watch](docs/watch.md), [council из четырёх reviewers](docs/examples.md)
+- [Execution plan](docs/execution-plan.md), [журнал](docs/run-journal.md), [pi worker](docs/pi-worker.md)
+- [Git worktree и интеграция](docs/workspaces.md), [live coding-проверка](docs/workspaces-live.md), [live MCP council](docs/council-live.md)
 
 ## Проверить локально
 
@@ -28,32 +38,56 @@ Supervisor, pi backend графа, pause/resume, MCP, skill, presets и watch е
 npm ci
 npm run typecheck
 npm test
-npm run --silent cli -- catalog.list
+npm run setup
+dynamicwf system.doctor
+dynamicwf catalog.models
 ```
 
+Установка создаёт ссылки на команду в `~/.local/bin` и skill в `~/.agents/skills`.
+Если bin directory отсутствует в PATH, используй напечатанный абсолютный путь.
+Harness может прочитать [SKILL.md](skills/dynamic-workflows/SKILL.md) напрямую или
+подключить `dynamicwf mcp` как stdio server. Специфичные настройки harness не меняются.
+
 CLI принимает один JSON-запрос через stdin и возвращает один JSON-ответ.
-Для машинного чтения используй `--silent`, чтобы npm не добавлял свой banner.
-По умолчанию черновики хранятся в `~/.dynamicwf/state.sqlite`; путь можно задать
+Без установки команда доступна как `npm run --silent cli -- <tool>`.
+По умолчанию черновики и run journal хранятся в `~/.dynamicwf/state.sqlite`; путь можно задать
 через `DYNAMICWF_HOME` или `--store /path/state.sqlite`.
 
 ```sh
-echo '{"id":"demo","name":"My workflow"}' | npm run --silent cli -- workflow.create
-echo '{"id":"demo"}' | npm run --silent cli -- workflow.inspect
-echo '{}' | npm run --silent cli -- workflow.schema
+echo '{"id":"demo","name":"My workflow"}' | dynamicwf workflow.create
+echo '{"id":"demo"}' | dynamicwf workflow.inspect
+echo '{}' | dynamicwf workflow.schema
 ```
 
 Примеры операций addNode/connect и цикл review→repair находятся в документации
 authoring. `workflow.validate` показывает ошибки незаконченного draft;
 `workflow.compile` принимает только завершённую корректную схему и возвращает source/hash.
-Команда запуска самого workflow пока не реализована.
+`workflow.prepare` показывает зафиксированные настройки. `run.start` принимает
+`{id,cwd,input}` и быстро возвращает run ID; `run.status`, `run.inspect`, `run.events`
+показывают фактическое состояние. `dynamicwf watch --run <id>` отображает граф.
+
+`run.pause` дожидается текущих workers, `run.resume` продолжает, `run.cancel`
+прерывает их. Завершённые checkpoints не повторяются при восстановлении.
+Неопределённые внешние эффекты после crash не запускаются заново молча.
+`preset.save {id:runId,name,scope}` сохраняет успешный план; `preset.run` повторяет
+его с новым input и новыми сессиями. Все запросы — JSON, не код оркестрации.
+
+Permission profiles ограничивают набор tools; это не OS sandbox. Выданный shell
+работает с правами локального пользователя. Review verdict привязан к переданной
+версии артефакта; автор обязан указать реальную версию проверяемых данных.
+Для параллельных coding-веток используй `worktree`, для слияния одобренных результатов
+— явный `integrate`. Исходный и целевой workspace должны быть чистыми Git roots;
+конфликт не считается успешной интеграцией. Ветки и результаты сохраняются.
 
 Live probe не входит в `npm test` и требует явно указать доступную модель:
 
 ```sh
 npm run probe:pi -- --provider openai-codex --model gpt-5.6-sol
+npm run probe:workflow -- --provider openai-codex --model gpt-5.6-sol
 ```
 
 Результат выполненного live probe и границы его доказательства — в
-[отчёте pi](docs/research/pi-live.md).
+[отчёте pi](docs/research/pi-live.md); сквозной запуск — в
+[отчёте workflow](docs/research/workflow-live.md).
 
 Проект самостоятельный. Соседний `remote-pi` не является его зависимостью.

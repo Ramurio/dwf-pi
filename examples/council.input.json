@@ -1,0 +1,18 @@
+{
+  "policy": "unanimous",
+  "artifact": {
+    "paths": [
+      "src",
+      "tests"
+    ],
+    "description": "Review the selected repository artifact. Replace paths and description with the actual review scope.",
+    "verificationEvidence": "Provide paths to actual test reports or other inspected verification evidence."
+  },
+  "artifactRevision": "REPLACE_WITH_REVIEWED_ARTIFACT_REVISION",
+  "acceptanceCriteriaRevision": "council-example-criteria-v1",
+  "acceptanceCriteria": [
+    "The requested behavior is implemented across the stated scope.",
+    "Changes preserve compatibility required by the project.",
+    "Verification evidence covers relevant acceptance criteria and regressions."
+  ]
+}

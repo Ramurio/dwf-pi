@@ -7,6 +7,14 @@ const literal = (value: import("../src/graph.js").Json): Expr => ({ op: "literal
 const ref = (...path: string[]): Expr => ({ op: "ref", path });
 const scope = { input: { question: "review", nested: [3, 7] }, nodes: { review: { decision: "request_changes" } } };
 
+test("select lazily binds initial input or the latest review without evaluating an absent branch", () => {
+  const expression: Expr = { op: "select", when: { op: "exists", value: ref("nodes", "review") },
+    then: ref("nodes", "review"), otherwise: ref("input") };
+  assert.deepEqual(evaluate(expression, { ...scope, nodes: {} }), scope.input);
+  assert.deepEqual(evaluate(expression, scope), scope.nodes.review);
+  assert.throws(() => evaluate({ ...expression, when: literal("true") }, scope), /boolean/);
+});
+
 test("bindings assemble independent JSON values from explicit inputs and completed outputs", () => {
   const output = evaluate({ op: "object", fields: {
     input: ref("input"), finding: ref("nodes", "review", "decision"),

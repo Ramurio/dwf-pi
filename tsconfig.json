@@ -11,5 +11,5 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "spikes/**/*.ts", "tests/**/*.ts"]
+  "include": ["src/**/*.ts", "spikes/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts"]
 }

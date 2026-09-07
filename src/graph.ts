@@ -9,6 +9,7 @@ export type Expr =
   | { op: "object"; fields: Record<string, Expr> }
   | { op: "array" | "all" | "any"; items: Expr[] }
   | { op: "get"; value: Expr; path: string[] }
+  | { op: "select"; when: Expr; then: Expr; otherwise: Expr }
   | { op: "eq" | "ne" | "gt" | "gte" | "lt" | "lte"; left: Expr; right: Expr }
   | { op: "not" | "exists"; value: Expr };
 export type Node = { id: string } & (
@@ -16,6 +17,8 @@ export type Node = { id: string } & (
   | { kind: "transform" | "end"; value: Expr }
   | { kind: "branch"; input?: Expr }
   | { kind: "subworkflow"; graphId: string; input: Expr }
+  | { kind: "worktree"; graphId: string; input: Expr; base?: string }
+  | { kind: "integrate"; sources: Expr }
   | { kind: "map"; graphId: string; items: Expr; concurrency?: number }
   | { kind: "parallel"; children: { id: string; graphId: string; input: Expr }[]; concurrency?: number }
   | { kind: "check"; command: string; args: string[]; cwd?: string }
@@ -38,6 +41,7 @@ const definitions = {
     tagged("literal", { value: json }), tagged("ref", { path: Type.Array(Type.String(), { minItems: 1 }) }),
     tagged("object", { fields: Type.Record(Type.String(), expr) }), tagged("array", { items: Type.Array(expr) }),
     tagged("get", { value: expr, path: Type.Array(Type.String()) }),
+    tagged("select", { when: expr, then: expr, otherwise: expr }),
     ...["eq", "ne", "gt", "gte", "lt", "lte"].map((op) => tagged(op, { left: expr, right: expr })),
     ...["all", "any"].map((op) => tagged(op, { items: Type.Array(expr) })),
     ...["not", "exists"].map((op) => tagged(op, { value: expr })),
@@ -47,6 +51,8 @@ const definitions = {
     node("transform", { value: expr }), node("end", { value: expr }),
     node("branch", { input: Type.Optional(expr) }),
     node("subworkflow", { graphId: id, input: expr }),
+    node("worktree", { graphId: id, input: expr, base: Type.Optional(Type.String({ minLength: 1, pattern: "^[^\\u0000]+$" })) }),
+    node("integrate", { sources: expr }),
     node("map", { graphId: id, items: expr, concurrency: Type.Optional(positiveInt) }),
     node("parallel", { children: Type.Array(Type.Object({ id, graphId: id, input: expr }, closed), { minItems: 1 }), concurrency: Type.Optional(positiveInt) }),
     node("check", { command: Type.String({ minLength: 1, pattern: "^[^\\u0000]+$" }), args: Type.Array(Type.String({ pattern: "^[^\\u0000]*$" })), cwd: Type.Optional(Type.String({ minLength: 1, pattern: "^[^\\u0000]+$" })) }),
@@ -104,7 +110,7 @@ export function validateWorkflow(value: unknown): ValidationResult {
     if (!nodes.has(graph.entry)) add(`${base}.entry`, "Entry node does not exist");
     for (const [i, item] of graph.nodes.entries()) {
       const path = `${base}.nodes[${i}]`;
-      if (item.kind === "subworkflow" || item.kind === "map") refs.add(item.graphId);
+      if (item.kind === "subworkflow" || item.kind === "map" || item.kind === "worktree") refs.add(item.graphId);
       if (item.kind === "parallel") {
         const childIds = new Set<string>();
         for (const [j, child] of item.children.entries()) {
@@ -175,7 +181,8 @@ function expressions(node: Node): Expr[] {
     case "agent": return node.input ? [node.task, node.input] : [node.task];
     case "transform": case "end": return [node.value];
     case "branch": return node.input ? [node.input] : [];
-    case "subworkflow": return [node.input];
+    case "subworkflow": case "worktree": return [node.input];
+    case "integrate": return [node.sources];
     case "map": return [node.items];
     case "parallel": return node.children.map((child) => child.input);
     case "check": return [];
@@ -191,6 +198,7 @@ function inspectExpr(expr: Expr, nodes: Map<string, Node>, path: string, add: (p
     case "object": for (const child of Object.values(expr.fields)) inspectExpr(child, nodes, path, add); return;
     case "array": case "all": case "any": for (const child of expr.items) inspectExpr(child, nodes, path, add); return;
     case "get": case "not": case "exists": inspectExpr(expr.value, nodes, path, add); return;
+    case "select": for (const child of [expr.when, expr.then, expr.otherwise]) inspectExpr(child, nodes, path, add); return;
     default: inspectExpr(expr.left, nodes, path, add); inspectExpr(expr.right, nodes, path, add);
   }
 }

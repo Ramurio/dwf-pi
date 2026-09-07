@@ -1,7 +1,7 @@
 # Authoring: блоки и связи как данные
 
-[`src/authoring.ts`](../src/authoring.ts) даёт общий in-process API для будущих CLI
-и MCP tools. Агент выбирает блоки, поля и связи. Циклы, scheduler и исполняемый код
+[`src/authoring.ts`](../src/authoring.ts) даёт общий in-process API для CLI
+и MCP tools через `WorkflowService`. Агент выбирает блоки, поля и связи. Циклы, scheduler и исполняемый код
 оркестрации агент не пишет.
 
 ```ts

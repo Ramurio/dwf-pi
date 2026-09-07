@@ -45,6 +45,8 @@ function recorder(agent?: WorkflowRuntime["agent"], check?: WorkflowRuntime["che
   const runtime: WorkflowRuntime = {
     step(context, work) { return Effect.suspend(() => { steps.push(structuredClone(context)); return work(); }); },
     agent: agent ?? (() => Effect.fail(new Error("Unexpected agent node"))),
+    worktree: () => Effect.fail(new Error("Unexpected worktree node")),
+    integrate: () => Effect.fail(new Error("Unexpected integrate node")),
     check: check ?? (() => Effect.fail(new Error("Unexpected check node"))),
   };
   return { runtime, steps };
@@ -106,15 +108,26 @@ test("map, parallel and subworkflow compile into real Effect concurrency with or
   const completed: string[] = [];
   let active = 0;
   let maxActive = 0;
+  let admitAll!: () => void;
+  const allAdmitted = new Promise<void>(resolve => { admitAll = resolve; });
+  const fastDone = new Map<string, { promise: Promise<void>; resolve: () => void }>();
+  for (const item of ["A", "B", "C"]) {
+    let release!: () => void;
+    const promise = new Promise<void>(resolve => { release = resolve; });
+    fastDone.set(item, { promise, resolve: release });
+  }
   const r = recorder((_context, _node, _task, input) => Effect.gen(function* () {
     assert.ok(input && !Array.isArray(input) && typeof input === "object");
     active++; maxActive = Math.max(maxActive, active);
-    yield* Effect.sleep(input.delay as number);
+    if (active === 6) admitAll();
+    yield* Effect.promise(() => allAdmitted);
+    if (input.label === "slow") yield* Effect.promise(() => fastDone.get(input.item as string)!.promise);
     completed.push(`${input.item}:${input.label}`);
+    if (input.label === "fast") fastDone.get(input.item as string)!.resolve();
     active--;
     return input;
   }));
-  const result = await Effect.runPromise(compiled.run(r.runtime, ["A", "B", "C"]));
+  const result = await Effect.runPromise(compiled.run(r.runtime, ["A", "B", "C"]).pipe(Effect.timeout("20 seconds")));
   assert.deepEqual(result, ["A", "B", "C"].map((item) => ({ slow: { item, delay: 20, label: "slow" }, fast: { item, delay: 1, label: "fast" } })));
   assert.equal(maxActive, 6, "map and default unbounded parallel overlap child execution");
   assert.ok(completed.indexOf("A:fast") < completed.indexOf("A:slow"));

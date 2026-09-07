@@ -1,0 +1,1078 @@
+{
+  "id": "review-council",
+  "expectedRevision": 1,
+  "operations": [
+    {
+      "op": "addGraph",
+      "graphId": "reviewer"
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "policy",
+        "kind": "branch",
+        "input": {
+          "op": "select",
+          "when": {
+            "op": "exists",
+            "value": {
+              "op": "ref",
+              "path": [
+                "input",
+                "policy"
+              ]
+            }
+          },
+          "then": {
+            "op": "ref",
+            "path": [
+              "input",
+              "policy"
+            ]
+          },
+          "otherwise": {
+            "op": "literal",
+            "value": null
+          }
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "council",
+        "kind": "parallel",
+        "children": [
+          {
+            "id": "correctness",
+            "graphId": "reviewer",
+            "input": {
+              "op": "object",
+              "fields": {
+                "perspective": {
+                  "op": "literal",
+                  "value": "correctness"
+                },
+                "instructions": {
+                  "op": "literal",
+                  "value": "Independently review correctness and edge cases against the supplied acceptance criteria. Inspect actual artifact evidence, identify concrete failures and missing cases, and do not edit files. Do not treat another reviewer opinion as evidence. Bind your verdict to the supplied artifactRevision and acceptanceCriteriaRevision."
+                },
+                "artifact": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "artifact"
+                  ]
+                },
+                "artifactRevision": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "artifactRevision"
+                  ]
+                },
+                "acceptanceCriteria": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "acceptanceCriteria"
+                  ]
+                },
+                "acceptanceCriteriaRevision": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "acceptanceCriteriaRevision"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "verification",
+            "graphId": "reviewer",
+            "input": {
+              "op": "object",
+              "fields": {
+                "perspective": {
+                  "op": "literal",
+                  "value": "verification"
+                },
+                "instructions": {
+                  "op": "literal",
+                  "value": "Independently review the quality and completeness of verification evidence. Check that claimed tests address the acceptance criteria and relevant regressions; distinguish observed tests from unexecuted claims. You have read-only tools, so inspect evidence without pretending to run shell commands. Do not edit files. Bind your verdict to the supplied artifactRevision and acceptanceCriteriaRevision."
+                },
+                "artifact": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "artifact"
+                  ]
+                },
+                "artifactRevision": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "artifactRevision"
+                  ]
+                },
+                "acceptanceCriteria": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "acceptanceCriteria"
+                  ]
+                },
+                "acceptanceCriteriaRevision": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "acceptanceCriteriaRevision"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "maintainability",
+            "graphId": "reviewer",
+            "input": {
+              "op": "object",
+              "fields": {
+                "perspective": {
+                  "op": "literal",
+                  "value": "maintainability"
+                },
+                "instructions": {
+                  "op": "literal",
+                  "value": "Independently review design, maintainability and integration with repository conventions, within the supplied acceptance criteria. Prefer concrete costly defects over stylistic preferences. Inspect the actual artifact and do not edit files. Bind your verdict to the supplied artifactRevision and acceptanceCriteriaRevision."
+                },
+                "artifact": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "artifact"
+                  ]
+                },
+                "artifactRevision": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "artifactRevision"
+                  ]
+                },
+                "acceptanceCriteria": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "acceptanceCriteria"
+                  ]
+                },
+                "acceptanceCriteriaRevision": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "acceptanceCriteriaRevision"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "requirements",
+            "graphId": "reviewer",
+            "input": {
+              "op": "object",
+              "fields": {
+                "perspective": {
+                  "op": "literal",
+                  "value": "requirements"
+                },
+                "instructions": {
+                  "op": "literal",
+                  "value": "Independently review fidelity to the user requirements, scope and compatibility. Identify missing behavior, accidental scope reduction and claims unsupported by the artifact. Assess the supplied acceptance criteria against actual evidence and do not edit files. Bind your verdict to the supplied artifactRevision and acceptanceCriteriaRevision."
+                },
+                "artifact": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "artifact"
+                  ]
+                },
+                "artifactRevision": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "artifactRevision"
+                  ]
+                },
+                "acceptanceCriteria": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "acceptanceCriteria"
+                  ]
+                },
+                "acceptanceCriteriaRevision": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "acceptanceCriteriaRevision"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "facts",
+        "kind": "transform",
+        "value": {
+          "op": "object",
+          "fields": {
+            "votes": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "council"
+              ]
+            },
+            "revisionConsistent": {
+              "op": "all",
+              "items": [
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "correctness",
+                      "artifactRevision"
+                    ]
+                  },
+                  "right": {
+                    "op": "ref",
+                    "path": [
+                      "input",
+                      "artifactRevision"
+                    ]
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "correctness",
+                      "acceptanceCriteriaRevision"
+                    ]
+                  },
+                  "right": {
+                    "op": "ref",
+                    "path": [
+                      "input",
+                      "acceptanceCriteriaRevision"
+                    ]
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "verification",
+                      "artifactRevision"
+                    ]
+                  },
+                  "right": {
+                    "op": "ref",
+                    "path": [
+                      "input",
+                      "artifactRevision"
+                    ]
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "verification",
+                      "acceptanceCriteriaRevision"
+                    ]
+                  },
+                  "right": {
+                    "op": "ref",
+                    "path": [
+                      "input",
+                      "acceptanceCriteriaRevision"
+                    ]
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "maintainability",
+                      "artifactRevision"
+                    ]
+                  },
+                  "right": {
+                    "op": "ref",
+                    "path": [
+                      "input",
+                      "artifactRevision"
+                    ]
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "maintainability",
+                      "acceptanceCriteriaRevision"
+                    ]
+                  },
+                  "right": {
+                    "op": "ref",
+                    "path": [
+                      "input",
+                      "acceptanceCriteriaRevision"
+                    ]
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "requirements",
+                      "artifactRevision"
+                    ]
+                  },
+                  "right": {
+                    "op": "ref",
+                    "path": [
+                      "input",
+                      "artifactRevision"
+                    ]
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "requirements",
+                      "acceptanceCriteriaRevision"
+                    ]
+                  },
+                  "right": {
+                    "op": "ref",
+                    "path": [
+                      "input",
+                      "acceptanceCriteriaRevision"
+                    ]
+                  }
+                }
+              ]
+            },
+            "unanimous": {
+              "op": "all",
+              "items": [
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "correctness",
+                      "decision"
+                    ]
+                  },
+                  "right": {
+                    "op": "literal",
+                    "value": "approve"
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "verification",
+                      "decision"
+                    ]
+                  },
+                  "right": {
+                    "op": "literal",
+                    "value": "approve"
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "maintainability",
+                      "decision"
+                    ]
+                  },
+                  "right": {
+                    "op": "literal",
+                    "value": "approve"
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "requirements",
+                      "decision"
+                    ]
+                  },
+                  "right": {
+                    "op": "literal",
+                    "value": "approve"
+                  }
+                }
+              ]
+            },
+            "threeOfFour": {
+              "op": "any",
+              "items": [
+                {
+                  "op": "all",
+                  "items": [
+                    {
+                      "op": "eq",
+                      "left": {
+                        "op": "ref",
+                        "path": [
+                          "nodes",
+                          "council",
+                          "correctness",
+                          "decision"
+                        ]
+                      },
+                      "right": {
+                        "op": "literal",
+                        "value": "approve"
+                      }
+                    },
+                    {
+                      "op": "eq",
+                      "left": {
+                        "op": "ref",
+                        "path": [
+                          "nodes",
+                          "council",
+                          "verification",
+                          "decision"
+                        ]
+                      },
+                      "right": {
+                        "op": "literal",
+                        "value": "approve"
+                      }
+                    },
+                    {
+                      "op": "eq",
+                      "left": {
+                        "op": "ref",
+                        "path": [
+                          "nodes",
+                          "council",
+                          "maintainability",
+                          "decision"
+                        ]
+                      },
+                      "right": {
+                        "op": "literal",
+                        "value": "approve"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "op": "all",
+                  "items": [
+                    {
+                      "op": "eq",
+                      "left": {
+                        "op": "ref",
+                        "path": [
+                          "nodes",
+                          "council",
+                          "correctness",
+                          "decision"
+                        ]
+                      },
+                      "right": {
+                        "op": "literal",
+                        "value": "approve"
+                      }
+                    },
+                    {
+                      "op": "eq",
+                      "left": {
+                        "op": "ref",
+                        "path": [
+                          "nodes",
+                          "council",
+                          "verification",
+                          "decision"
+                        ]
+                      },
+                      "right": {
+                        "op": "literal",
+                        "value": "approve"
+                      }
+                    },
+                    {
+                      "op": "eq",
+                      "left": {
+                        "op": "ref",
+                        "path": [
+                          "nodes",
+                          "council",
+                          "requirements",
+                          "decision"
+                        ]
+                      },
+                      "right": {
+                        "op": "literal",
+                        "value": "approve"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "op": "all",
+                  "items": [
+                    {
+                      "op": "eq",
+                      "left": {
+                        "op": "ref",
+                        "path": [
+                          "nodes",
+                          "council",
+                          "correctness",
+                          "decision"
+                        ]
+                      },
+                      "right": {
+                        "op": "literal",
+                        "value": "approve"
+                      }
+                    },
+                    {
+                      "op": "eq",
+                      "left": {
+                        "op": "ref",
+                        "path": [
+                          "nodes",
+                          "council",
+                          "maintainability",
+                          "decision"
+                        ]
+                      },
+                      "right": {
+                        "op": "literal",
+                        "value": "approve"
+                      }
+                    },
+                    {
+                      "op": "eq",
+                      "left": {
+                        "op": "ref",
+                        "path": [
+                          "nodes",
+                          "council",
+                          "requirements",
+                          "decision"
+                        ]
+                      },
+                      "right": {
+                        "op": "literal",
+                        "value": "approve"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "op": "all",
+                  "items": [
+                    {
+                      "op": "eq",
+                      "left": {
+                        "op": "ref",
+                        "path": [
+                          "nodes",
+                          "council",
+                          "verification",
+                          "decision"
+                        ]
+                      },
+                      "right": {
+                        "op": "literal",
+                        "value": "approve"
+                      }
+                    },
+                    {
+                      "op": "eq",
+                      "left": {
+                        "op": "ref",
+                        "path": [
+                          "nodes",
+                          "council",
+                          "maintainability",
+                          "decision"
+                        ]
+                      },
+                      "right": {
+                        "op": "literal",
+                        "value": "approve"
+                      }
+                    },
+                    {
+                      "op": "eq",
+                      "left": {
+                        "op": "ref",
+                        "path": [
+                          "nodes",
+                          "council",
+                          "requirements",
+                          "decision"
+                        ]
+                      },
+                      "right": {
+                        "op": "literal",
+                        "value": "approve"
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            "hasChangeRequests": {
+              "op": "any",
+              "items": [
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "correctness",
+                      "decision"
+                    ]
+                  },
+                  "right": {
+                    "op": "literal",
+                    "value": "request_changes"
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "verification",
+                      "decision"
+                    ]
+                  },
+                  "right": {
+                    "op": "literal",
+                    "value": "request_changes"
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "maintainability",
+                      "decision"
+                    ]
+                  },
+                  "right": {
+                    "op": "literal",
+                    "value": "request_changes"
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "council",
+                      "requirements",
+                      "decision"
+                    ]
+                  },
+                  "right": {
+                    "op": "literal",
+                    "value": "request_changes"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "verdict",
+        "kind": "transform",
+        "value": {
+          "op": "select",
+          "when": {
+            "op": "ref",
+            "path": [
+              "nodes",
+              "facts",
+              "revisionConsistent"
+            ]
+          },
+          "then": {
+            "op": "select",
+            "when": {
+              "op": "select",
+              "when": {
+                "op": "eq",
+                "left": {
+                  "op": "ref",
+                  "path": [
+                    "nodes",
+                    "policy"
+                  ]
+                },
+                "right": {
+                  "op": "literal",
+                  "value": "unanimous"
+                }
+              },
+              "then": {
+                "op": "ref",
+                "path": [
+                  "nodes",
+                  "facts",
+                  "unanimous"
+                ]
+              },
+              "otherwise": {
+                "op": "ref",
+                "path": [
+                  "nodes",
+                  "facts",
+                  "threeOfFour"
+                ]
+              }
+            },
+            "then": {
+              "op": "literal",
+              "value": "approve"
+            },
+            "otherwise": {
+              "op": "select",
+              "when": {
+                "op": "ref",
+                "path": [
+                  "nodes",
+                  "facts",
+                  "hasChangeRequests"
+                ]
+              },
+              "then": {
+                "op": "literal",
+                "value": "request_changes"
+              },
+              "otherwise": {
+                "op": "literal",
+                "value": "inconclusive"
+              }
+            }
+          },
+          "otherwise": {
+            "op": "literal",
+            "value": "inconclusive"
+          }
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "done",
+        "kind": "end",
+        "value": {
+          "op": "object",
+          "fields": {
+            "accepted": {
+              "op": "eq",
+              "left": {
+                "op": "ref",
+                "path": [
+                  "nodes",
+                  "verdict"
+                ]
+              },
+              "right": {
+                "op": "literal",
+                "value": "approve"
+              }
+            },
+            "decision": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "verdict"
+              ]
+            },
+            "policy": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "policy"
+              ]
+            },
+            "artifactRevision": {
+              "op": "ref",
+              "path": [
+                "input",
+                "artifactRevision"
+              ]
+            },
+            "acceptanceCriteriaRevision": {
+              "op": "ref",
+              "path": [
+                "input",
+                "acceptanceCriteriaRevision"
+              ]
+            },
+            "revisionConsistent": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "facts",
+                "revisionConsistent"
+              ]
+            },
+            "votes": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "facts",
+                "votes"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "invalid_policy",
+        "kind": "end",
+        "value": {
+          "op": "object",
+          "fields": {
+            "accepted": {
+              "op": "literal",
+              "value": false
+            },
+            "decision": {
+              "op": "literal",
+              "value": "invalid_policy"
+            },
+            "policy": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "policy"
+              ]
+            },
+            "message": {
+              "op": "literal",
+              "value": "Select unanimous or three-of-four before starting reviewer inference."
+            },
+            "supportedPolicies": {
+              "op": "literal",
+              "value": [
+                "unanimous",
+                "three-of-four"
+              ]
+            },
+            "votes": {
+              "op": "literal",
+              "value": {}
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "main",
+      "edge": {
+        "from": "policy",
+        "to": "council",
+        "when": {
+          "op": "any",
+          "items": [
+            {
+              "op": "eq",
+              "left": {
+                "op": "ref",
+                "path": [
+                  "nodes",
+                  "policy"
+                ]
+              },
+              "right": {
+                "op": "literal",
+                "value": "unanimous"
+              }
+            },
+            {
+              "op": "eq",
+              "left": {
+                "op": "ref",
+                "path": [
+                  "nodes",
+                  "policy"
+                ]
+              },
+              "right": {
+                "op": "literal",
+                "value": "three-of-four"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "main",
+      "edge": {
+        "from": "policy",
+        "to": "invalid_policy"
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "main",
+      "edge": {
+        "from": "council",
+        "to": "facts"
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "main",
+      "edge": {
+        "from": "facts",
+        "to": "verdict"
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "main",
+      "edge": {
+        "from": "verdict",
+        "to": "done"
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "reviewer",
+      "node": {
+        "id": "review",
+        "kind": "agent",
+        "role": "reviewer",
+        "task": {
+          "op": "ref",
+          "path": [
+            "input",
+            "instructions"
+          ]
+        },
+        "input": {
+          "op": "ref",
+          "path": [
+            "input"
+          ]
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "reviewer",
+      "node": {
+        "id": "done",
+        "kind": "end",
+        "value": {
+          "op": "ref",
+          "path": [
+            "nodes",
+            "review"
+          ]
+        }
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "reviewer",
+      "edge": {
+        "from": "review",
+        "to": "done"
+      }
+    }
+  ]
+}

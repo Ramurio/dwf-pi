@@ -1,65 +1,86 @@
 # Состояние работы
 
-2026-09-08: завершены исследование, технические probes и первое ядро authoring/codegen.
-Ответы пользователя сохранены в [decisions.md](decisions.md); ожидать анкету больше не нужно.
+2026-09-08. Реализован и проверен локальный workflow backend.
+Ответы пользователя и выбранные решения — в [decisions.md](decisions.md).
 
-## Что работает и чем проверено
+## Реализовано
 
-- Исследованы официальные Claude Code Dynamic workflows, девять движков/подходов,
-  pi SDK/RPC и переносимость; первичные ссылки в `docs/research/`.
-- Pinned npm зависимости и lockfile; pi public import packaging workaround
-  `@earendil-works/pi-server@0.85.0` объявлен явно.
-- TypeScript graph contract, девять ролей, structured reviewer verdict с revision.
-  Строгие schemas, семантическая проверка, циклы, nested graph refs, immutable snapshots.
-- Expression AST без eval; явные bindings, boolean routing, ordered conditions/fallback.
-- Authoring операции create/add/replace/remove/connect/disconnect/setEntry; atomic patch,
-  revision guard; незавершённые drafts сохраняются с отдельной validation.
-- SQLite draft storage с CAS. CLI работает между процессами; 24 concurrent first opens
-  проверяют WAL/schema initialization. `busy_timeout` установлен до WAL pragma.
-- Компилятор выдаёт actual TS+Effect while/switch/forEach, а не runGraph wrapper.
-  Сгенерированные модули проходят strict TypeScript и выполняются в тестах: review loop,
-  nested map/parallel/subworkflow, scope/visit identity, input-order и data/code separation.
-- Pi SDK offline probes используют actual session/tool loop и fake transport.
-  Доказаны clearQueue-before-abort, raw schema validation, settlement и изоляция ресурсов.
-- Live pi `openai-codex/gpt-5.6-sol`: один валидный submit_result, низкий thinking,
-  settlement и повторное открытие transcript. Повторять без новой причины не нужно.
-- Effect memory-engine probes выявили replay behavior и отсутствие немедленной отмены
-  активной activity; memory engine не выбран как durable backend.
+- Исследованы Claude Code Dynamic workflows и девять подходов/движков; первичные
+  источники и архитектурные выводы в `docs/research/`.
+- Графовый authoring через общие CLI/MCP tools: drafts, atomic revision patches,
+  каталог девяти ролей, проверка схемы, условия, циклы, lazy feedback select,
+  dynamic map, parallel и вложенные графы. Автор не пишет scheduler.
+- Детерминированная генерация настоящего TS + Effect. Frozen execution plan содержит
+  версии, source/hash, конкретные model/thinking, prompts/tools/permissions,
+  output schemas и полное содержимое skills.
+- Отдельный supervisor и pi worker processes. SQLite WAL/FULL хранит run,
+  activation checkpoints, outputs и events; owner fencing защищает поздние записи.
+  Закрытие harness не останавливает run. Pause дожидается текущих листьев; cancel
+  отдельно прерывает workers и обычных потомков. Resume восстанавливает успешные
+  checkpoints, отказывается слепо повторять неопределённые внешние эффекты.
+- Actual pi SDK: exactly-one strict submit_result, raw validation без coercion,
+  resource isolation, fresh reviewer / continued node sessions, settlement,
+  usage и очистка очередей перед abort. Глобальные extensions/hooks не подгружаются.
+- Codex и узкий Grok subscription bridge. Auth остаётся в pi. Обновлённый xai-auth
+  каталог содержит Grok 4.6 и другие реальные IDs; отдельный Heavy ID не обнаружен.
+  Optional Grok adapter не блокирует native Codex. Модели/готовность доступны через
+  catalog.models и system.doctor.
+- Worktree/integrate: run-owned branches, scoped cwd, commit успешных изменений,
+  явная интеграция и отказ при конфликте/dirty target. Concurrent coding workers
+  требуют отдельных worktrees. Не заявляется OS sandbox или rollback всех эффектов.
+- Project/global immutable JSON presets сохраняют успешный frozen plan. Новые inputs
+  создают новые runs/сессии; изменённый draft не меняет preset. Credentials,
+  результаты/входы запуска и сессии в шаблон не включаются.
+- Terminal watch показывает графы, связи, фактические scopes/visits и journal states;
+  Ctrl-C отключает viewer. Переносимый skill, однократная установка и MCP stdio
+  через один service без отдельной логики планирования.
+- Пример council: четыре независимых reviewer и детерминированные unanimous /
+  three-of-four policies. Все 162 комбинации решений проверены; revisions
+  сверяются, inconclusive не считается одобрением, dissent сохраняется.
 
-Команды проверки: `npm run typecheck`, `npm test`. Реальный model call — отдельный
-`npm run probe:pi -- --provider ... --model ...`, не часть обычного тестирования.
-Последний полный запуск: typecheck прошёл; 62 tests passed, 0 failed, 0 skipped.
-Проверены локальные Markdown-ссылки и `git diff --check`.
+## Фактические проверки
 
-## Оставшаяся работа — полный объём цели
+- Live Codex: author→run→pause→resume→request_changes→repair→approve, затем save
+  project/global→edit draft→preset rerun с новым input и новой сессией. Четыре
+  actual worker вызова; отчёт `docs/research/workflow-live.md`.
+- Live Grok 4.6: strict nonce + answer42, requested/observed thinking low, actual
+  refreshed authenticated catalog. Это не доказательство Heavy entitlement.
+- Live Git workflow: actual Codex implementer исправил файл в выделенном worktree,
+  command check проверил результат, fresh reviewer прочитал candidate и одобрил
+  его; explicit integrate завершился чистым Git state и повторным check.
+  Два model вызова; отчёт `docs/workspaces-live.md`.
+- Live MCP council: четыре actual Codex reviewer, четыре fresh sessions,
+  наблюдаемое перекрытие всех четырёх workers и согласованные artifact/criteria
+  revisions. После закрытия первого MCP клиента run продолжил работу; новый
+  клиент получил unanimous approve с сохранёнными findings. Отчёт `docs/council-live.md`.
+- Официальный MCP SDK client: initialize, tools, authoring, detached launch, закрытие
+  первого соединения, второй клиент, pause/resume/events. Современная и legacy
+  protocol initialization проверены.
+- Независимый skill forward test: пять pure runs через установленный CLI из внешнего
+  cwd, branch/map/loops/select, project/global presets и новые inputs после правки
+  draft. Все temporary processes/artifacts убраны; `docs/skill-forward-test.md`.
+- Чистая production installation с `npm ci --omit-dev --ignore-scripts`: установленный
+  CLI из внешнего cwd возвращает каталог всех девяти ролей. tsx/typescript — runtime
+  dependencies, а не случайно доступные dev packages.
+- Реально установлены `/Users/ramu/.local/bin/dynamicwf` и
+  `/Users/ramu/.agents/skills/dynamic-workflows`; bin уже в PATH. Doctor из `/tmp`
+  подтвердил локальные prerequisites, 14 cached authenticated models двух providers,
+  без inference/network refresh. Harness-specific настройки не изменялись.
+- Skill quick_validate и TypeScript typecheck проходят.
+- Итоговый `npm test`: 190 тестов, 190 passed, 0 failed, 0 skipped. Набор включает
+  actual pi SDK contracts, MCP clients, generated Effect execution, процессы,
+  journal recovery, presets и реальные временные Git repositories. Live model
+  probes перечислены выше и не входят в этот автоматический набор.
 
-1. Замороженный execution plan: model resolution, role/skill snapshots, output-schema
-   subset validation, permissions; compile должен ссылаться на fixed runtime/catalog версии.
-2. Workflow runtime: отдельный supervisor process, журнал run/activations/events,
-   pi worker processes, pause/pausing/resume/cancel; восстановление без слепого повтора
-   неопределённых внешних эффектов. `runtime-contract.ts` пока только интерфейс.
-3. Настоящий pi backend compiled graphs: strict submit_result exactly once, isolated
-   resource loader, session policy, actual errors/usage, abort queues и process cleanup.
-4. Grok subscription adapter: есть OAuth metadata и установленный pi-xai-oauth@1.5.2,
-   но native ModelRuntime не регистрирует alias xai-auth автоматически. См. grok-integration.
-   Нужен provider-only bridge в отдельном worker; shared global fetch state учитывать.
-5. Worktree policy и integration step для параллельных writers; council как композиция
-   ролей/графа с настройкой policy и привязкой verdict к проверенной версии.
-6. Presets: глобальные/проектные, snapshots содержимого, сохранение успешного run,
-   новые inputs без копирования credentials/транскрипта в шаблон.
-7. Общий application service для CLI/MCP (сейчас CLI напрямую dispatch), переносимый
-   skill, setup/doctor и запуск из внешнего cwd. Generated imports пока проверены под
-   project package scope: resolver для глобальной runs directory ещё нужен.
-8. Terminal watch реального event stream и схема со всеми активными ветками.
-9. Полный live сценарий author→run→pause→resume→review-loop→save preset→rerun через
-   два клиента; проверка требований по фактическим результатам.
+## Границы поставленной версии
 
-По умолчанию не добавлять лимиты или human approvals. Граф фиксирован до запуска;
-ручное редактирование работающего графа не нужно. Oracle — отдельный проект.
+Локальное POSIX выполнение, Node >=22.19. Граф после старта не редактируется.
+Закрытие viewer/client не отменяет run. После crash неизвестный результат side effect
+требует реального reconciliation; retry-authorization mutation не предоставляется.
+Permission profiles и worktrees не являются OS sandbox; выданный shell имеет права
+пользователя. Grok bridge пока text-only и требует локального reviewed
+pi-xai-oauth@1.5.2; адаптер не зависит от соседнего remote-pi проекта.
 
-## Следующее действие
-
-Продолжать с execution plan и журналируемого runtime под уже имеющийся generated
-contract. Изучить current sources/tests, не начинать исследование заново. Сначала
-замкнуть один настоящий worker→review loop и независимость от harness, затем
-добавлять preset/MCP/watch на ту же модель состояния. Цель остаётся активной.
+Нет скрытых caps, обязательных human approvals или default auto-save presets.
+Oracle остаётся внешним проектом. Новые модели, расширения ролей, Windows/remote
+hosting и ручное редактирование running graph не входят в проверенный контракт.

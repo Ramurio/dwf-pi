@@ -20,10 +20,12 @@ run(runtime: WorkflowRuntime, input: Json): Effect.Effect<Json, Error>
 - `subworkflow`: вызывает конкретную сгенерированную child graph function с её input.
 - `map`: требует массив items и вызывает child function через `Effect.forEach`. Результат — массив в порядке входных items, независимо от порядка завершения.
 - `parallel`: генерирует функции отдельных ветвей и `Effect.forEach`. Результат — объект, ключи которого равны child IDs; порядок включения соответствует порядку children.
+- `worktree`: передаёт runtime callback конкретной child graph function; её scope и рабочую директорию определяет изолированный Git workspace.
+- `integrate`: вычисляет sources и передаёт явную интеграцию зафиксированных Git результатов в runtime.
 
 У `map` и `parallel` число `concurrency` передаётся в Effect явно. Если поле отсутствует, используется `"unbounded"` согласно пользовательскому решению об отсутствии скрытого ограничения параллелизма. Это не отменяет ограничений ОС или провайдера. У графовых циклов нет встроенного maxIterations; условие выхода задают edges, остановку обеспечивает Effect interruption/runtime. Повторный визит заменяет `nodes[nodeId]` последним завершённым результатом; остальные завершённые node values сохраняются в пределах этого graph invocation. Соседние/дочерние graph invocations имеют отдельные records.
 
-Каждый блок, включая end/map/parallel/subworkflow/branch/transform, исполняется через `runtime.step(context, work)`. Внутри work находятся вычисление input и дочерние вызовы. Реализация runtime может не вызвать thunk и вернуть уже сохранённый результат. Это интерфейс интеграции, а не реализованный durable journal.
+Каждый блок, включая end/map/parallel/subworkflow/branch/transform, исполняется через `runtime.step(context, work)`. Внутри work находятся вычисление input и дочерние вызовы. `JournalRuntime` может не вызвать thunk и вернуть уже сохранённый результат; scheduler восстанавливает локальный control flow через checkpoints.
 
 ## Идентичность активаций
 
@@ -33,12 +35,20 @@ run(runtime: WorkflowRuntime, input: Json): Effect.Effect<Json, Error>
 node, parentNodeId, visit, parentVisit, map, itemIndex, graph, childGraphId
 node, parentNodeId, visit, parentVisit, parallel, childId, graph, childGraphId
 node, parentNodeId, visit, parentVisit, subworkflow, graph, childGraphId
+node, parentNodeId, visit, parentVisit, worktree, graph, childGraphId
 ```
 
-Для идентификатора journal следует хранить tuple/JSON `[graphId, nodeId, scope, visit]`, не склеивать произвольные сегменты разделителем. Run ID добавляет внешний runtime: один и тот же compiled workflow имеет одинаковую структуру scope в разных запусках. Нельзя разделять local records или счётчики между параллельными child invocations.
+Журнал хранит tuple/JSON `[scope, graphId, nodeId, visit]`, не склеивает произвольные сегменты разделителем. Run ID добавляет внешний runtime: один и тот же compiled workflow имеет одинаковую структуру scope в разных запусках. Нельзя разделять local records или счётчики между параллельными child invocations.
 
 ## Проверка и текущие границы
 
 `tests/compiler.test.ts` проверяет TypeScript diagnostics **сгенерированных** модулей с strict flags, транспилирует их через установленный TypeScript, записывает временные `.mjs`, импортирует и исполняет через Effect с mock runtime. Проверены review reject → backedge → approve, map+parallel+subworkflow, порядок результатов при разном времени завершения, фактическое перекрытие ветвей, уникальность scope/visit, step для всех structural nodes, branch/check, identity input defaults, deterministic hash, literal code-looking строки и prototype data keys, invalid graph и нестроковый task.
 
-Это pure compiler и injectable runtime contract. Здесь ещё нет pi adapter, supervisor process, persistence/recovery, pause admission gate, frozen model resolution, skill/resource pinning, model/provider capability validation, workspace/worktree allocation или exactly-once внешних эффектов. Node config сохраняется как data, defaults/модели не разрешаются компилятором. Зависимости `effect`/expressions/runtime API должны совпадать с окружением сгенерированного модуля; source hash сам по себе их не фиксирует. Runtime обязан проверять JSON результаты, contract output, ошибки транспорта, permissions и cancellation своих внешних операций.
+Компилятор остаётся чистым: defaults/модели разрешает `prepareExecutionPlan`,
+исполнение обеспечивает `JournalRuntime` в detached supervisor. Frozen plan
+связывает source/hash с версиями compiler/runtime, моделями и ресурсами.
+`loadGeneratedModule` перенаправляет только compiler-owned imports на установленный
+runtime и выполняет модуль из внешней runs directory. Произвольные данные графа
+не становятся импортами. Pi workers проверяют structured output, capabilities
+и settlement. Журнал не обещает exactly-once для внешних эффектов: неопределённый
+результат после crash нельзя повторять автоматически. См. `docs/run-journal.md`.

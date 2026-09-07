@@ -50,6 +50,7 @@ export function evaluate(expression: Expr, scope: ExpressionScope): Json {
     case "literal": return structuredClone(expression.value);
     case "ref": return readPath(scope, expression.path);
     case "get": return readPath(evalChild(expression.value), expression.path);
+    case "select": return evalChild(boolean(evalChild(expression.when)) ? expression.then : expression.otherwise);
     case "object": return Object.fromEntries(Object.entries(expression.fields).map(([key, value]) => [key, evalChild(value)]));
     case "array": return expression.items.map(evalChild);
     case "exists":

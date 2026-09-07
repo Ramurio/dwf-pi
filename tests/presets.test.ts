@@ -1,0 +1,122 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { mkdtemp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
+import { prepareExecutionPlan } from "../src/execution-plan.js";
+import type { WorkflowDefinition } from "../src/graph.js";
+import { PresetLibrary } from "../src/presets.js";
+import { RunStore } from "../src/run-store.js";
+import { WorkflowService } from "../src/service.js";
+
+const workflow: WorkflowDefinition = { schemaVersion: 1, id: "echo", name: "Echo input", revision: 1, entryGraph: "main", graphs: {
+  main: { entry: "done", nodes: [{ id: "done", kind: "end", value: { op: "ref", path: ["input"] } }], edges: [] },
+} };
+async function fixture(work: (directory: string, store: RunStore, library: PresetLibrary) => Promise<void>) {
+  const directory = await mkdtemp(join(tmpdir(), "dwf-presets-"));
+  const store = new RunStore(join(directory, "state.sqlite"));
+  try { await work(directory, store, new PresetLibrary(join(directory, "presets"))); }
+  finally { store.close(); await rm(directory, { force: true, recursive: true }); }
+}
+async function savedRun(store: RunStore, directory: string, id: string, value = workflow) {
+  store.create({ id, plan: await prepareExecutionPlan(value, { cwd: directory }), cwd: directory, input: "PRIVATE_RUN_INPUT" });
+  const { token } = store.reserveLaunch(id);
+  store.finish(id, token, { status: "succeeded", output: "PRIVATE_RUN_OUTPUT" });
+  return store.get(id);
+}
+
+test("presets atomically save immutable plans, deduplicate concurrent saves and exclude run data", async () => {
+  await fixture(async (directory, store, library) => {
+    const run = await savedRun(store, directory, "test-run");
+    const copies = await Promise.all(Array.from({ length: 12 }, () => library.save("tested", run)));
+    assert.ok(copies.every(record => record.savedAt === copies[0]!.savedAt && record.revision === run.plan.hash));
+    assert.deepEqual(await readdir(join(library.root, "tested")), [`${run.plan.hash}.json`]);
+    const json = await readFile(join(library.root, "tested", `${run.plan.hash}.json`), "utf8");
+    assert.doesNotMatch(json, /PRIVATE_RUN_INPUT|PRIVATE_RUN_OUTPUT|ownerToken|supervisorPid|sessionFile/);
+    assert.deepEqual((await library.read("tested")).plan, run.plan);
+    assert.equal((await library.list()).length, 1);
+    await assert.rejects(library.save("untested", { ...run, status: "running" }), /successful run/);
+  });
+});
+
+test("preset revisions remain addressable and tampered content fails verification", async () => {
+  await fixture(async (directory, store, library) => {
+    const first = await library.save("tested", await savedRun(store, directory, "first"));
+    await sleep(2);
+    const modified = { ...workflow, name: "Echo changed", revision: 2 };
+    const second = await library.save("tested", await savedRun(store, directory, "second", modified));
+    assert.notEqual(second.revision, first.revision);
+    assert.equal((await library.read("tested")).revision, second.revision);
+    assert.equal((await library.read("tested", first.revision)).plan.workflow.name, "Echo input");
+    const path = join(library.root, "tested", `${second.revision}.json`);
+    const data = JSON.parse(await readFile(path, "utf8"));
+    data.plan.source += "\nthrow Error('tampered');";
+    await writeFile(path, JSON.stringify(data));
+    await assert.rejects(library.read("tested"), /compiled source/);
+  });
+});
+
+test("preset paths reject traversal and symbolic-link revision files/directories", async () => {
+  await fixture(async (directory, store, library) => {
+    const run = await savedRun(store, directory, "run");
+    for (const name of ["../outside", "/absolute", "a/b", ".", "x\0z"]) await assert.rejects(library.save(name, run), /preset name/);
+    await assert.rejects(library.read("tested", "../invalid"), /revision hash/);
+    await mkdir(library.root);
+    await symlink(directory, join(library.root, "linked"));
+    await assert.rejects(library.save("linked", run), /real directory/);
+    await rm(join(library.root, "linked"));
+    const saved = await library.save("tested", run);
+    const path = join(library.root, "tested", `${saved.revision}.json`);
+    await rm(path); await symlink(join(directory, "state.sqlite"), path);
+    await assert.rejects(library.read("tested"), /real JSON file/);
+  });
+});
+
+test("service saves project/global libraries, project shadows global, reruns frozen plan with new input", { timeout: 45_000 }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "dwf-preset-service-"));
+  const cwd = join(directory, "project");
+  const nested = join(cwd, "subdirectory");
+  await mkdir(join(cwd, ".git"), { recursive: true }); await mkdir(nested);
+  const filename = join(directory, "global", "state.sqlite");
+  const service = new WorkflowService(filename, { cwd: nested });
+  const runs: string[] = [];
+  const wait = async (id: string) => {
+    const deadline = Date.now() + 20_000;
+    while (Date.now() < deadline) {
+      const current = await service.dispatch("run.status", { id }) as { status: string; output: unknown };
+      if (current.status === "succeeded") return current;
+      assert.notEqual(current.status, "failed"); await sleep(25);
+    }
+    throw new Error("Preset test run timed out");
+  };
+  try {
+    await service.dispatch("workflow.create", { id: "echo", name: "Echo input" });
+    await service.dispatch("workflow.patch", { id: "echo", expectedRevision: 1, operations: [{ op: "addNode", graphId: "main", node: workflow.graphs.main!.nodes[0] }] });
+    const first = await service.dispatch("run.start", { id: "echo", input: { initial: true } }) as { id: string; planHash: string };
+    runs.push(first.id); await wait(first.id);
+    await service.dispatch("preset.save", { id: first.id, name: "echo", scope: "global" });
+    const saved = await service.dispatch("preset.save", { id: first.id, name: "echo" }) as { directory: string };
+    assert.equal(saved.directory, join(await realpath(cwd), ".dynamicwf", "presets"));
+    const listed = await service.dispatch("preset.list") as { scope: string; shadowed: boolean }[];
+    assert.deepEqual(listed.map(x => [x.scope, x.shadowed]), [["project", false], ["global", true]]);
+    // Editing the author's draft does not mutate the successful preset.
+    await service.dispatch("workflow.patch", { id: "echo", expectedRevision: 2, operations: [{ op: "replaceNode", graphId: "main", node: { id: "done", kind: "end", value: { op: "literal", value: "different draft" } } }] });
+    const next = await service.dispatch("preset.run", { name: "echo", input: { next: 42 } }) as { id: string; planHash: string; preset: { scope: string } };
+    runs.push(next.id);
+    assert.notEqual(first.id, next.id); assert.equal(next.planHash, first.planHash); assert.equal(next.preset.scope, "project");
+    assert.deepEqual((await wait(next.id)).output, { next: 42 });
+    await assert.rejects(service.dispatch("preset.inspect", { name: "echo", scope: "elsewhere" }), /scope/);
+    await assert.rejects(service.dispatch("preset.run", { name: "echo", model: "mutable override" }), /Unexpected/);
+  } finally {
+    for (const id of runs) {
+      await service.dispatch("run.cancel", { id }).catch(() => {});
+      for (let i = 0; i < 100; i++) {
+        const state = await service.dispatch("run.status", { id }) as { status: string };
+        if (["succeeded", "failed", "cancelled"].includes(state.status)) break;
+        await sleep(50);
+      }
+    }
+    service.close(); await rm(directory, { recursive: true, force: true });
+  }
+});

@@ -14,5 +14,7 @@ export interface RuntimeContext {
 export interface WorkflowRuntime {
   step(context: RuntimeContext, work: () => Effect.Effect<Json, Error>): Effect.Effect<Json, Error>;
   agent(context: RuntimeContext, node: Extract<Node, { kind: "agent" }>, task: string, input: Json): Effect.Effect<Json, Error>;
+  worktree(context: RuntimeContext, node: Extract<Node, { kind: "worktree" }>, child: (scope: readonly string[]) => Effect.Effect<Json, Error>): Effect.Effect<Json, Error>;
+  integrate(context: RuntimeContext, node: Extract<Node, { kind: "integrate" }>, sources: Json): Effect.Effect<Json, Error>;
   check(context: RuntimeContext, node: Extract<Node, { kind: "check" }>): Effect.Effect<Json, Error>;
 }
