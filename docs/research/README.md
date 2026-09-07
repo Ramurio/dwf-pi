@@ -11,6 +11,9 @@
   sessions, завершение, отмена, результаты по схеме, resources и permissions.
 - [Переносимость](portability.md): Agent Skills, общий CLI/MCP контракт,
   граница между skill и работающей интеграцией.
+- [Effect spike](effect-spike.md): исполняемые проверки replay и interruption.
+- [Pi SDK spike](pi-contract-spike.md): реальные сессии с детерминированным model transport.
+- [Настоящий вызов pi](pi-live.md): Codex OAuth, submission, settlement и transcript.
 
 ## Главные выводы для выбора устройства
 
@@ -40,6 +43,6 @@ pi workers выполняют агентные активации. Роль, у�
 
 [Архитектурный черновик](../architecture-proposal.md) связывает исследование с
 примитивами, компилятором, runtime, установкой и пресетами.
-[Анкета](../questions.md) отправлена до реализации; ответы пока не получены.
-После ответов фиксируются решения и начинается технический spike pi + Effect,
-затем реализация полного пути по [критериям приёмки](../requirements.md).
+[Анкета](../questions.md) отправлена до реализации, ответы получены и сохранены
+в [решениях](../decisions.md). Технический spike pi + Effect выполнен;
+продолжается реализация полного пути по [критериям приёмки](../requirements.md).

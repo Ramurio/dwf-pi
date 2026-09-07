@@ -1,0 +1,176 @@
+import assert from "node:assert/strict";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import test, { type TestContext } from "node:test";
+import { Effect } from "effect";
+import ts from "typescript";
+import { compileWorkflow } from "../src/compiler.js";
+import type { Expr, Graph, Json, WorkflowDefinition } from "../src/graph.js";
+import type { RuntimeContext, WorkflowRuntime } from "../src/runtime-contract.js";
+
+const literal = (value: Json): Expr => ({ op: "literal", value });
+const ref = (...path: string[]): Expr => ({ op: "ref", path });
+const definition = (graphs: Record<string, Graph>, entryGraph = "main"): WorkflowDefinition => ({
+  schemaVersion: 1, id: "compiler-test", name: "Compiler test", revision: 1, entryGraph, graphs,
+});
+
+async function load(t: TestContext, workflow: WorkflowDefinition) {
+  const compiled = compileWorkflow(workflow);
+  const directory = await mkdtemp(join(process.cwd(), ".compiler-test-"));
+  t.after(async () => { await rm(directory, { recursive: true, force: true }); });
+  const tsPath = join(directory, "workflow.ts");
+  await writeFile(tsPath, compiled.source);
+  const program = ts.createProgram([tsPath], {
+    target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    strict: true, noUncheckedIndexedAccess: true, exactOptionalPropertyTypes: true,
+    verbatimModuleSyntax: true, skipLibCheck: true, noEmit: true,
+  });
+  const diagnostics = ts.getPreEmitDiagnostics(program);
+  assert.deepEqual(diagnostics.map((d) => ts.flattenDiagnosticMessageText(d.messageText, "\n")), [], "Generated TS must typecheck");
+  const output = ts.transpileModule(compiled.source, {
+    compilerOptions: { target: ts.ScriptTarget.ES2023, module: ts.ModuleKind.ESNext }, reportDiagnostics: true,
+  });
+  assert.deepEqual(output.diagnostics ?? [], []);
+  const path = join(directory, "workflow.mjs");
+  await writeFile(path, output.outputText);
+  const module = await import(pathToFileURL(path).href) as {
+    run: (runtime: WorkflowRuntime, input: Json) => Effect.Effect<Json, Error>;
+  };
+  return { ...compiled, run: module.run };
+}
+
+function recorder(agent?: WorkflowRuntime["agent"], check?: WorkflowRuntime["check"]) {
+  const steps: RuntimeContext[] = [];
+  const runtime: WorkflowRuntime = {
+    step(context, work) { return Effect.suspend(() => { steps.push(structuredClone(context)); return work(); }); },
+    agent: agent ?? (() => Effect.fail(new Error("Unexpected agent node"))),
+    check: check ?? (() => Effect.fail(new Error("Unexpected check node"))),
+  };
+  return { runtime, steps };
+}
+
+const reviewWorkflow = definition({ main: {
+  entry: "implement",
+  nodes: [
+    { id: "implement", kind: "agent", role: "implementer", task: literal("Implement fixes") },
+    { id: "review", kind: "agent", role: "reviewer", task: literal("Review changes"), input: ref("nodes", "implement") },
+    { id: "done", kind: "end", value: ref("nodes", "review") },
+  ],
+  edges: [
+    { from: "implement", to: "review" },
+    { from: "review", to: "implement" },
+    { from: "review", to: "done", when: { op: "eq", left: ref("nodes", "review", "verdict"), right: literal("approve") } },
+  ],
+} });
+
+test("generated Effect loop executes rejected review backedge and then approval", async (t) => {
+  const compiled = await load(t, reviewWorkflow);
+  const inputs: Json[] = [];
+  const r = recorder((context, _node, task, input) => {
+    assert.equal(typeof task, "string");
+    inputs.push(input);
+    return Effect.succeed(context.nodeId === "implement" ? { revision: context.visit + 1 } : { verdict: context.visit === 0 ? "revise" : "approve" });
+  });
+  assert.deepEqual(await Effect.runPromise(compiled.run(r.runtime, { request: "Fix bug" })), { verdict: "approve" });
+  assert.deepEqual(r.steps.map(({ nodeId, visit }) => [nodeId, visit]), [["implement", 0], ["review", 0], ["implement", 1], ["review", 1], ["done", 0]]);
+  assert.deepEqual(inputs, [{ request: "Fix bug" }, { revision: 1 }, { request: "Fix bug" }, { revision: 2 }]);
+  assert.match(compiled.source, /while \(true\)/);
+  assert.match(compiled.source, /switch \(pc\)/);
+  assert.doesNotMatch(compiled.source, /runGraph/);
+});
+
+test("map, parallel and subworkflow compile into real Effect concurrency with ordered results and distinct scopes", async (t) => {
+  const workflow = definition({
+    main: { entry: "fan", nodes: [
+      { id: "fan", kind: "map", graphId: "branch", items: ref("input"), concurrency: 3 },
+      { id: "done", kind: "end", value: ref("nodes", "fan") },
+    ], edges: [{ from: "fan", to: "done" }] },
+    branch: { entry: "fork", nodes: [
+      { id: "fork", kind: "parallel", children: [
+        { id: "slow", graphId: "nested", input: { op: "object", fields: { item: ref("input"), delay: literal(20), label: literal("slow") } } },
+        { id: "fast", graphId: "nested", input: { op: "object", fields: { item: ref("input"), delay: literal(1), label: literal("fast") } } },
+      ] },
+      { id: "done", kind: "end", value: ref("nodes", "fork") },
+    ], edges: [{ from: "fork", to: "done" }] },
+    nested: { entry: "call", nodes: [
+      { id: "call", kind: "subworkflow", graphId: "leaf", input: ref("input") },
+      { id: "done", kind: "end", value: ref("nodes", "call") },
+    ], edges: [{ from: "call", to: "done" }] },
+    leaf: { entry: "work", nodes: [
+      { id: "work", kind: "agent", role: "general", task: literal("Echo") },
+      { id: "done", kind: "end", value: ref("nodes", "work") },
+    ], edges: [{ from: "work", to: "done" }] },
+  });
+  const compiled = await load(t, workflow);
+  const completed: string[] = [];
+  let active = 0;
+  let maxActive = 0;
+  const r = recorder((_context, _node, _task, input) => Effect.gen(function* () {
+    assert.ok(input && !Array.isArray(input) && typeof input === "object");
+    active++; maxActive = Math.max(maxActive, active);
+    yield* Effect.sleep(input.delay as number);
+    completed.push(`${input.item}:${input.label}`);
+    active--;
+    return input;
+  }));
+  const result = await Effect.runPromise(compiled.run(r.runtime, ["A", "B", "C"]));
+  assert.deepEqual(result, ["A", "B", "C"].map((item) => ({ slow: { item, delay: 20, label: "slow" }, fast: { item, delay: 1, label: "fast" } })));
+  assert.equal(maxActive, 6, "map and default unbounded parallel overlap child execution");
+  assert.ok(completed.indexOf("A:fast") < completed.indexOf("A:slow"));
+  assert.equal(new Set(r.steps.map((s) => JSON.stringify([s.graphId, s.nodeId, s.scope, s.visit]))).size, r.steps.length);
+  assert.ok(r.steps.every((s) => s.visit === 0));
+  assert.equal(r.steps.length, 32, "every structural and leaf node passes runtime.step");
+  assert.match(compiled.source, /Effect\.forEach/);
+  assert.match(compiled.source, /concurrency: 3/);
+  assert.match(compiled.source, /concurrency: "unbounded"/);
+});
+
+test("branch defaults to graph input, explicit bindings and check results are preserved", async (t) => {
+  const workflow = definition({ main: { entry: "identity", nodes: [
+    { id: "identity", kind: "branch" },
+    { id: "bound", kind: "branch", input: literal("bound") },
+    { id: "check", kind: "check", command: "node", args: ["--version"] },
+    { id: "done", kind: "end", value: { op: "array", items: [ref("nodes", "identity"), ref("nodes", "bound"), ref("nodes", "check")] } },
+  ], edges: [{ from: "identity", to: "bound" }, { from: "bound", to: "check" }, { from: "check", to: "done" }] } });
+  const compiled = await load(t, workflow);
+  const r = recorder(undefined, (_context, node) => {
+    assert.equal(node.command, "node");
+    assert.deepEqual(node.args, ["--version"]);
+    return Effect.succeed({ exitCode: 0 });
+  });
+  assert.deepEqual(await Effect.runPromise(compiled.run(r.runtime, "original")), ["original", "bound", { exitCode: 0 }]);
+  assert.equal(r.steps.length, 4);
+});
+
+test("canonical source and hash are stable; code-looking strings and prototype keys remain data", async (t) => {
+  const payload = JSON.parse('{"__proto__":{"injected":true},"text":"`); throw new Error(\\"INJECTED\\"); // ${globalThis.compromised = true}"}') as Json;
+  const workflow = definition({ main: { entry: "constructor", nodes: [
+    { id: "constructor", kind: "transform", value: literal(payload) },
+    { id: "done", kind: "end", value: ref("nodes", "constructor") },
+  ], edges: [{ from: "constructor", to: "done" }] } });
+  const compiled = await load(t, workflow);
+  const reordered = { graphs: workflow.graphs, entryGraph: workflow.entryGraph, revision: workflow.revision, name: workflow.name, id: workflow.id, schemaVersion: workflow.schemaVersion };
+  assert.equal(compiled.source, compileWorkflow(reordered).source);
+  assert.equal(compiled.hash, compileWorkflow(reordered).hash);
+  assert.match(compiled.hash, /^[0-9a-f]{64}$/);
+  const r = recorder();
+  const output = await Effect.runPromise(compiled.run(r.runtime, null));
+  assert.deepEqual(output, payload);
+  assert.ok(output && typeof output === "object" && Object.hasOwn(output, "__proto__"));
+  assert.equal(Object.hasOwn(globalThis, "compromised"), false);
+});
+
+test("invalid graphs fail compilation and non-string agent task fails without invoking runtime.agent", async (t) => {
+  assert.throws(() => compileWorkflow({}), /schemaVersion|entryGraph|graphs/);
+  const workflow = definition({ main: { entry: "work", nodes: [
+    { id: "work", kind: "agent", role: "general", task: literal(123) },
+    { id: "done", kind: "end", value: ref("nodes", "work") },
+  ], edges: [{ from: "work", to: "done" }] } });
+  const compiled = await load(t, workflow);
+  const r = recorder();
+  const outcome = await Effect.runPromise(Effect.either(compiled.run(r.runtime, null)));
+  assert.equal(outcome._tag, "Left");
+  if (outcome._tag === "Left") assert.match(outcome.left.message, /Agent task must evaluate to a string/);
+  assert.equal(r.steps.length, 1);
+});
