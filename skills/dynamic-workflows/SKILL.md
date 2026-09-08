@@ -58,7 +58,7 @@ Wrap each concurrent coding branch in a `worktree` block whose child graph perfo
 
 ## Run and control
 
-Launch with `run.start {"id":"...","cwd":"/absolute/workspace","input":...}`. Record the returned run ID. Observe it with `run.status`, inspect outputs/activations with `run.inspect`, and page events with `run.events {"id":"...","after":0}` followed by the returned `nextAfter`. The terminal view is `dynamicwf watch --run <id>`; add `--once` for a snapshot.
+Launch with `run.start {"id":"...","cwd":"/absolute/workspace","input":...}`. Record the returned run ID. Observe it with `run.status`, inspect outputs/activations with `run.inspect`, and page events with `run.events {"id":"...","after":0}` followed by the returned `nextAfter`. Give the user the actual run ID and a ready-to-copy `dynamicwf watch --run <id>` command (including `--store` when used) immediately after launch, before waiting. The monitor opens a compact live dashboard: 1 current work, 2 history, 3 graph; arrows scroll and q detaches. Use `--once` for a compact snapshot or `--graph --once` for the complete technical graph. For your own observation, prefer short `run.status` calls and inspect details when the state warrants it; avoid printing repeated full graphs.
 
 `run.pause` stops admitting new work and drains active leaves before reporting `paused`; structural map/parallel parents can remain recorded as running at that checkpoint. `run.resume` continues the same live supervisor or recovers a verified-dead one. `run.cancel` interrupts workers and is irreversible for that run. Ctrl-C in the watcher only detaches the viewer. A caller timeout, closed tab, or stale heartbeat alone does not prove the run died; inspect the existing run rather than starting a duplicate.
 

@@ -23,7 +23,7 @@
 | Настройки блока | Model, thinking, system prompt, tools, skills, permissions, session policy валидируются и реально применяются | Plan/worker tests с actual SDK; Codex/Grok live; snapshots и explicit model failures |
 | Pi как backend | Сквозной запуск с настоящим установленным pi, без зависимости от API родительского harness | Codex и Grok 4.6 live, отдельные процессы и свои pi-сессии |
 | Переносимый skill и однократная настройка | Установка, prerequisites skill + CLI/MCP, отсутствие host-specific backend; отдельные сквозные проверки хотя бы двух клиентов | Установлены command/skill; CLI + официальный MCP SDK client; независимый forward test из внешнего cwd |
-| Видимость текущего графа и стадии | Терминальное отображение реального состояния запуска, а не статическая картинка | watch читает реальный activation journal; tests/terminal.test.ts |
+| Видимость текущего графа и стадии | Терминальное отображение реального состояния запуска, а не статическая картинка | watch: компактные вкладки Сейчас/История/Схема, события workers, проходы и ветки; tests/monitor.test.ts, tests/terminal.test.ts, PTY QA в docs/watch.md |
 | Библиотека пресетов | Сохранить удачный запуск, получить зафиксированные настройки, повторить с новыми входами | Project/global immutable JSON; live save→edit draft→new-input rerun |
 | Промпты, навыки, права | Полные поставляемые определения, реальные проверки доступов и тесты важных ограничений | Frozen role/config/skill bytes, strict tool allowlist/output, fresh reviewers, workspace coordination; OS sandbox не заявляется |
 | Вести Git | Осмысленные локальные коммиты; результаты проверок и открытая работа отражены в документации | Локальная история и актуальные verification reports; итоговый статус в docs/progress.md |

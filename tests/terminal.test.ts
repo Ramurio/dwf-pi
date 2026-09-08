@@ -89,7 +89,7 @@ test("non-TTY summary limits active identities while preserving the complete rec
   assert.match(renderRun(run(), active), /visit=5/);
 });
 
-test("watch once renders a graph and Ctrl-C detaches without issuing any workflow control command", { timeout: 15_000 }, async () => {
+test("watch once renders a compact snapshot and Ctrl-C detaches without workflow mutations", { timeout: 15_000 }, async () => {
   const directory = await mkdtemp(join(tmpdir(), "dynamicwf-watch-"));
   const filename = join(directory, "state.sqlite");
   const store = new RunStore(filename);
@@ -116,11 +116,12 @@ test("watch once renders a graph and Ctrl-C detaches without issuing any workflo
   });
   try {
     const graph = await invoke(true);
-    assert.match(graph, /Graph main/);
-    assert.match(graph, /Graph child/);
+    assert.match(graph, /DYNAMICWF/);
+    assert.match(graph, /СЕЙЧАС/);
     assert.doesNotMatch(graph, /\u001b/u);
     const summary = await invoke(false);
-    assert.match(summary, /run-example: queued; desired running/);
+    assert.match(summary, /run-example/);
+    assert.match(summary, /Run: ОЖИДАНИЕ/);
     assert.doesNotMatch(summary, /Graph main|\u001b/u);
     assert.deepEqual(store.get(record.id), original);
     assert.deepEqual(store.events(record.id), initialEvents);

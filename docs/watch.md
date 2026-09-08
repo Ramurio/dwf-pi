@@ -1,17 +1,89 @@
-# Watch a running workflow
+# Монитор workflow
 
 ```sh
-node --import tsx src/watch.ts --run run-…
-node --import tsx src/watch.ts --run run-… --store /path/to/state.sqlite
-node --import tsx src/watch.ts --run run-… --once
+dynamicwf watch --run run-…
+dynamicwf watch --run run-… --store /path/to/state.sqlite
 ```
 
-The default journal is `$DYNAMICWF_HOME/state.sqlite`, or `~/.dynamicwf/state.sqlite` when that environment variable is unset, matching the CLI service. `--once` prints a complete diagram and exits. Each graph lists its nodes and arrows, including conditional and loop edges; map and subworkflow references link to the corresponding graph definition. Conditional edges are marked `[if]`; conditions are evaluated by the workflow runtime, not the viewer.
+По умолчанию открывается компактный экран **Сейчас**. Он занимает один экран
+терминала, обновляется на месте и не засоряет историю терминала копиями графа.
+Размер подстраивается под окно; длинные строки обрезаются, содержимое прокручивается.
 
-On a terminal, watch redraws the diagram when execution state changes. With stdout redirected to a file or pipe, it emits one concise line per observed state change. Polling is every 500 ms, so brief intermediate states may be missed; the journal remains the complete event history. Terminal runs automatically end watching. Paused and interrupted runs remain visible until Ctrl-C.
+- **1 — Сейчас:** текущие задачи, длительность, модель/thinking, последнее событие
+  worker, пять последних завершённых задач и возможные следующие переходы.
+- **2 — История:** завершённые задачи, новые сверху. Видны решения ревьюеров,
+  exit code проверок, ошибки, отдельные проходы и попытки восстановления.
+- **3 — Схема:** все графы, узлы, связи и технические идентификаторы.
+- **↑/↓**, **j/k**, **PageUp/PageDown**, **Home** — прокрутка выбранной вкладки.
+- **q / Ctrl+C** — закрыть монитор. Workflow продолжит работу.
 
-Ctrl-C and SIGTERM detach the viewer. They do not pause or cancel the workflow or terminate its supervisor. The viewer only reads run and activation records: it does not claim execution ownership or infer process death from polling. A journal status may therefore remain `running` after an unobserved crash until the control service reconciles it.
+Завершённый run остаётся на экране, чтобы можно было изучить историю. Выход возвращает
+предыдущий экран терминала и обычный режим ввода. Монитор не отправляет pause, resume
+или cancel и не меняет владельца исполнения.
 
-Node state aggregates recorded activations across scopes and visits. Active rows show graph, node, invocation scope, visit and attempt, allowing parallel/map workers to be distinguished. The counters are recorded successful/running/failed/interrupted activations; they are not a prediction of the number of future loop iterations or fan-out items. No completion percentage is invented. Structural parents can remain `running` while a paused workflow waits at a checkpoint; the diagram labels these paused structural activations explicitly.
+## Как читать экран
 
-The symbols are `○` not visited, `▶` running, `✓` succeeded, `×` failed and `!` interrupted. On a node with multiple records, the label prioritizes running, then interrupted, then failed. Each graph is shown even if no activation has visited it yet. Long user text is visibly shortened; ANSI escapes, control characters and direction-changing Unicode characters from workflow fields, scopes or errors are displayed as escaped text rather than executed by the terminal.
+`candidate #1 / council #2 / correctness / review · проход 1` означает первый
+workspace, второй запуск council и ветку correctness. `проход 2` у самого узла —
+повторное выполнение этого узла в той же ветке; `попытка 2` — восстановление того же
+прохода. Элементы динамического map нумеруются с единицы. Ветки сохраняют свои имена,
+поэтому три reviewer не выглядят как три одинаковые строки.
+
+Контейнеры worktree/parallel/map скрыты из списка текущей работы, пока внутри них
+выполняются дочерние задачи. При выделении/завершении workspace или на паузе контейнер
+может показываться отдельно. Счётчик задач не включает контейнеры.
+
+Длительность обновляется по часам. Последняя активность — наблюдаемое событие из
+журнала pi: начало запроса, ожидание ответа, использование инструмента, завершение
+хода. Это не поток рассуждений модели. Отсутствие новых событий не доказывает
+зависание. Heartbeat показан как возраст записи в журнале; монитор не проверяет
+живость процесса. Для такой проверки используй `run.status`.
+
+Успешное выполнение узла не означает одобрение продукта: `request_changes`,
+`inconclusive`, ненулевой exit code и `accepted:false` показываются явно.
+Для результата run с `accepted:false` заголовок сообщает **РЕЗУЛЬТАТ НЕ ПРИНЯТ**, даже
+если технический статус — succeeded. Монитор распознаёт эти стандартные поля,
+но не пытается интерпретировать произвольную пользовательскую output schema.
+
+## Снимки и вывод в файл
+
+```sh
+dynamicwf watch --run run-… --once          # компактный снимок
+dynamicwf watch --run run-… --graph --once # полная техническая схема
+dynamicwf watch --run run-… --plain        # только изменения, без перерисовки
+```
+
+При перенаправлении stdout режим изменений включается автоматически. Сначала он
+показывает текущие задачи и до пяти недавних результатов, затем выводит только новые
+переходы статусов. Heartbeat и повторные опросы не порождают одинаковые строки.
+После завершения run такой монитор выходит автоматически. Полная история остаётся
+доступна через вкладку 2 и `run.events`; короткие промежуточные состояния между
+опросами могут не попасть в текстовый поток.
+
+Хранилище по умолчанию — `$DYNAMICWF_HOME/state.sqlite`, иначе
+`~/.dynamicwf/state.sqlite`. `--store` должен совпадать с использованным при запуске.
+Текст workflow очищается от управляющих кодов, ANSI и bidi-последовательностей.
+
+## Проверка обновления, 2026-09-09
+
+- 19 тестов монитора, terminal renderer и установленной команды прошли; typecheck
+  и проверка skill прошли. Проверяются разные ветки и проходы, повторные попытки,
+  скрытие контейнеров, ограничения размеров экрана, очистка управляющих символов,
+  ошибки проверок и ревью, отсутствие дубликатов и массового вывода старой истории.
+- Установленный `dynamicwf` проверен в настоящем PTY с разбором экрана через pyte:
+  80×20, переключение трёх вкладок, PageDown, изменение размера до 60×16, q,
+  восстановление курсора и исходных termios flags. pyte использован только для QA,
+  в зависимости проекта не добавлен.
+- На run `run-0777991f-a942-430a-9b9c-382887927863` наблюдались три одновременные
+  ветки ревью с отдельными событиями worker. Затем проверен завершённый экран:
+  accepted result, rootTests exit 0, история доступна до выхода из монитора.
+  Управляющие команды этому run не отправлялись.
+
+Повторить PTY-проверку на существующем run (без управляющих команд):
+
+```sh
+uv run --with pyte python spikes/watch-pty.py --run run-… --store /path/to/state.sqlite
+```
+
+Стартовые предупреждения загрузчика выводятся до открытия альтернативного экрана,
+чтобы не сдвигать уже отрисованный интерфейс. Они не подавляются глобально.
