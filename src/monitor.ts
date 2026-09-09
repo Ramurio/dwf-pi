@@ -1,7 +1,8 @@
 import type { ActivationRecord, RunEvent, RunRecord } from "./run-store.js";
+import { activationUsage, summarizeUsage, tokenNumber, tokenSummary } from "./usage.js";
 import { renderRun, terminalText } from "./terminal.js";
 
-export type MonitorView = "overview" | "history" | "graph";
+export type MonitorView = "overview" | "history" | "graph" | "tokens";
 export interface WorkerActivity { at: number; label: string }
 export interface MonitorOptions {
   width?: number; height?: number; now?: number; view?: MonitorView; offset?: number;
@@ -64,7 +65,8 @@ function historyLine(a: ActivationRecord): string {
   const result = evidence(a);
   const rejected = result === "request_changes" || result === "inconclusive" || result.includes("НЕ принят") || /^exit (?!0$)/.test(result);
   const icon = a.status === "succeeded" && !rejected ? "✓" : a.status === "running" ? "▶" : "!";
-  return `${icon} ${activationPath(a)} — ${evidence(a)} · ${duration((a.finishedAt ?? a.startedAt) - a.startedAt)}`;
+  const usage = activationUsage(a);
+  return `${icon}${usage ? ` ${tokenNumber(usage.totalTokens)} ток.` : a.kind === "agent" ? " токены: н/д" : ""} ${activationPath(a)} — ${evidence(a)} · ${duration((a.finishedAt ?? a.startedAt) - a.startedAt)}`;
 }
 export function collectActivity(events: readonly RunEvent[], activity: Map<string, WorkerActivity>): void {
   for (const e of events) {
@@ -78,6 +80,7 @@ export function collectActivity(events: readonly RunEvent[], activity: Map<strin
 }
 export function monitorBody(run: RunRecord, records: readonly ActivationRecord[], options: MonitorOptions = {}): string[] {
   const now = options.now ?? Date.now(), view = options.view ?? "overview";
+  if (view === "tokens") return tokenDetails(run, records);
   if (view === "graph") return ["Схема: возможные переходы, не история выполнения.", ...renderRun(run, records).split("\n").slice(3)];
   const completed = records.filter(a => a.status !== "running" && significant(a)).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0));
   if (view === "history") return ["Последние завершённые задачи — новые сверху", "Проход = повтор узла; попытка = восстановление того же прохода.", "", ...completed.map(historyLine), ...(!completed.length ? ["Завершённых задач пока нет."] : [])];
@@ -114,16 +117,17 @@ export function renderDashboard(run: RunRecord, records: readonly ActivationReco
   let outcome = "";
   if (run.output && typeof run.output === "object" && !Array.isArray(run.output) && run.output.accepted === false) outcome = " · РЕЗУЛЬТАТ НЕ ПРИНЯТ";
   const view = options.view ?? "overview";
-  const tabs = `${view === "overview" ? "[1 Сейчас]" : "1 Сейчас"}   ${view === "history" ? "[2 История]" : "2 История"}   ${view === "graph" ? "[3 Схема]" : "3 Схема"}`;
+  const tabs = `${view === "overview" ? "[1 Сейчас]" : "1 Сейчас"}   ${view === "history" ? "[2 История]" : "2 История"}   ${view === "graph" ? "[3 Схема]" : "3 Схема"}   ${view === "tokens" ? "[4 Токены]" : "4 Токены"}`;
   const heading = [
     `DYNAMICWF  ${statusNames[run.status] ?? run.status}${outcome} · ${elapsed} · задач сейчас: ${active}`,
+    tokenSummary(records),
     run.plan.workflow.name,
     `${run.id} · ${terminal.has(run.status) ? "запуск завершён" : `heartbeat: ${heartbeat} (по журналу)`}`,
     run.error ? `Ошибка: ${run.error}` : run.status === "pausing" ? "Ждём завершения активных задач, затем пауза." : tabs,
     "─".repeat(width),
   ];
   const body = monitorBody(run, records, options);
-  if (height < 10) return [heading[0]!, heading[1]!, ...body.slice(0, height - 3), "1 Сейчас · 2 История · 3 Схема · q выход"].map(line => clipLine(line, width)).join("\n");
+  if (height < 10) return [heading[0]!, heading[1]!, ...body.slice(0, height - 3), "1 Сейчас · 2 История · 3 Схема · 4 Токены · q выход"].map(line => clipLine(line, width)).join("\n");
   const capacity = Math.max(0, height - heading.length - 2);
   const offset = Math.max(0, Math.min(options.offset ?? 0, Math.max(0, body.length - capacity)));
   const footer = `↑↓ прокрутка · q / Ctrl+C выйти${body.length > capacity ? ` · строки ${offset + 1}–${Math.min(body.length, offset + capacity)}/${body.length}` : ""}`;
@@ -137,7 +141,7 @@ export class MonitorLog {
     const lines: string[] = [];
     const state = `${run.status}/${run.desired}`;
     if (!this.state) lines.push(`${terminalText(run.plan.workflow.name)} · ${terminalText(run.id)}`);
-    if (state !== this.state) lines.push(`Run: ${statusNames[run.status] ?? run.status}${run.error ? ` — ${terminalText(run.error)}` : ""}`);
+    if (state !== this.state) lines.push(`Run: ${statusNames[run.status] ?? run.status}${run.error ? ` — ${terminalText(run.error)}` : ""} · ${tokenSummary(records)}`);
     const initialVisible = new Set([...activeWork(records), ...records.filter(a => a.status !== "running" && significant(a)).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0)).slice(0, 5)].map(a => a.key));
     for (const a of records) {
       const value = `${a.status}/${a.attempt}`;
@@ -147,4 +151,37 @@ export class MonitorLog {
     this.state = state;
     return lines;
   }
+}
+
+function tokenDetails(run: RunRecord, records: readonly ActivationRecord[]): string[] {
+  const total = summarizeUsage(records);
+  const lines = [tokenSummary(records), `Вход: ${tokenNumber(total.input)} · Выход: ${tokenNumber(total.output)}`,
+    "Total — счётчик провайдера; он может включать кэш сверх input/output.",
+    "Это суммарный расход всех вызовов, а не размер одного контекста."];
+  if (total.pending) lines.push(`Ещё работают без отчёта: ${total.pending}. Их расход пока не включён.`);
+  if (total.missing) lines.push(`Нет отчёта у завершённых/прерванных агентов: ${total.missing}. Это не ноль.`);
+  if (total.earlierAttempts) lines.push(`Предыдущих попыток без отдельного учёта: ${total.earlierAttempts}.`);
+  if (total.costReported) lines.push(`Оценка SDK: $${total.cost.toFixed(4)}${total.costReported !== total.reported || total.partial ? " (неполная)" : ""} — не списание по подписке.`);
+  lines.push("", "ПО МОДЕЛЯМ — доля от учтённых токенов");
+  const groups = new Map<string, ActivationRecord[]>();
+  for (const a of records.filter(a => a.kind === "agent")) {
+    const saved = a.metadata.model;
+    const model = saved && typeof saved === "object" && !Array.isArray(saved) && typeof saved.id === "string" && typeof saved.provider === "string" ? saved : run.plan.agents[a.context.graphId]?.[a.context.nodeId]?.model;
+    const label = model ? `${model.provider}/${model.id}` : "модель не записана";
+    groups.set(label, [...groups.get(label) ?? [], a]);
+  }
+  for (const [model, group] of [...groups].sort((a, b) => summarizeUsage(b[1]).totalTokens - summarizeUsage(a[1]).totalTokens)) {
+    const usage = summarizeUsage(group);
+    const percent = total.totalTokens > 0 ? ` · ${Math.round(usage.totalTokens / total.totalTokens * 100)}%` : "";
+    lines.push(`${usage.reported ? tokenNumber(usage.totalTokens) : "н/д"} ток.${percent} · ${terminalText(model)}${usage.partial ? " · неполные данные" : ""}`);
+  }
+  lines.push("", "ПО АГЕНТАМ И ПРОХОДАМ — больше расход сверху");
+  for (const a of records.filter(a => a.kind === "agent").sort((a, b) => (activationUsage(b)?.totalTokens ?? -1) - (activationUsage(a)?.totalTokens ?? -1))) {
+    const usage = activationUsage(a);
+    lines.push(`${usage ? tokenNumber(usage.totalTokens) : "н/д"} ток. · ${activationPath(a)}`);
+    lines.push(usage ? `  вход ${tokenNumber(usage.input)} · выход ${tokenNumber(usage.output)}` : `  ${a.status === "running" ? "ожидаем отчёт worker" : "отчёт не сохранён"}`);
+  }
+  if (!groups.size) lines.push("Агенты ещё не запускались. Команды и служебные узлы токены не расходуют.");
+  lines.push("", "Учёт обновляется после завершения worker, не по каждому новому токену.");
+  return lines;
 }

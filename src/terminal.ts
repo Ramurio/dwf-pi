@@ -1,3 +1,4 @@
+import { summarizeUsage, tokenNumber, tokenSummary } from "./usage.js";
 import type { Node } from "./graph.js";
 import type { ActivationRecord, RunRecord } from "./run-store.js";
 
@@ -38,13 +39,15 @@ export function renderRun(run: RunRecord, activations: readonly ActivationRecord
   const lines = [
     `${terminalText(run.plan.workflow.name)} · ${terminalText(run.plan.workflow.id)} revision ${run.plan.workflow.revision}`,
     `Run ${terminalText(run.id)} · ${stateLabel(run)}`,
-    `Journal: ${progress(activations)}`,
+    `Journal: ${progress(activations)} · ${tokenSummary(activations)}`,
   ];
   for (const [graphId, graph] of Object.entries(run.plan.workflow.graphs)) {
     lines.push("", `┌ Graph ${terminalText(graphId)} · entry ${terminalText(graph.entry)}`);
     for (const node of graph.nodes) {
       const records = activations.filter(a => a.context.graphId === graphId && a.context.nodeId === node.id);
+      const usage = summarizeUsage(records);
       lines.push(`│ ${nodeLabel(node)}  ${nodeState(records)}`);
+      if (node.kind === "agent") lines.push(`│   Токены: ${usage.reported ? tokenNumber(usage.totalTokens) : records.length ? "нет отчётов" : "—"}${usage.partial ? " · неполные данные" : ""} · все ветки / проходы`);
       if (node.kind === "map" || node.kind === "subworkflow") lines.push(`│   ↳ graph ${terminalText(node.graphId)}${node.kind === "map" ? ` · dynamic items · concurrency ${node.concurrency ?? "unbounded"}` : ""}`);
       if (node.kind === "parallel") for (const child of node.children) lines.push(`│   ↳ ${terminalText(child.id)} → graph ${terminalText(child.graphId)}`);
     }

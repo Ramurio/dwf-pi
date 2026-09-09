@@ -102,3 +102,41 @@ test("very small windows preserve a visible exit hint without overflowing rows",
     assert.match(text.split("\n").at(-1)!, /q выход/);
   }
 });
+
+test("token views sum independent workers once, preserve provider total and expose unknown usage", async () => {
+  const { summarizeUsage, activationUsage, tokenSummary } = await import("../src/usage.js");
+  const a = reviewer("correctness"), b = reviewer("tests", 1), pending = reviewer("docs");
+  a.status = "succeeded"; a.finishedAt = 1000; a.metadata.usage = { input: 10, output: 5, totalTokens: 100, cost: 0.01 };
+  b.status = "succeeded"; b.finishedAt = 2000; b.metadata.usage = { input: 20, output: 10, totalTokens: 200 };
+  const parent = activation("candidate", "worktree", base); parent.metadata.usage = a.metadata.usage;
+  const records = [a, b, pending, parent];
+  const sum = summarizeUsage(records);
+  assert.equal(sum.totalTokens, 300); // not input + output, and never count parent copies
+  assert.equal(sum.input, 30); assert.equal(sum.output, 15);
+  assert.equal(sum.reported, 2); assert.equal(sum.pending, 1); assert.equal(sum.partial, true);
+  assert.equal(activationUsage(parent), undefined);
+  assert.match(tokenSummary(records), /Токены: 300 · неполные данные · отчётов: 2\/3/);
+  assert.match(renderDashboard(run(), records), /Токены: 300/);
+  const detail = monitorBody(run(), records, { view: "tokens" }).join("\n");
+  assert.match(detail, /Ещё работают без отчёта: 1/);
+  assert.match(detail, /200 ток.*tests.*проход 2/);
+  assert.match(detail, /не списание по подписке/);
+  assert.match(monitorBody(run(), records, { view: "history" }).join("\n"), /✓ 200 ток\./);
+  assert.match(monitorBody(run(), records, { view: "graph" }).join("\n"), /Токены: 300 · неполные данные/);
+});
+
+test("missing, invalid, zero and previous-attempt usage are not confused", async () => {
+  const { summarizeUsage, tokenSummary } = await import("../src/usage.js");
+  const a = reviewer("tests"); a.status = "failed";
+  assert.match(tokenSummary([a]), /нет отчётов/);
+  assert.equal(summarizeUsage([a]).missing, 1);
+  a.metadata.usage = { input: 0, output: 0, totalTokens: 0 };
+  assert.equal(summarizeUsage([a]).partial, false);
+  assert.match(tokenSummary([a]), /Токены: 0 · отчётов: 1\/1/);
+  a.attempt = 2;
+  assert.equal(summarizeUsage([a]).partial, true);
+  assert.equal(summarizeUsage([a]).earlierAttempts, 1);
+  a.metadata.usage = { input: -1, output: 0, totalTokens: 0 };
+  assert.equal(summarizeUsage([a]).reported, 0);
+  assert.equal(summarizeUsage([]).totalTokens, 0);
+});

@@ -28,6 +28,8 @@ try:
     assert 'DYNAMICWF' in overview and 'СЕЙЧАС' in overview and 'Ctrl+C' in overview, overview
     os.write(master,b'2');pump(0.5)
     history=capture('history'); assert 'новые сверху' in history, history
+    os.write(master,b'4');pump(0.5)
+    tokens=capture('tokens'); assert 'Токены:' in tokens and 'ПО МОДЕЛЯМ' in tokens, tokens
     os.write(master,b'3');pump(0.5)
     graph=capture('graph'); assert 'Graph ' in graph, graph
     os.write(master,b'\x1b[6~');pump(0.5)
@@ -41,7 +43,7 @@ try:
     assert child.returncode==0
     assert b'\x1b[?1049h' in raw and b'\x1b[?1049l' in raw and b'\x1b[?25h' in raw
     assert termios.tcgetattr(slave)==before, 'terminal mode not restored'
-    print('PTY verified: overview, history, graph, scrolling, resize 80x20 to 60x16, q exit, cursor and terminal input restoration.')
+    print('PTY verified: overview, history, graph, tokens, scrolling, resize 80x20 to 60x16, q exit, cursor and terminal input restoration.')
     assert raw.index(b'DeprecationWarning') < raw.index(b'\x1b[?1049h') if b'DeprecationWarning' in raw else True
     print(overview)
 finally:

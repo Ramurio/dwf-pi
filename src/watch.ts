@@ -13,7 +13,7 @@ let drawing = false, raw = false, previousRaw = false;
 let view: MonitorView = "overview", offset = 0;
 const onKey = (_: string, key: { name?: string; ctrl?: boolean } = {}) => {
   if (key.name === "q" || key.ctrl && key.name === "c") detach();
-  if (["1", "2", "3"].includes(key.name ?? "")) { view = key.name === "2" ? "history" : key.name === "3" ? "graph" : "overview"; offset = 0; }
+  if (["1", "2", "3", "4"].includes(key.name ?? "")) { view = key.name === "4" ? "tokens" : key.name === "2" ? "history" : key.name === "3" ? "graph" : "overview"; offset = 0; }
   if (key.name === "down" || key.name === "j") offset++;
   if (key.name === "up" || key.name === "k") offset = Math.max(0, offset - 1);
   if (key.name === "pagedown") offset += 10;
@@ -27,7 +27,7 @@ try {
     graph: { type: "boolean" }, plain: { type: "boolean" },
   } });
   if (values.help) {
-    process.stdout.write("Usage: dynamicwf watch --run <id> [--store state.sqlite] [--once] [--graph] [--plain]\n1 Now · 2 History · 3 Graph · arrows/PgUp/PgDn scroll · q/Ctrl-C detach\n--once: compact snapshot; --graph --once: full graph; --plain: append-only changes.\nThe workflow continues when you close the monitor.\n");
+    process.stdout.write("Usage: dynamicwf watch --run <id> [--store state.sqlite] [--once] [--graph] [--plain]\n1 Now · 2 History · 3 Graph · 4 Tokens · arrows/PgUp/PgDn scroll · q/Ctrl-C detach\n--once: compact snapshot; --graph --once: full graph; --plain: append-only changes.\nThe workflow continues when you close the monitor.\n");
   } else {
     if (!values.run) throw new Error("Specify --run <id>; use --help");
     store = new RunStore(values.store ?? defaultStorePath());
@@ -58,7 +58,7 @@ try {
       if (events.length) cursor = events.at(-1)!.seq;
       collectActivity(events, activity);
       if (values.once || tty) {
-        offset = Math.min(offset, Math.max(0, monitorBody(run, activations, { view, activity }).length - Math.max(0, (process.stdout.rows || 25) - 8)));
+        offset = Math.min(offset, Math.max(0, monitorBody(run, activations, { view, activity }).length - Math.max(0, (process.stdout.rows || 25) - 9)));
         const rendered = values.once && values.graph ? renderRun(run, activations) : renderDashboard(run, activations, {
           width: Math.max(1, (process.stdout.columns || 101) - 1), height: Math.max(4, (process.stdout.rows || 25) - 1), view, offset, activity,
         });
