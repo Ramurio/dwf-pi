@@ -11,7 +11,7 @@ import { prepareExecutionPlan, type PrepareExecutionOptions } from "./execution-
 import { ExprSchema, validateWorkflow, WorkflowSchema, type Json } from "./graph.js";
 import { assertJson } from "./output-schema.js";
 import { RunController } from "./run-controller.js";
-import type { ActivationRecord, RunEvent, RunRecord } from "./run-store.js";
+import type { ActivationRecord, AttemptRecord, RunEvent, RunRecord } from "./run-store.js";
 import { DraftStore } from "./store.js";
 import { PresetLibrary, presetName, presetRevision, presetSummary, type PresetScope } from "./presets.js";
 import { summarizeUsage } from "./usage.js";
@@ -21,7 +21,7 @@ export const serviceToolNames = [
   "catalog.list", "catalog.describe", "catalog.models", "system.doctor", "workflow.schema", "workflow.create", "workflow.list", "workflow.inspect",
   "workflow.patch", "workflow.validate", "workflow.compile", "workflow.prepare", "run.start", "run.status",
   "run.list", "run.inspect", "run.events", "run.usage", "run.pause", "run.resume", "run.cancel",
-  "preset.save", "preset.list", "preset.inspect", "preset.run", "run.waits", "run.resolve", "run.trace", "workflow.prepared",
+  "preset.save", "preset.list", "preset.inspect", "preset.run", "run.waits", "run.resolve", "run.trace", "workflow.prepared", "run.attempts",
 ] as const;
 export type ServiceToolName = typeof serviceToolNames[number];
 export type WorkflowServiceOptions = Omit<PrepareExecutionOptions, "cwd"> & { cwd?: string };
@@ -187,9 +187,16 @@ export class WorkflowService {
         await controller.control(id, tool.slice(4) as "pause" | "resume" | "cancel");
         return publicObservation(controller.snapshot(id));
       }
+      case "run.attempts": {
+        const input = object(request, ["id", "key", "after", "limit"]);
+        const page = this.getController().store.attempts(identifier(input.id), nonemptyString(input.key,"key"),
+          input.after === undefined ? 0 : cursor(input.after), input.limit === undefined ? 100 : cursor(input.limit));
+        return publicAttempts(page);
+      }
       case "run.waits": {
         const input = object(request, ["id"]);
-        const controller = this.getController(), id = identifier(input.id);
+        const id = identifier(input.id);
+        const controller = this.getController();
         return { ...publicObservation(controller.snapshot(id)), waits: controller.store.waits(id) };
       }
       case "run.resolve": {
@@ -281,6 +288,15 @@ function publicActivation(record: ActivationRecord) {
   const { ownerToken: _, metadata, ...fields } = record;
   const { workerToken: __, ...publicMetadata } = metadata;
   return { ...fields, metadata: publicMetadata };
+}
+/** Explicit inspection keeps operation/session provenance but excludes fences and cumulative usage. */
+export function publicAttempts(page: ReturnType<RunController["store"]["attempts"]>) {
+  const project = (record: AttemptRecord) => {
+    const { metadata, ...activation } = publicActivation(record);
+    const { usage: _, usageLedgerVersion: _v, usageReportCount: _c, usageRecordedAttempts: _a, usageComplete: _complete, ...details } = metadata;
+    return { ...activation, accounting: record.accounting, metadata: details };
+  };
+  return { ...page, current: project(page.current), records: page.records.map(project) };
 }
 function publicEvent(event: RunEvent): RunEvent {
   if (event.type === "run.reserved") return { ...event, payload: {} };

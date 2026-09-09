@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { RunController } from "../run-controller.js";
 import { collectActivity, type WorkerActivity } from "../monitor.js";
 import { summarizeUsage } from "../usage.js";
+import { publicAttempts } from "../service.js";
 import { graphSnapshot } from "./model.js";
 import type { Json } from "../graph.js";
 
@@ -171,6 +172,12 @@ export async function startGraphServer(
         if (!id) throw new Error("Select a run");
         store.get(id);
         json(store.usageReports(id, Number(url.searchParams.get("after") ?? 0), 100));
+        return;
+      }
+      if (name === "attempts") {
+        const id = url.searchParams.get("id") ?? runId, key = url.searchParams.get("key");
+        if (!id || !key) throw new Error("Select a run and activation key");
+        json(publicAttempts(store.attempts(id, key, Number(url.searchParams.get("after") ?? 0), 100)));
         return;
       }
       if (name === "trace") {

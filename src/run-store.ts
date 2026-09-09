@@ -48,6 +48,9 @@ export interface ActivationRecord {
   metadata: ActivationMetadata;
 }
 export interface RunEvent { seq: number; runId: string; type: string; payload: Json; at: number }
+export interface AttemptRecord extends ActivationRecord {
+  accounting: { recorded: boolean; complete: boolean; responses: number; usage: TokenUsage | null };
+}
 export interface TransitionRecord { seq: number; runId: string; key: string; context: RuntimeContext; attempt: number; at: number; decision: RoutingDecision }
 export interface WaitRecord {
   id: string; runId: string; key: string; reason: string; input: Json; responseSchema: Record<string, unknown>;
@@ -119,11 +122,16 @@ export class RunStore {
         run_id TEXT PRIMARY KEY REFERENCES workflow_runs(id), prepared_id TEXT NOT NULL,
         idempotency_key TEXT UNIQUE
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS workflow_activation_history (
+        run_id TEXT NOT NULL, activation_key TEXT NOT NULL, attempt INTEGER NOT NULL, record TEXT NOT NULL,
+        PRIMARY KEY(run_id,activation_key,attempt),
+        FOREIGN KEY(run_id,activation_key) REFERENCES workflow_activations(run_id,activation_key)
+      ) STRICT;
     `);
   }
   close(): void { this.database.close(); }
-  private transaction<T>(body: () => T): T {
-    this.database.exec("BEGIN IMMEDIATE");
+  private transaction<T>(body: () => T, mode: "write" | "read" = "write"): T {
+    this.database.exec(mode === "write" ? "BEGIN IMMEDIATE" : "BEGIN");
     try { const result = body(); this.database.exec("COMMIT"); return result; }
     catch (error) { this.database.exec("ROLLBACK"); throw error; }
   }
@@ -311,6 +319,9 @@ export class RunStore {
       if (old?.status === "succeeded") return old;
       if (old?.status === "running") throw new Error(`Activation is already running: ${key}`);
       if (old?.sideEffect && !(old.kind === "worktree" && old.metadata.workspacePhase === "children")) throw new Error(`Uncertain side effect requires explicit retry authorization: ${key}`);
+      // Preserve the complete prior checkpoint atomically before replacing the current attempt.
+      if (old) this.database.prepare("INSERT INTO workflow_activation_history(run_id,activation_key,attempt,record) VALUES(?,?,?,?)")
+        .run(id, key, old.attempt, JSON.stringify(old));
       const now = Date.now();
       if (run.status === "waiting") {
         this.database.prepare("UPDATE workflow_runs SET status='running',updated_at=? WHERE id=?").run(now, id);
@@ -390,6 +401,28 @@ export class RunStore {
   completed(id: string, key: string): { output: Json } | undefined {
     const record = this.getActivation(id, key);
     return record?.status === "succeeded" ? { output: record.output! } : undefined;
+  }
+  /** Pages contain immutable archived attempts; current is a separate live observation on every read. */
+  attempts(id: string, key: string, after = 0, limit = 100) {
+    if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error("Invalid attempt page cursor or limit (1–1000)");
+    return this.transaction(() => {
+      this.get(id);
+      const current = this.getActivation(id, key);
+      if (!current) throw new Error("Activation not found in this run");
+      const rows = this.database.prepare("SELECT record FROM workflow_activation_history WHERE run_id=? AND activation_key=? AND attempt>? ORDER BY attempt LIMIT ?").all(id, key, after, limit + 1);
+      const count = Number(this.database.prepare("SELECT COUNT(*) AS n FROM workflow_activation_history WHERE run_id=? AND activation_key=?").get(id,key)!.n);
+      const records = rows.slice(0,limit).map(row => this.attemptAccounting(JSON.parse(String(row.record)) as ActivationRecord));
+      return { key, current: this.attemptAccounting(current), records,
+        totalAttempts: current.attempt, archived: count, missingArchived: Math.max(0,current.attempt - 1 - count),
+        nextAfter: records.at(-1)?.attempt ?? after, hasMore: rows.length > limit };
+    }, "read");
+  }
+  private attemptAccounting(record: ActivationRecord): AttemptRecord {
+    const ledger = this.database.prepare("SELECT complete FROM workflow_usage_attempts WHERE run_id=? AND activation_key=? AND attempt=?").get(record.runId,record.key,record.attempt);
+    const reports = this.database.prepare("SELECT usage FROM workflow_usage_reports WHERE run_id=? AND activation_key=? AND attempt=? ORDER BY seq").all(record.runId,record.key,record.attempt)
+      .map(row => JSON.parse(String(row.usage)) as TokenUsage);
+    return { ...record, accounting: { recorded: Boolean(ledger), complete: ledger?.complete === 1,
+      responses: reports.length, usage: reports.length ? sumTokenUsage(reports) : null } };
   }
   transition(id: string, key: string): TransitionRecord | undefined {
     const row = this.database.prepare("SELECT t.*,a.context FROM workflow_transitions t JOIN workflow_activations a ON a.run_id=t.run_id AND a.activation_key=t.activation_key WHERE t.run_id=? AND t.activation_key=?").get(id, key);

@@ -40,3 +40,17 @@ export class CursorPages {
 export class UsagePages extends CursorPages {}
 /** @extends {CursorPages<import('../run-store.js').TransitionRecord>} */
 export class TracePages extends CursorPages {}
+/** @typedef {ReturnType<typeof import('../service.js').publicAttempts>} AttemptPage */
+/** @extends {CursorPages<AttemptPage['current']>} */
+export class AttemptPages extends CursorPages {
+  /** @type {Map<string, AttemptPage>} */
+  snapshots = new Map();
+  /** @param {string} id @param {(id: string, cursor: number) => Promise<AttemptPage>} fetchPage */
+  async loadAttempts(id, fetchPage) {
+    await this.load(id, async (key, cursor) => {
+      const result = await fetchPage(key,cursor);
+      this.snapshots.set(key,result);
+      return { reports:result.records, nextAfter:result.nextAfter, hasMore:result.hasMore };
+    });
+  }
+}

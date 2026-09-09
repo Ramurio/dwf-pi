@@ -1,8 +1,9 @@
 import { layoutGraph } from "./layout.js";
-import { UsagePages, TracePages } from "./usage-pages.js";
+import { UsagePages, TracePages, AttemptPages } from "./usage-pages.js";
 
 const usagePages = new UsagePages();
 const tracePages = new TracePages();
+const attemptPages = new AttemptPages();
 const routingLabels = { true: "Условие выполнено", false: "Условие не выполнено", "not-evaluated": "Не проверялось", fallback: "Выбран запасной переход", error: "Ошибка проверки" };
 const waitDrafts = new Map();
 
@@ -468,11 +469,35 @@ function renderInspector() {
       for (const finding of a.findings) details.append(el("pre", "", finding));
       row.append(details);
     }
+    renderAttempts(row,a);
     aside.append(row);
   }
   aside.scrollTop = scroll;
 }
 const svgNS = "http://www.w3.org/2000/svg";
+function renderAttempts(container, activation) {
+  const id=state.id, identity=JSON.stringify([id,activation.key]), page=attemptPages.get(identity);
+  const load=button(page.loading ? "Загружаем попытки…" : !page.opened ? `Попытки: ${activation.attempt}` : page.hasMore ? "Ещё попытки" : "Обновить попытки", async()=>{
+    const work=attemptPages.loadAttempts(identity,(_identity,cursor)=>api(`attempts?id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}&after=${cursor}`));
+    renderInspector(); await work; if(state.id===id)renderInspector();
+  },"child-button");
+  load.disabled=page.loading;container.append(load);
+  if(page.error)container.append(el("p","notice",page.error));
+  const snapshot=attemptPages.snapshots.get(identity);
+  if(!snapshot)return;
+  if(snapshot.missingArchived)container.append(el("p","notice",`Не сохранено прежних попыток: ${snapshot.missingArchived}. Старый журнал не содержит их полных записей.`));
+  container.append(el("p","muted","Попытки на момент запроса. Расход ниже относится к каждой попытке отдельно."));
+  for(const record of [...page.reports,snapshot.current]) {
+    const card=el("section","attempt-card");
+    card.append(el("strong","",`Попытка ${record.attempt}${record.attempt===snapshot.current.attempt ? " · последняя" : ""}`),badge(record.status));
+    card.append(el("p","muted",`${date(record.startedAt)} · ${record.finishedAt===null ? "не завершена на момент запроса" : duration(record.finishedAt-record.startedAt)}`));
+    if(record.kind==="agent")card.append(el("p","",record.accounting.usage ? `${number(record.accounting.usage.totalTokens)} ток. · ответов ${record.accounting.responses}${record.accounting.complete ? "" : " · частично"}` : "Расход этой попытки неизвестен: нет отчётов SDK."));
+    if(record.error)card.append(el("pre","",record.error));
+    if(Object.hasOwn(record,"output"))card.append(el("pre","",JSON.stringify(record.output,null,2)));
+    if(Object.keys(record.metadata).length){const details=el("details");details.append(el("summary","","Данные попытки"),el("pre","",JSON.stringify(record.metadata,null,2)));card.append(details);}
+    container.append(card);
+  }
+}
 function svgEl(tag, attrs = {}, text) {
   const node = document.createElementNS(svgNS, tag);
   for (const [key, value] of Object.entries(attrs))

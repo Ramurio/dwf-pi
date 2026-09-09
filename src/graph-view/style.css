@@ -856,3 +856,6 @@ dialog .controls {
 .execution-plan { margin: 0 0 16px; font-size: 13px; overflow-wrap: anywhere; }
 .execution-plan summary { cursor: pointer; color: var(--muted); }
 .execution-plan p { margin: 8px 0; }
+.attempt-card { margin-top: 12px; padding: 12px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+.attempt-card > .badge { margin-left: 8px; }
+.attempt-card pre { white-space: pre-wrap; font-size: 12px; }

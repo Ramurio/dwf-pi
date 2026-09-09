@@ -66,6 +66,7 @@ persistent store path. Catalog/schema calls do not create a database.
 | `run.list` | none | Public summaries and process liveness for stored runs |
 | `run.inspect` | run `id` | Summary, frozen workflow, run input and activation journal |
 | `run.events` | run `id`, optional `after` | `{events,nextAfter}` for incremental observation |
+| `run.attempts` | run `id`, activation `key`, optional `after`, `limit` | Archived attempts, separate current checkpoint, per-attempt accounting and history gaps |
 | `run.pause` | run `id` | Public state after pause request |
 | `run.resume` | run `id` | Public state after resume request |
 | `run.cancel` | run `id` | Public state after cancellation request |
@@ -154,3 +155,5 @@ Validation: existing CLI authoring tests remain unchanged. `tests/service.test.t
 checks strict requests, preparation/model selection, persisted detached execution
 across service closure, pause/resume/cancel, event cursors and token-free public
 inspection.
+
+Attempt history and its cursor/current distinction are documented in [attempt-history.md](attempt-history.md). This read-only operation does not authorize repeated effects.

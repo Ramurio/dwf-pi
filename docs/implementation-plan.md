@@ -12,7 +12,7 @@
 | Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Реализовано и проверено: await, run.waits/resolve, JSON-форма, idempotency, pause/resume, SIGKILL и worktree reattach; см. outcomes-and-waits.md |
 | Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Реализовано: controller.snapshot + projectRun, включая browser list и watch; проверка процессов отдельно от heartbeat, см. observation.md |
 | Usage | Учёт каждого ответа, cache/reasoning, попытки, dedup, отмена/ошибки, раскрытие сумм | Backend/API/UI реализованы; 65 targeted tests и браузерный fixture, см. usage.md. Общая приёмка с будущим recovery остаётся обязательной |
-| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | Не начато |
+| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История попыток, API/UI и раздельный usage реализованы; типы ошибок, policies и reconciliation ещё не начаты, см. attempt-history.md |
 | Артефакты | Snapshot/digest, версии критериев, применимость checks/reviews, diff | Не начато |
 | Интеграция | Отдельный integration workspace, проверки объединения, контроль target head | Не начато |
 | Authoring | Рецепты в обычный граф, агрегация коллекций, schemas и dataflow diagnostics | Не начато |
@@ -141,3 +141,24 @@ cancelled; typecheck, browser JS syntax и skill validation прошли.
 `/tmp/dynamicwf-prepared-full-20260910.log`. Контракт: prepared-start.md.
 Prepared snapshots не являются tested presets; retention, preset delivery, общая
 нормализация run journal и восстановление эффектов не объявлены готовыми этим этапом.
+
+
+### История попыток
+
+Замена текущего checkpoint теперь атомарно архивирует прежнюю попытку с исходными
+ошибкой, временем и metadata. `run.attempts` / `run_attempts` и browser inspector
+показывают архив отдельно от текущего состояния; pagination не превращает текущую
+попытку в неизменную старую строку. Usage выводится по точному run/key/attempt, без
+повторного суммирования cumulative metadata. Старые пропуски явно отмечены.
+
+Проверены rollback archive+replacement+event, cursor/current, identity scopes/visits,
+раздельный usage 8+12=20, redaction, read-only API/browser, client refresh и настоящий
+SIGKILL с сохранением await и без повторения завершённой записи. Native UI показал
+попытку 1 interrupted с прежней ошибкой и попытку 2 succeeded с ответом; повтор
+загрузки без дублей, консоль без ошибок. Временный run/server очищены.
+
+После изменения обычный параллельный `npm test`: **259/259**, 59,1 секунды, без
+cancelled; typecheck, browser syntax, строгий checkJs paging module и skill validation
+прошли. `/tmp/dynamicwf-attempts-full-20260910.log`. Контракт: attempt-history.md.
+Это завершает сохранение и просмотр attempts, но не typed failures, policies,
+output repair и reconciliation. Общий goal остаётся в полном объёме.
