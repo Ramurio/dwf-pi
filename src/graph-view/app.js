@@ -284,6 +284,11 @@ function renderHeader() {
   $("run-id").textContent = r.id;
   $("cwd").textContent = r.cwd;
   $("cwd").title = r.cwd;
+  $("execution-plan-detail").replaceChildren(
+    el("p", "muted", `Ревизия графа: ${r.workflowRevision}. План этого запуска зафиксирован.`),
+    el("p", "", r.preparedId ? `Подготовленный план: ${r.preparedId}` : "Отдельный preparedId для этого запуска не записан."),
+    el("p", "", `SHA-256 плана: ${r.planHash}`),
+  );
   const status = $("run-status");
   status.className = `badge ${r.status}`;
   status.textContent = r.presentation.statusLabel;

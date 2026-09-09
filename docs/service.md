@@ -10,8 +10,10 @@ change an input while asynchronous preparation is running.
 ```ts
 const service = new WorkflowService('/path/to/state.sqlite', { cwd: '/project' });
 try {
+  const prepared = await service.dispatch('workflow.prepare', { id: 'repair' }) as PreparedExecution;
   const result = await service.dispatch('run.start', {
-    id: 'repair', input: { task: 'Implement the requested change' }
+    preparedId: prepared.preparedId, idempotencyKey: 'unique-intended-repair-run',
+    input: { task: 'Implement the requested change' }
   });
 } finally {
   service.close();
@@ -27,7 +29,7 @@ inspect or control it using its returned run ID and the same store filename.
 ```sh
 npm run --silent cli -- catalog.list <<<'{}'
 npm run --silent cli -- workflow.prepare --store /path/to/state.sqlite <<<'{"id":"repair","cwd":"/project"}'
-npm run --silent cli -- run.start --store /path/to/state.sqlite <<<'{"id":"repair","cwd":"/project","input":{"task":"Fix the failing check"}}'
+npm run --silent cli -- run.start --store /path/to/state.sqlite <<<'{"preparedId":"prepared-RETURNED-HASH","idempotencyKey":"unique-repair-run","input":{"task":"Fix the failing check"}}'
 npm run --silent cli -- run.status --store /path/to/state.sqlite <<<'{"id":"run-RETURNED-ID"}'
 ```
 
@@ -57,8 +59,9 @@ persistent store path. Catalog/schema calls do not create a database.
 | `workflow.patch` | `id`, `expectedRevision`, `operations` | Updated revision and validation result |
 | `workflow.validate` | `id` | Graph validation result |
 | `workflow.compile` | `id` | Generated TypeScript + Effect source and hash |
-| `workflow.prepare` | `id`, optional `cwd`, `model` | Full frozen execution plan, with no inference or run launch |
-| `run.start` | `id`, optional `input`, `cwd`, `model` | New run's public summary after supervisor spawn |
+| `workflow.prepare` | `id`, optional `cwd`, `model` | Saved `{preparedId,planHash,cwd,createdAt,plan}`, with no inference |
+| `workflow.prepared` | `preparedId` | Saved handle and verified full plan, without mutable resource reads |
+| `run.start` | `preparedId`, optional `input`, `idempotencyKey`; or `id`, optional `input`, `cwd`, `model` | Started or deduplicated run public summary |
 | `run.status` | run `id` | Public summary and observed process liveness |
 | `run.list` | none | Public summaries and process liveness for stored runs |
 | `run.inspect` | run `id` | Summary, frozen workflow, run input and activation journal |
@@ -73,7 +76,10 @@ persistent store path. Catalog/schema calls do not create a database.
 Completed summaries include `taskOutcome` independently of technical status/output.
 See [outcomes-and-waits.md](outcomes-and-waits.md) for resolution, pause and recovery.
 
-`run.start.id` identifies a draft; all other run operations take the returned run ID.
+`run.start.preparedId` identifies a saved plan in this journal. It cannot be combined
+with `id`, `cwd` or `model`. The alternative `run.start.id` identifies a current draft
+and always creates a new run; it does not accept `idempotencyKey`. Other run
+operations take the returned run ID.
 A missing run input defaults to JSON `null`; explicit `false`, `0`, `""`, objects,
 arrays and `null` retain their JSON meaning. `cwd` defaults to the service's working
 directory (the CLI process's working directory). A relative `cwd` is resolved against
@@ -81,11 +87,15 @@ that directory. `model` is exactly `{provider,id}` and supplies a default for no
 without an explicit model; it does not replace per-node choices. Availability and
 thinking behavior are described in [execution-plan.md](execution-plan.md).
 
-Run start freezes the current draft revision. Later patches affect future starts.
-`workflow.prepare` exposes the concrete plan for inspection, including skill
+The recommended prepared start uses the saved snapshot regardless of later draft,
+skill or default-model changes. `workflow.prepare` now returns an envelope with the
+execution plan under `plan` (previously the result was the plan itself). Library
+`prepareExecutionPlan` still returns an `ExecutionPlan` directly. See
+[prepared-start.md](prepared-start.md) for exact start, delivery retries and recovery.
+`workflow.prepared` exposes the concrete plan for inspection, including skill
 snapshots; ordinary status responses omit that potentially large payload and owner
 fencing tokens. They include workflow identity/revision, `planHash`, `sourceHash`,
-resolved agent model/thinking summaries, working directory, timestamps, status,
+`preparedId` when recorded, resolved agent model/thinking summaries, working directory, timestamps, status,
 desired state, supervisor PID, and output or error when present. Observed state also
 includes `supervisorAlive` and `workersAlive`; a database PID alone does not prove
 liveness. `run.inspect` omits activation owner/worker fencing tokens. Public events

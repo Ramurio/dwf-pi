@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { WorkflowService, serviceToolNames } from "../src/service.js";
-import type { ExecutionPlan } from "../src/execution-types.js";
+import type { PreparedExecution } from "../src/execution-types.js";
 import type { Node } from "../src/graph.js";
 import { RunStore } from "../src/run-store.js";
 
@@ -54,7 +54,7 @@ test("shared service retains strict catalog and authoring API, frozen preparatio
     assert.deepEqual(await service.dispatch("workflow.list", {}), [{ id: "sample", name: "Sample", revision: 2 }]);
     assert.deepEqual(await service.dispatch("workflow.validate", { id: "sample" }), { valid: true, issues: [] });
     const compiled = await service.dispatch("workflow.compile", { id: "sample" }) as { source: string; hash: string };
-    const plan = await service.dispatch("workflow.prepare", { id: "sample" }) as ExecutionPlan;
+    const { plan } = await service.dispatch("workflow.prepare", { id: "sample" }) as PreparedExecution;
     assert.equal(compiled.source, plan.source);
     assert.equal(compiled.hash, plan.sourceHash);
     await assert.rejects(service.dispatch("workflow.patch", { id: "sample", expectedRevision: 1, operations: [{ op: "removeNode", graphId: "main", nodeId: "done" }] }), /Revision conflict/);
@@ -85,7 +85,7 @@ test("workflow.prepare resolves explicit available model and default thinking wi
     await author(service, [
       { id: "worker", kind: "agent", role: "general", task: { op: "literal", value: "Task" } }, pureNode,
     ]);
-    const plan = await service.dispatch("workflow.prepare", { id: "sample", model: { provider: "test", id: "plain" } }) as ExecutionPlan;
+    const { plan } = await service.dispatch("workflow.prepare", { id: "sample", model: { provider: "test", id: "plain" } }) as PreparedExecution;
     assert.deepEqual(plan.agents.main!.worker!.model, { provider: "test", id: "plain" });
     assert.equal(plan.agents.main!.worker!.thinking, "off");
     await assert.rejects(service.dispatch("workflow.prepare", { id: "sample", model: { provider: "missing", id: "missing" } }), /Model unavailable/);
@@ -153,7 +153,7 @@ test("public inspection and events exclude stored process ownership tokens", asy
   const store = new RunStore(filename);
   try {
     await author(service);
-    const plan = await service.dispatch("workflow.prepare", { id: "sample" }) as ExecutionPlan;
+    const { plan } = await service.dispatch("workflow.prepare", { id: "sample" }) as PreparedExecution;
     store.create({ id: "run-redaction", plan, input: null, cwd });
     const { token } = store.reserveLaunch("run-redaction");
     const activation = store.beginActivation("run-redaction", token, { scope: ["graph", "main"], graphId: "main", nodeId: "done", visit: 1 }, { kind: "end", sideEffect: false });

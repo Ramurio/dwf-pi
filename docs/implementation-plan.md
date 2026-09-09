@@ -17,13 +17,13 @@
 | Интеграция | Отдельный integration workspace, проверки объединения, контроль target head | Не начато |
 | Authoring | Рецепты в обычный граф, агрегация коллекций, schemas и dataflow diagnostics | Не начато |
 | Симуляция | Публичный запуск сценариев с заданными outputs, отрицательные пути до inference | Не начато |
-| Старт | Адресуемый prepared plan, запуск именно его, idempotency повторной доставки | Не начато |
+| Старт | Адресуемый prepared plan, запуск именно его, idempotency повторной доставки | Реализовано: preparedId привязан к plan/cwd, keyed start атомарен, retry не снимает pause/terminal; 254/254 полного параллельного набора и native UI, см. prepared-start.md |
 | Browser | Обзор результата, трасса/причины, timeline/checkpoint, council, artifacts/diff, usage | Outcome/await/usage и durable routing trace реализованы; timeline, council, artifacts/diff и общий обзор остаются |
 | Presets | Формы запуска, явное сохранение, версии/diff, копирование в draft | Не начато |
 | Browser navigation | Deep links, reload state, terminal handoff, project search, opt-in notifications | Не начато |
 | Graph readability | Раздельные порты/рёбра, обход узлов, подписи, стабильный обзор с раскрытием scopes | Маршруты/порты/подписи реализованы, 10 browser API/layout tests и in-app QA; обзор с раскрытием групп ещё не начат |
 | Run comparison | Согласованные trace/timeline, сравнение проходов и первое расхождение с версией критериев | Не начато |
-| Journal | Компактные reads, content-addressed plans/resources, paging/events, streaming logs | Не начато |
+| Journal | Компактные reads, content-addressed plans/resources, paging/events, streaming logs | Prepared snapshots адресуются по hash и разделяются между handles; run plans ещё inline, остальные пункты не начаты |
 | Retention | Размеры и явная проверяемая очистка принадлежащих run данных | Не начато |
 | Worker capabilities | Явные web/MCP tools, схемы/права/версии, фактический каталог | Не начато |
 | Context | Frozen project instructions, project/global roles/prompts, политика длинных сессий | Не начато |
@@ -58,7 +58,7 @@ supervisor в worktree; повтор start; patch после prepare; конфл
   за 95,7 секунды; `/tmp/dynamicwf-usage-routes-full-20260910.log`.
   Нестабильность обычного параллельного прогона этим не считается исправленной.
 
-Следующий блок: адресуемый prepared plan и идемпотентный запуск. Остальные строки
+Следующий блок: типы ошибок и управляемое восстановление с сохранением попыток. Остальные строки
 сохраняют полный обязательный объём; завершённые изменения не означают завершение
 общего goal.
 
@@ -120,3 +120,24 @@ Native QA: empty trace→ответ→false/fallback→rejected, источни�
 typecheck, browser JS syntax и skill validation прошли.
 `/tmp/dynamicwf-trace-full-20260910.log`. Контракт: routing-trace.md.
 Это основа будущих timeline/comparison, а не объявление их готовности.
+
+
+### Подготовленные планы и доставка старта
+
+`workflow.prepare` сохраняет `{preparedId,planHash,cwd,createdAt,plan}`; inspect
+по `workflow.prepared` не читает изменившиеся draft/skills/catalog. Prepared start
+исполняет точный snapshot в привязанном canonical cwd. Ключ start связывается с
+run атомарно; четыре независимых CLI возвращают один ID и выполняют одну запись.
+Повтор после потери ответа сохраняет результат даже без исходного workspace,
+конфликты не создают runs. Create/reserve gaps, pause, interruption, failed/cancelled
+и реальный SIGKILL не превращают доставку команды в повтор неопределённых действий.
+Старый старт по draft ID остаётся явным неидемпотентным режимом.
+
+Native UI: один run, snapshot ревизии 2 после изменения draft до 3, принятый прежний
+результат, сохранённое раскрытие «План запуска», hash/preparedId и отсутствие ошибок
+консоли. Fixtures очищены; пользовательский demo/journal не менялся, inference не было.
+После реализации обычный параллельный `npm test`: **254/254**, 59,9 секунды, без
+cancelled; typecheck, browser JS syntax и skill validation прошли.
+`/tmp/dynamicwf-prepared-full-20260910.log`. Контракт: prepared-start.md.
+Prepared snapshots не являются tested presets; retention, preset delivery, общая
+нормализация run journal и восстановление эффектов не объявлены готовыми этим этапом.

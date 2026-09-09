@@ -1,5 +1,9 @@
 # Frozen execution plans
 
+For the public `workflow.prepare` saved handle and exact/idempotent `run.start`, see
+[prepared-start.md](prepared-start.md). The library function below still returns the
+plan itself; the service response wraps it under `plan` with identity/workspace metadata.
+
 `prepareExecutionPlan(workflow, { cwd, defaultModel? })` validates and compiles the
 whole graph before starting any inference. It creates an immutable, JSON-serializable
 `ExecutionPlan`, containing the validated graph, exact generated TypeScript + Effect

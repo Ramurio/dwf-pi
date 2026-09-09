@@ -12,7 +12,7 @@ export function createMcpServer(filename?: string, options: WorkflowServiceOptio
   const service = new WorkflowService(filename, options);
   const server = new Server({ name: "dynamicwf-pi", version: "0.0.0" }, {
     capabilities: { tools: {} },
-    instructions: "Create workflows as graph blocks and connections through workflow_create/workflow_patch. Inspect catalog defaults and workflow_schema. Validate then run_start; loops, conditions and fan-out are generated from the graph. Runs survive this connection closing. Use run_pause to drain active work, run_resume to continue, and run_cancel to interrupt. Responses use a JSON {ok,result} or {ok:false,error} envelope in structuredContent and text.",
+    instructions: "Create workflows as graph blocks and connections through workflow_create/workflow_patch. Inspect catalog defaults and workflow_schema. Validate, workflow_prepare, then run_start with the returned preparedId and a stable idempotencyKey. Retry delivery with the same preparedId/input/key to get the same run. Give the user its ID and watch command immediately. Loops, conditions and fan-out are generated from the graph. Runs survive this connection closing. Use run_pause to drain active work, run_resume to continue, and run_cancel to interrupt. Responses use a JSON {ok,result} or {ok:false,error} envelope in structuredContent and text.",
   });
   const entries = new Map(mcpToolDefinitions.map(definition => [definition.name, { definition, validate: createOutputValidator(definition.inputSchema) }]));
   server.setRequestHandler("tools/list", () => ({ tools: mcpToolDefinitions.map(({ serviceTool: _, ...tool }) => ({ ...tool, inputSchema: tool.inputSchema as Tool["inputSchema"] })) }));

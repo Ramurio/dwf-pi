@@ -68,8 +68,11 @@ echo '{}' | dynamicwf workflow.schema
 Примеры операций addNode/connect и цикл review→repair находятся в документации
 authoring. `workflow.validate` показывает ошибки незаконченного draft;
 `workflow.compile` принимает только завершённую корректную схему и возвращает source/hash.
-`workflow.prepare` показывает зафиксированные настройки. `run.start` принимает
-`{id,cwd,input}` и быстро возвращает run ID; `run.status`, `run.inspect`, `run.events`
+`workflow.prepare {id,cwd}` сохраняет snapshot и возвращает `{preparedId,planHash,cwd,createdAt,plan}`.
+`run.start {preparedId,idempotencyKey,input}` запускает именно его; повтор с тем же
+ключом и входом возвращает тот же run ID. `workflow.prepared {preparedId}` позволяет
+снова прочитать snapshot. Старт `{id,cwd,input}` напрямую из draft остаётся отдельным
+режимом и каждый раз создаёт новый run; `run.status`, `run.inspect`, `run.events`
 показывают фактическое состояние. `dynamicwf watch --run <id>` открывает компактный монитор: текущая работа,
 история, схема и расход токенов на отдельных вкладках (1/2/3/4), без повторяющихся простыней.
 

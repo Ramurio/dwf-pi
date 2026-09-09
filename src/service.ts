@@ -15,12 +15,13 @@ import type { ActivationRecord, RunEvent, RunRecord } from "./run-store.js";
 import { DraftStore } from "./store.js";
 import { PresetLibrary, presetName, presetRevision, presetSummary, type PresetScope } from "./presets.js";
 import { summarizeUsage } from "./usage.js";
+import { PreparedPlanStore, executionWorkspace } from "./prepared-plans.js";
 
 export const serviceToolNames = [
   "catalog.list", "catalog.describe", "catalog.models", "system.doctor", "workflow.schema", "workflow.create", "workflow.list", "workflow.inspect",
   "workflow.patch", "workflow.validate", "workflow.compile", "workflow.prepare", "run.start", "run.status",
   "run.list", "run.inspect", "run.events", "run.usage", "run.pause", "run.resume", "run.cancel",
-  "preset.save", "preset.list", "preset.inspect", "preset.run", "run.waits", "run.resolve", "run.trace",
+  "preset.save", "preset.list", "preset.inspect", "preset.run", "run.waits", "run.resolve", "run.trace", "workflow.prepared",
 ] as const;
 export type ServiceToolName = typeof serviceToolNames[number];
 export type WorkflowServiceOptions = Omit<PrepareExecutionOptions, "cwd"> & { cwd?: string };
@@ -34,6 +35,7 @@ export class WorkflowService {
   readonly cwd: string;
   private drafts?: DraftStore;
   private controller?: RunController;
+  private plans?: PreparedPlanStore;
   private closed = false;
   private readonly executionOptions: Omit<PrepareExecutionOptions, "cwd">;
   constructor(filename = defaultStorePath(), options: WorkflowServiceOptions = {}) {
@@ -51,10 +53,14 @@ export class WorkflowService {
     if (!this.controller) this.controller = new RunController(this.filename);
     return this.controller;
   }
+  private getPlans(): PreparedPlanStore {
+    if (!this.plans) this.plans = new PreparedPlanStore(this.filename);
+    return this.plans;
+  }
   close(): void {
     if (this.closed) return;
     this.closed = true;
-    try { this.drafts?.close(); } finally { this.controller?.close(); }
+    try { this.drafts?.close(); } finally { try { this.controller?.close(); } finally { this.plans?.close(); } }
   }
   async dispatch(tool: string, request: unknown = {}): Promise<unknown> {
     if (this.closed) throw new Error("Workflow service is closed");
@@ -100,15 +106,40 @@ export class WorkflowService {
         const workflow = this.getDrafts().get(identifier(input.id));
         return tool === "workflow.inspect" ? workflow : tool === "workflow.validate" ? validateWorkflow(workflow) : compileWorkflow(workflow);
       }
-      case "workflow.prepare": case "run.start": {
-        const input = object(request, tool === "run.start" ? ["id", "input", "cwd", "model"] : ["id", "cwd", "model"]);
+      case "workflow.prepared": {
+        const input = object(request, ["preparedId"]);
+        return this.getPlans().get(preparedIdentifier(input.preparedId));
+      }
+      case "workflow.prepare": {
+        const input = object(request, ["id", "cwd", "model"]);
+        const cwd = await executionWorkspace(input.cwd === undefined ? this.cwd : resolve(this.cwd, nonemptyString(input.cwd, "cwd")));
+        const options = { ...this.executionOptions, ...(input.model === undefined ? {} : { defaultModel: model(input.model) }) };
+        const plan = await prepareExecutionPlan(this.getDrafts().get(identifier(input.id)), { ...options, cwd });
+        return this.getPlans().save(plan, cwd);
+      }
+      case "run.start": {
+        const input = object(request, ["id", "preparedId", "idempotencyKey", "input", "cwd", "model"]);
+        const value = Object.hasOwn(input, "input") ? input.input as Json : null;
+        if (Object.hasOwn(input, "preparedId")) {
+          if (["id", "cwd", "model"].some(key => Object.hasOwn(input, key))) throw new Error("Prepared start cannot override id, cwd or model; prepare a new plan instead");
+          const start = { preparedId: preparedIdentifier(input.preparedId), ...(input.idempotencyKey === undefined ? {} : { idempotencyKey: nonemptyString(input.idempotencyKey, "idempotencyKey") }) };
+          const controller = this.getController();
+          const existing = controller.store.findStart(start, value);
+          let run;
+          if (existing) run = await controller.completeStart(existing.id);
+          else {
+            const prepared = this.getPlans().get(start.preparedId);
+            run = await controller.startPrepared(prepared.plan, value, prepared.cwd, start);
+          }
+          return publicObservation(controller.snapshot(run.id));
+        }
+        if (Object.hasOwn(input, "idempotencyKey")) throw new Error("Idempotent start requires preparedId; prepare the draft first");
         const id = identifier(input.id);
         const cwd = input.cwd === undefined ? this.cwd : resolve(this.cwd, nonemptyString(input.cwd, "cwd"));
         const options = { ...this.executionOptions, ...(input.model === undefined ? {} : { defaultModel: model(input.model) }) };
-        const workflow = this.getDrafts().get(id);
-        if (tool === "workflow.prepare") return prepareExecutionPlan(workflow, { ...options, cwd });
-        const run = await this.getController().start(workflow, Object.hasOwn(input, "input") ? input.input as Json : null, cwd, options);
-        return publicObservation(this.getController().snapshot(run.id));
+        const controller = this.getController();
+        const run = await controller.start(this.getDrafts().get(id), value, cwd, options);
+        return publicObservation(controller.snapshot(run.id));
       }
       case "run.list": {
         object(request, []);
@@ -233,6 +264,7 @@ export function publicRunSummary(run: RunRecord) {
   return {
     id: run.id, workflow: { id: run.plan.workflow.id, name: run.plan.workflow.name, revision: run.plan.workflow.revision },
     planHash: run.plan.hash, sourceHash: run.plan.sourceHash,
+    ...(run.preparedId === undefined ? {} : { preparedId: run.preparedId }),
     agents: Object.entries(run.plan.agents).flatMap(([graphId, agents]) => Object.entries(agents).map(([nodeId, agent]) => ({
       graphId, nodeId, model: agent.model, thinking: agent.thinking, permission: agent.permission, session: agent.session,
     }))),
@@ -268,6 +300,10 @@ function object(value: unknown, allowed: string[]): Record<string, unknown> {
 }
 function identifier(value: unknown): string {
   if (typeof value !== "string" || !/^[A-Za-z][A-Za-z0-9_-]*$/.test(value)) throw new Error("Expected a workflow, run or role identifier");
+  return value;
+}
+function preparedIdentifier(value: unknown): string {
+  if (typeof value !== "string" || !/^prepared-[a-f0-9]{64}$/.test(value)) throw new Error("Expected prepared plan identifier");
   return value;
 }
 function nonemptyString(value: unknown, field: string): string {

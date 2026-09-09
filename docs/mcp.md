@@ -63,7 +63,7 @@ business semantics between the transports.
 | MCP tool family | Available names |
 | --- | --- |
 | Roles | `catalog_list`, `catalog_describe` |
-| Authoring | `workflow_schema`, `workflow_create`, `workflow_list`, `workflow_inspect`, `workflow_patch`, `workflow_validate`, `workflow_compile`, `workflow_prepare` |
+| Authoring | `workflow_schema`, `workflow_create`, `workflow_list`, `workflow_inspect`, `workflow_patch`, `workflow_validate`, `workflow_compile`, `workflow_prepare`, `workflow_prepared` |
 | Execution | `run_start`, `run_status`, `run_list`, `run_inspect`, `run_events`, `run_pause`, `run_resume`, `run_cancel` |
 | Presets | `preset_save`, `preset_list`, `preset_inspect`, `preset_run` |
 
@@ -106,8 +106,12 @@ and protocol failures. [MCP tools specification](https://modelcontextprotocol.io
 ## Run lifetime and control
 
 A normal sequence is `workflow_create` → `workflow_patch` → `workflow_validate` →
-`workflow_prepare` → `run_start`. Preparation resolves the frozen plan without
-inference. Start returns its run ID after spawning a supervisor; the MCP request is
+`workflow_prepare` → `run_start`. Preparation persists `{preparedId,planHash,cwd,createdAt,plan}` without
+inference. Pass its `preparedId` and a caller-chosen `idempotencyKey` to `run_start`;
+retry the same input/key to receive the same run. `workflow_prepared` inspects the
+saved handle. See [prepared-start.md](prepared-start.md) for delivery conflicts,
+workspace binding and interrupted launches. Start returns its run ID after initial
+spawn (or the existing run on a delivery retry); the MCP request is
 not held open until the workflow finishes. Use `run_status`/`run_inspect` and
 incremental `run_events` (`after` → returned `nextAfter`) to observe execution.
 

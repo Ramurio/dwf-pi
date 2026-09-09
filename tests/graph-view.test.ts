@@ -108,6 +108,9 @@ test("local UI serves all assets and a safe projection; read-only requests prese
     }
     const snapshot = await (await fetch(f.url + "snapshot?id=run-ui")).json();
     assert.equal(snapshot.id, "run-ui");
+    assert.equal(snapshot.planHash, f.store.get("run-ui").plan.hash);
+    assert.equal(snapshot.workflowRevision, 1);
+    assert.equal(snapshot.preparedId, null);
     assert.equal(snapshot.graphs[0].nodes[0].status, "unvisited");
     assert.doesNotMatch(
       JSON.stringify(snapshot),

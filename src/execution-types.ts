@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { AgentConfig } from "./catalog.js";
 import type { Json, WorkflowDefinition } from "./graph.js";
 import type { TokenUsage } from "./usage.js";
@@ -47,3 +48,16 @@ export type PiWorkerMessage =
   | { type: "event"; event: { type: string; [key: string]: unknown } }
   | { type: "result"; result: PiWorkerResult }
   | { type: "error"; error: string };
+
+export interface PreparedExecution {
+  preparedId: string;
+  planHash: string;
+  cwd: string;
+  createdAt: number;
+  plan: ExecutionPlan;
+}
+
+/** A prepared handle binds the workspace as well as frozen plan bytes. */
+export function preparedExecutionId(planHash: string, cwd: string): string {
+  return `prepared-${createHash("sha256").update(JSON.stringify(["dynamicwf-prepared-v1", planHash, cwd])).digest("hex")}`;
+}

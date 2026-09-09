@@ -90,9 +90,9 @@ test("official MCP client initializes, authors and runs; new client inspects and
     ] });
     assert.equal(patched.validation.valid, true);
     const prepared = await call(first.client, "workflow_prepare", { id: "sample" });
-    const started = await call(first.client, "run_start", { id: "sample", input: { from: "first client" } });
+    const started = await call(first.client, "run_start", { preparedId: prepared.preparedId, idempotencyKey: "mcp-sample", input: { from: "first client" } });
     runId = started.id;
-    assert.equal(started.planHash, prepared.hash);
+    assert.equal(started.planHash, prepared.planHash);
     await call(first.client, "run_pause", { id: runId });
     const paused = await waitStatus(first.client, runId!, "paused");
     assert.equal(paused.supervisorAlive, true);
@@ -103,6 +103,10 @@ test("official MCP client initializes, authors and runs; new client inspects and
     assert.equal(inspected.supervisorAlive, true);
     assert.equal(inspected.workflow.revision, 2);
     assert.deepEqual(inspected.input, { from: "first client" });
+    assert.equal((await call(second.client, "workflow_prepared", { preparedId: prepared.preparedId })).planHash, prepared.planHash);
+    const repeated = await call(second.client, "run_start", { preparedId: prepared.preparedId, idempotencyKey: "mcp-sample", input: { from: "first client" } });
+    assert.equal(repeated.id, runId);
+    assert.equal(repeated.status, "paused");
     await call(second.client, "run_resume", { id: runId });
     const completed = await waitStatus(second.client, runId!, "succeeded");
     assert.deepEqual(completed.output, { from: "first client" });

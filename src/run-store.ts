@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { openWorkflowDatabase } from "./sqlite.js";
-import type { ExecutionPlan } from "./execution-types.js";
+import { preparedExecutionId, type ExecutionPlan } from "./execution-types.js";
 import type { Json } from "./graph.js";
 import type { RuntimeContext } from "./runtime-contract.js";
 import { parseUsage, sumTokenUsage, type TokenUsage } from "./usage.js";
@@ -24,11 +24,13 @@ export interface RunRecord {
   createdAt: number;
   updatedAt: number;
   heartbeatAt: number | null;
+  preparedId?: string;
   output?: Json;
   error?: string;
   taskOutcome?: TaskOutcome;
 }
 export type ActivationStatus = "running" | "succeeded" | "failed" | "interrupted";
+export interface PreparedStart { preparedId: string; idempotencyKey?: string }
 export interface ActivationMetadata { workerPid?: number | null; sessionFile?: string; [key: string]: Json | undefined }
 export interface ActivationRecord {
   runId: string;
@@ -113,6 +115,10 @@ export class RunStore {
         UNIQUE(run_id,activation_key), FOREIGN KEY(run_id,activation_key) REFERENCES workflow_activations(run_id,activation_key)
       ) STRICT;
       CREATE INDEX IF NOT EXISTS workflow_transitions_cursor ON workflow_transitions(run_id,seq);
+      CREATE TABLE IF NOT EXISTS workflow_run_starts (
+        run_id TEXT PRIMARY KEY REFERENCES workflow_runs(id), prepared_id TEXT NOT NULL,
+        idempotency_key TEXT UNIQUE
+      ) STRICT;
     `);
   }
   close(): void { this.database.close(); }
@@ -130,25 +136,44 @@ export class RunStore {
     if (!token || run.ownerToken !== token || !active.has(run.status)) throw new Error(`Stale run owner: ${id}`);
     return run;
   }
-  create(input: { id: string; plan: ExecutionPlan; input: Json; cwd: string }): RunRecord {
+  /** Lookup before reading mutable resources or checking cwd. JSON object key order is immaterial. */
+  findStart(start: PreparedStart, input: Json): RunRecord | undefined {
+    if (start.idempotencyKey === undefined) return undefined;
+    if (!start.idempotencyKey.length || start.idempotencyKey.includes("\0")) throw new Error("Invalid idempotency key");
+    assertJson(input);
+    const row = this.database.prepare("SELECT run_id,prepared_id FROM workflow_run_starts WHERE idempotency_key=?").get(start.idempotencyKey);
+    if (!row) return undefined;
+    const run = this.get(String(row.run_id));
+    if (row.prepared_id !== start.preparedId || !isDeepStrictEqual(run.input, JSON.parse(JSON.stringify(input)))) throw new Error("Start idempotency conflict: key is already bound to a different prepared plan or input");
+    return run;
+  }
+  create(input: { id: string; plan: ExecutionPlan; input: Json; cwd: string; start?: PreparedStart }): RunRecord {
+    assertJson(input.input);
+    if (input.start && preparedExecutionId(input.plan.hash, input.cwd) !== input.start.preparedId) throw new Error("Prepared start identity mismatch");
     return this.transaction(() => {
+      const existing = input.start && this.findStart(input.start, input.input);
+      if (existing) return existing;
       const now = Date.now();
       const inserted = this.database.prepare(`INSERT INTO workflow_runs(id,plan,input,cwd,status,desired,created_at,updated_at)
         VALUES(?,?,?,?,'queued','running',?,?) ON CONFLICT(id) DO NOTHING`)
         .run(input.id, JSON.stringify(input.plan), JSON.stringify(input.input), input.cwd, now, now);
       if (Number(inserted.changes) !== 1) throw new Error(`Run already exists: ${input.id}`);
-      this.event(input.id, "run.created", { planHash: input.plan.hash });
+      if (input.start) this.database.prepare("INSERT INTO workflow_run_starts(run_id,prepared_id,idempotency_key) VALUES(?,?,?)")
+        .run(input.id, input.start.preparedId, input.start.idempotencyKey ?? null);
+      this.event(input.id, "run.created", { planHash: input.plan.hash, ...(input.start ? { preparedId: input.start.preparedId } : {}) });
       return this.get(input.id);
     });
   }
   get(id: string): RunRecord {
-    const row = this.database.prepare("SELECT r.*, t.outcome AS task_outcome FROM workflow_runs r LEFT JOIN workflow_task_outcomes t ON t.run_id=r.id WHERE r.id = ?").get(id);
+    const row = this.database.prepare(`SELECT r.*, t.outcome AS task_outcome, s.prepared_id FROM workflow_runs r
+      LEFT JOIN workflow_task_outcomes t ON t.run_id=r.id LEFT JOIN workflow_run_starts s ON s.run_id=r.id WHERE r.id = ?`).get(id);
     if (!row) throw new Error(`Run not found: ${id}`);
     return {
       id: String(row.id), plan: JSON.parse(String(row.plan)) as ExecutionPlan, input: JSON.parse(String(row.input)) as Json,
       cwd: String(row.cwd), status: row.status as RunStatus, desired: row.desired as DesiredRunStatus,
       ownerToken: row.owner_token === null ? null : String(row.owner_token), supervisorPid: row.supervisor_pid === null ? null : Number(row.supervisor_pid),
       createdAt: Number(row.created_at), updatedAt: Number(row.updated_at), heartbeatAt: row.heartbeat_at === null ? null : Number(row.heartbeat_at),
+      ...(row.prepared_id === null ? {} : { preparedId: String(row.prepared_id) }),
       ...(row.output === null ? {} : { output: JSON.parse(String(row.output)) as Json }),
       ...(row.error === null ? {} : { error: String(row.error) }),
       ...(row.status === "succeeded" ? { taskOutcome: row.task_outcome === null
@@ -159,10 +184,10 @@ export class RunStore {
     return this.database.prepare("SELECT id FROM workflow_runs ORDER BY created_at, id").all().map(row => this.get(String(row.id)));
   }
   /** Atomic reservation. Never reclaim an active reservation based only on a timestamp or PID in this database. */
-  reserveLaunch(id: string): { token: string; run: RunRecord } {
+  reserveLaunch(id: string, initialOnly = false): { token: string; run: RunRecord } {
     return this.transaction(() => {
       const run = this.get(id);
-      if (!["queued", "interrupted"].includes(run.status) || run.desired !== "running" || run.ownerToken !== null) throw new Error(`Run is not launchable: ${id} (${run.status}/${run.desired})`);
+      if (!(initialOnly ? ["queued"] : ["queued", "interrupted"]).includes(run.status) || run.desired !== "running" || run.ownerToken !== null) throw new Error(`Run is not launchable: ${id} (${run.status}/${run.desired})`);
       const token = randomUUID();
       const now = Date.now();
       this.database.prepare("UPDATE workflow_runs SET status='running',owner_token=?,supervisor_pid=NULL,heartbeat_at=?,updated_at=?,error=NULL WHERE id=?")

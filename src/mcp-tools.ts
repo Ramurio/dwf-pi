@@ -2,13 +2,24 @@ import { CreateDraftSchema, DraftPatchSchema } from "./authoring.js";
 import { roleNames } from "./catalog.js";
 import { serviceToolNames, type ServiceToolName } from "./service.js";
 
-type InputSchema = { type: "object"; properties: Record<string, unknown>; required?: string[]; additionalProperties: false; $defs?: Record<string, unknown> };
+type InputSchema = { type: "object"; properties: Record<string, unknown>; required?: string[]; additionalProperties: false; $defs?: Record<string, unknown>; oneOf?: unknown[] };
 const identifier = { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_-]*$" };
 const cwd = { type: "string", minLength: 1, pattern: "^[^\\u0000]+$", description: "Workspace directory, relative to the server's cwd or absolute; defaults to server cwd." };
 const model = { type: "object", properties: { provider: { type: "string", minLength: 1 }, id: { type: "string", minLength: 1 } }, required: ["provider", "id"], additionalProperties: false, description: "Actual pi provider/model ID. Sets the default for nodes without a model; explicit node choices take precedence." };
 const object = (properties: Record<string, unknown> = {}, required: string[] = []): InputSchema => ({ type: "object", properties, required, additionalProperties: false });
 const byId = () => object({ id: identifier }, ["id"]);
 const prepare = () => object({ id: identifier, cwd, model }, ["id"]);
+const preparedId = { type: "string", pattern: "^prepared-[a-f0-9]{64}$", description: "Immutable workspace-bound handle returned by workflow_prepare in this journal." };
+const start: InputSchema = {
+  ...object({ id: identifier, preparedId, cwd, model,
+    input: { description: "JSON entry input; defaults to null." },
+    idempotencyKey: { type: "string", minLength: 1, pattern: "^[^\\u0000]+$", description: "Caller-generated key unique to one intended start in this journal. Retry the same preparedId/input/key to obtain the same run; conflicts fail. Requires preparedId." },
+  }),
+  oneOf: [
+    { required: ["preparedId"], properties: { preparedId: true, id: false, cwd: false, model: false } },
+    { required: ["id"], properties: { id: true, preparedId: false, idempotencyKey: false } },
+  ],
+};
 const scope = { type: "string", enum: ["global", "project"], description: "Library scope. Save defaults to project; reads without scope prefer project over global." };
 const revision = { type: "string", pattern: "^[a-f0-9]{64}$", description: "Immutable preset revision hash; omit to use current named revision." };
 const patch = JSON.parse(JSON.stringify(DraftPatchSchema)) as InputSchema;
@@ -27,8 +38,9 @@ const definitions: Record<ServiceToolName, { description: string; inputSchema: I
   "workflow.patch": { description: "Atomically add/replace/remove graph blocks, set entries, connect/disconnect edges. Supply expectedRevision from the latest draft. Returns next revision and semantic validation; invalid operations fail atomically. Conditions, select expressions, loops and fan-out remain declarative data.", inputSchema: patch, destructive: true },
   "workflow.validate": { description: "Check a draft's graph structure and configuration before compilation or execution. Returns concrete validation issues.", inputSchema: byId(), readOnly: true },
   "workflow.compile": { description: "Machine-generate TypeScript + Effect from a valid draft. Returns deterministic source/hash; do not author or edit orchestration code yourself.", inputSchema: byId(), readOnly: true },
-  "workflow.prepare": { description: "Prepare and inspect a frozen execution plan without launching inference: resolves available models/thinking, prompts, permissions, output schemas and complete skill snapshots. Explicit unavailable requests fail.", inputSchema: prepare(), openWorld: true },
-  "run.start": { description: "Start the current draft revision as a detached local workflow. Returns a run ID; execution continues after the MCP client/harness closes. Model workers and check blocks can perform granted external effects. Missing input is null.", inputSchema: object({ id: identifier, input: { description: "JSON input bound as input inside the entry graph; defaults to null." }, cwd, model }, ["id"]), destructive: true, openWorld: true },
+  "workflow.prepare": { description: "Persist a frozen execution plan without inference. Returns {preparedId,planHash,cwd,createdAt,plan}; use preparedId in run_start to execute these exact settings and skill snapshots in this workspace. Resolves concrete models/thinking; explicit unavailable requests fail.", inputSchema: prepare(), openWorld: true },
+  "workflow.prepared": { description: "Inspect a saved preparedId without rereading the draft, skills, workspace or provider catalog. Verifies frozen plan integrity. Handles are local to this journal.", inputSchema: object({ preparedId }, ["preparedId"]), readOnly: true },
+  "run.start": { description: "Start a detached workflow by preparedId (recommended) with a stable idempotencyKey for delivery retries. Identical keyed requests return the same run, including after completion; conflicts fail. Prepared starts cannot override workspace or model. Alternatively id starts the current draft as a new, non-idempotent run. Return the run ID and watch command immediately. Workers can perform granted external effects; closing this client does not stop them.", inputSchema: start, destructive: true, openWorld: true },
   "run.status": { description: "Observe a run's status, current supervisor/worker liveness, frozen plan hash and resolved models. Reconciles verified missing processes without restarting work.", inputSchema: byId(), idempotent: true },
   "run.list": { description: "List local runs and observe their current process liveness. Does not return large frozen resource payloads.", inputSchema: object(), idempotent: true },
   "run.inspect": { description: "Inspect a run's frozen graph, input, public state and activation journal, including outputs/errors and current node visits. Internal ownership tokens are omitted.", inputSchema: byId(), idempotent: true },

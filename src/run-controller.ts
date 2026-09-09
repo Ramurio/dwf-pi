@@ -1,14 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { spawn, execFileSync } from "node:child_process";
 import { closeSync, mkdirSync, openSync } from "node:fs";
-import { realpath, stat } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { prepareExecutionPlan, verifyExecutionPlan, type PrepareExecutionOptions } from "./execution-plan.js";
-import type { ExecutionPlan } from "./execution-types.js";
+import { preparedExecutionId, type ExecutionPlan } from "./execution-types.js";
+import { executionWorkspace } from "./prepared-plans.js";
 import type { Json } from "./graph.js";
 import { assertJson } from "./output-schema.js";
-import { RunStore, type RunRecord } from "./run-store.js";
+import { RunStore, type RunRecord, type PreparedStart } from "./run-store.js";
 import { projectRun } from "./observation.js";
 
 const supervisorPath = fileURLToPath(new URL("./supervisor.ts", import.meta.url));
@@ -45,27 +45,33 @@ export class RunController {
   }
   directory(id: string): string { return join(dirname(this.filename), "runs", id); }
   async start(workflow: unknown, input: Json, cwd: string, options: Omit<PrepareExecutionOptions, "cwd"> = {}): Promise<RunRecord> {
-    const workspace = await realpath(cwd);
-    if (!(await stat(workspace)).isDirectory()) throw new Error("Run workspace must be a directory");
+    const workspace = await executionWorkspace(cwd);
     const plan = await prepareExecutionPlan(workflow, { ...options, cwd: workspace });
     return this.startPrepared(plan, input, workspace);
   }
-  async startPrepared(plan: ExecutionPlan, input: Json, cwd: string): Promise<RunRecord> {
+  async startPrepared(plan: ExecutionPlan, input: Json, cwd: string, start?: PreparedStart): Promise<RunRecord> {
+    if (start && preparedExecutionId(plan.hash, cwd) !== start.preparedId) throw new Error("Prepared start identity mismatch");
+    const existing = start && this.store.findStart(start, input);
+    if (existing) return this.completeStart(existing.id);
     const verified = verifyExecutionPlan(plan);
     assertJson(input);
-    const workspace = await realpath(cwd);
-    if (!(await stat(workspace)).isDirectory()) throw new Error("Run workspace must be a directory");
-    const run = this.store.create({ id: `run-${randomUUID()}`, plan: verified, input, cwd: workspace });
-    await this.launch(run.id);
-    return this.store.get(run.id);
+    const workspace = await executionWorkspace(cwd);
+    if (start && workspace !== cwd) throw new Error("Prepared workspace now resolves to a different directory; prepare again");
+    const run = this.store.create({ id: `run-${randomUUID()}`, plan: verified, input, cwd: workspace, ...(start ? { start } : {}) });
+    return this.completeStart(run.id);
   }
-  private async launch(id: string): Promise<void> {
+  /** Finish only the create-before-reserve gap. A duplicate start never resumes interrupted work. */
+  async completeStart(id: string): Promise<RunRecord> {
+    await this.launch(id, true);
+    return this.store.get(id);
+  }
+  private async launch(id: string, initialOnly = false): Promise<void> {
     let token: string;
-    try { token = this.store.reserveLaunch(id).token; }
+    try { token = this.store.reserveLaunch(id, initialOnly).token; }
     catch (error) {
       const current = this.store.get(id);
       if (error instanceof Error && error.message.startsWith("Run is not launchable:") &&
-        (current.ownerToken !== null || current.desired !== "running" || !["queued", "interrupted"].includes(current.status))) return;
+        (current.ownerToken !== null || current.desired !== "running" || !(initialOnly ? ["queued"] : ["queued", "interrupted"]).includes(current.status))) return;
       throw error;
     }
     let child: ReturnType<typeof spawn> | undefined;

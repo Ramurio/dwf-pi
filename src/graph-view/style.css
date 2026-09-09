@@ -853,3 +853,6 @@ dialog .controls {
 .trace-card.routing-error { border-color: #bc7368; }
 .transition-details details { margin: 8px 0; }
 .transition-details pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow: auto; }
+.execution-plan { margin: 0 0 16px; font-size: 13px; overflow-wrap: anywhere; }
+.execution-plan summary { cursor: pointer; color: var(--muted); }
+.execution-plan p { margin: 8px 0; }
