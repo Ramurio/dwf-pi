@@ -6,6 +6,7 @@ import { serveStdio } from "@modelcontextprotocol/server/stdio";
 import { mcpToolDefinitions } from "./mcp-tools.js";
 import { createOutputValidator } from "./output-schema.js";
 import { WorkflowService, type WorkflowServiceOptions } from "./service.js";
+import { ExecutionFailure } from "./execution-failure.js";
 
 /** Thin MCP transport adapter. All authoring, execution, persistence and control belong to WorkflowService. */
 export function createMcpServer(filename?: string, options: WorkflowServiceOptions = {}): Server {
@@ -27,7 +28,7 @@ export function createMcpServer(filename?: string, options: WorkflowServiceOptio
       return { content: [{ type: "text", text: JSON.stringify(envelope) }], structuredContent: envelope };
     } catch (error) {
       const failure = error instanceof Error ? error : new Error("Unknown tool failure");
-      const envelope = { ok: false, error: { name: failure.name, message: failure.message, ...("issues" in failure ? { issues: failure.issues } : {}) } };
+      const envelope = { ok: false, error: { name: failure.name, message: failure.message, ...(failure instanceof ExecutionFailure ? { failure: failure.failure } : {}), ...("issues" in failure ? { issues: failure.issues } : {}) } };
       const serialized = JSON.stringify(envelope);
       return { isError: true, content: [{ type: "text", text: serialized }], structuredContent: JSON.parse(serialized) };
     }

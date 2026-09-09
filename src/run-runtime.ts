@@ -1,7 +1,8 @@
 import { randomUUID, createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
+import { executionFailure, failureRecord } from "./execution-failure.js";
 import type { ExecutionPlan, FrozenAgent, PiWorkerRequest } from "./execution-types.js";
 import type { Json, Node } from "./graph.js";
 import { assertJson, createOutputValidator } from "./output-schema.js";
@@ -16,6 +17,13 @@ import type { Edge } from "./graph.js";
 const errorOf = (error: unknown) => error instanceof Error ? error : new Error(String(error));
 const slotKey = (context: RuntimeContext) => JSON.stringify([context.scope, context.graphId, context.nodeId]);
 const digest = (text: string) => createHash("sha256").update(text).digest("hex");
+export function describeFailureCause(cause: Cause.Cause<unknown>) {
+  const error = Option.getOrUndefined(Cause.failureOption(cause));
+  return error instanceof ExpressionError ? executionFailure("expression","execution","read-only",error.message).failure : failureRecord(error, {
+    code: Cause.isInterruptedOnly(cause) ? "cancelled" : "unknown",phase:"execution",effects:"unknown",
+    message:error instanceof Error ? error.message : "Execution interrupted before a checkpoint",
+  });
+}
 // Await the process promise during interruption: aborting an Effect must not
 // publish terminal state before the worker has actually exited and drained.
 function processEffect<A>(run: (signal: AbortSignal) => Promise<A>): Effect.Effect<A, Error> {
@@ -70,7 +78,7 @@ export class JournalRuntime implements WorkflowRuntime {
       const key = activationKey(context);
       const decision = this.store.transition(this.run.id, key)?.decision ??
         this.store.recordTransition(this.run.id, this.token, key, explainEdge(context.nodeId, edges, scope)).decision;
-      if (decision.error) throw new ExpressionError(decision.error);
+      if (decision.error) throw executionFailure("expression","routing","read-only",decision.error);
       return decision.to!;
     }, catch: errorOf });
   }
@@ -113,8 +121,10 @@ export class JournalRuntime implements WorkflowRuntime {
           if (record.status === "succeeded") return;
           const latest = runtime.store.getActivation(runtime.run.id, record.key);
           if (latest?.status === "running" && runtime.store.get(runtime.run.id).ownerToken === runtime.token) {
+            const failure = Exit.isFailure(exit) ? describeFailureCause(exit.cause) : executionFailure("unknown","execution","unknown","Activation finished without a checkpoint").failure;
             runtime.store.failActivation(runtime.run.id, runtime.token, record.key,
-              Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "Activation finished without a checkpoint");
+              Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "Activation finished without a checkpoint",
+              ["map","parallel","subworkflow","worktree","integrate"].includes(node.kind) ? {...failure,effects:"unknown"} : failure);
           }
         }),
       ).pipe(Effect.catchAll(error => {
@@ -161,7 +171,9 @@ export class JournalRuntime implements WorkflowRuntime {
             } else this.store.appendEvent(this.run.id, this.token, "worker.event", { key, event: JSON.parse(JSON.stringify(event)) as Json });
           },
         });
-        const output = validate(result.output);
+        let output: Json;
+        try { output = validate(result.output); }
+        catch { throw executionFailure("output","output",config.permission === "read-only" ? "read-only" : "unknown","Worker result failed strict output schema validation"); }
         this.checkReviewOutput(node, config, input, output);
         this.store.setActivationMetadata(this.run.id, this.token, key, {
           workerPid: null, sessionFile: result.sessionFile,
@@ -242,7 +254,7 @@ export class JournalRuntime implements WorkflowRuntime {
   private checkReviewInput(node: Node, config: FrozenAgent, input: Json): void {
     if (node.kind !== "agent" || node.role !== "reviewer" || !Array.isArray(config.outputSchema.required) || !config.outputSchema.required.includes("artifactRevision")) return;
     if (!input || typeof input !== "object" || Array.isArray(input) || typeof input.artifactRevision !== "string" || !input.artifactRevision) {
-      throw new Error("Reviewer input must identify the artifactRevision being reviewed");
+      throw executionFailure("configuration","setup","not-started","Reviewer input must identify the artifactRevision being reviewed");
     }
   }
   private checkReviewOutput(node: Node, config: FrozenAgent, input: Json, output: Json): void {
@@ -251,7 +263,7 @@ export class JournalRuntime implements WorkflowRuntime {
     const actual = output as Record<string, Json>;
     if (actual.artifactRevision !== expected.artifactRevision ||
         (typeof expected.acceptanceCriteriaRevision === "string" && actual.acceptanceCriteriaRevision !== expected.acceptanceCriteriaRevision)) {
-      throw new Error("Reviewer verdict does not match the reviewed artifact/criteria revision");
+      throw executionFailure("output","output",config.permission === "read-only" ? "read-only" : "unknown","Reviewer verdict does not match the reviewed artifact/criteria revision");
     }
   }
 }

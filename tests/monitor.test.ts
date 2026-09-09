@@ -140,3 +140,13 @@ test("missing, invalid, zero and previous-attempt usage are not confused", async
   assert.equal(summarizeUsage([a]).reported, 0);
   assert.equal(summarizeUsage([]).totalTokens, 0);
 });
+
+
+test("monitor uses typed causes instead of stacks and labels effect certainty only on the failing activation", () => {
+  const failure = {version:1 as const,code:"process" as const,phase:"setup" as const,effects:"not-started" as const,message:"Command missing"};
+  const record = {...reviewer("tests"),status:"failed" as const,error:"STACK_TRACE_NOT_FOR_HEADER",metadata:{failure},finishedAt:100};
+  const failed = {...run(),status:"failed" as const,error:"STACK_TRACE_NOT_FOR_HEADER",failure:{...failure,effects:"unknown" as const}};
+  const text = renderDashboard(failed,[record],{height:24,width:140,now:100});
+  assert.match(text,/process\/setup: Command missing/);assert.match(text,/not-started/);assert.doesNotMatch(text,/STACK_TRACE_NOT_FOR_HEADER/);
+  const log = new MonitorLog();assert.match(log.update(failed,[record]).join("\n"),/process\/setup/);assert.deepEqual(log.update(failed,[record]),[]);
+});

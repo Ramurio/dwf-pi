@@ -157,3 +157,5 @@ across service closure, pause/resume/cancel, event cursors and token-free public
 inspection.
 
 Attempt history and its cursor/current distinction are documented in [attempt-history.md](attempt-history.md). This read-only operation does not authorize repeated effects.
+
+Structured failure records are described in [execution-failures.md](execution-failures.md). Run summaries expose `failure` for known failed/interrupted observations; activation details carry `metadata.failure`. CLI/MCP error envelopes include a typed failure only when the application actually raised one. These fields do not change retry admission.

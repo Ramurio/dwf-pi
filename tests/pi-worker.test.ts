@@ -1,3 +1,4 @@
+import { ExecutionFailure } from "../src/execution-failure.js";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -11,6 +12,32 @@ import { executePiWorker, type PiWorkerOptions } from "../src/pi-worker.js";
 import type { PiWorkerRequest } from "../src/execution-types.js";
 
 const provider = "dynamicwf-worker-test";
+test("typed output failure distinguishes read-only work from a writer that already changed an artifact", async t => {
+  const readonly = await fixture(t,[()=>submit({answer:"invalid"})]);
+  await assert.rejects(executePiWorker(readonly.request,readonly.options),(error:unknown)=>{
+    assert.ok(error instanceof ExecutionFailure);assert.equal(error.failure.code,"output");assert.equal(error.failure.phase,"output");assert.equal(error.failure.effects,"read-only");return true;
+  });
+  const writer = await fixture(t,[()=>reply([{type:"toolCall",id:"write-artifact",name:"write",arguments:{path:"artifact.txt",content:"already written"}}],"toolUse"),()=>submit({answer:"invalid"})]);
+  writer.request.config.permission="workspace-write";writer.request.config.tools=["write"];
+  await assert.rejects(executePiWorker(writer.request,writer.options),(error:unknown)=>{
+    assert.ok(error instanceof ExecutionFailure);assert.equal(error.failure.code,"output");assert.equal(error.failure.effects,"unknown");return true;
+  });
+  assert.equal(await readFile(join(writer.request.cwd,"artifact.txt"),"utf8"),"already written");
+  assert.equal(writer.calls.length,2);assert.equal(writer.events.filter((e:any)=>e.type==="usage.report").length,2);
+});
+test("plain SDK errors cannot masquerade as curated output errors or leak diagnostics through a recognized prefix",async t=>{
+  const f=await fixture(t,[]),secret="TEST_CREDENTIAL_MUST_NOT_LEAK";
+  await assert.rejects(executePiWorker(f.request,{...f.options,onSession(){throw Error(`submit_result ${secret}`);}}),(error:unknown)=>{
+    assert.ok(error instanceof ExecutionFailure);assert.equal(error.failure.code,"unknown");assert.equal(error.failure.effects,"not-started");assert.doesNotMatch(JSON.stringify(error.failure),new RegExp(secret));return true;
+  });
+  assert.equal(f.calls.length,0);
+});
+test("SDK provider failure remains unclassified within provider errors instead of guessing a retryable transport cause",async t=>{
+  const f=await fixture(t,[()=>({...reply([],"error"),errorMessage:"401 network temporary TEST_CREDENTIAL_MUST_NOT_LEAK"})]);
+  await assert.rejects(executePiWorker(f.request,f.options),(error:unknown)=>{
+    assert.ok(error instanceof ExecutionFailure);assert.equal(error.failure.code,"provider");assert.equal(error.failure.effects,"read-only");assert.doesNotMatch(JSON.stringify(error.failure),/401|temporary|TEST_CREDENTIAL/);return true;
+  });
+});
 const modelId = "offline-scripted";
 function reply(content: AssistantMessage["content"], stopReason: AssistantMessage["stopReason"] = "stop"): AssistantMessage {
   return { role: "assistant", content, stopReason, provider, model: modelId, api: "openai-completions", timestamp: 1,

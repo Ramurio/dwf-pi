@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { WorkflowService, serviceToolNames } from "./service.js";
+import { ExecutionFailure } from "./execution-failure.js";
 
 let service: WorkflowService | undefined;
 try {
@@ -23,6 +24,7 @@ try {
   const failure = error instanceof Error ? error : new Error("Unknown failure");
   console.log(JSON.stringify({ ok: false, error: {
     name: failure.name, message: failure.message,
+    ...(failure instanceof ExecutionFailure ? { failure: failure.failure } : {}),
     ...("issues" in failure ? { issues: failure.issues } : {}),
   } }));
   process.exitCode = 1;

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { openWorkflowDatabase } from "./sqlite.js";
 import { preparedExecutionId, type ExecutionPlan } from "./execution-types.js";
+import { executionFailure, parseExecutionFailure, type ExecutionFailureRecord } from "./execution-failure.js";
 import type { Json } from "./graph.js";
 import type { RuntimeContext } from "./runtime-contract.js";
 import { parseUsage, sumTokenUsage, type TokenUsage } from "./usage.js";
@@ -28,6 +29,7 @@ export interface RunRecord {
   output?: Json;
   error?: string;
   taskOutcome?: TaskOutcome;
+  failure?: ExecutionFailureRecord;
 }
 export type ActivationStatus = "running" | "succeeded" | "failed" | "interrupted";
 export interface PreparedStart { preparedId: string; idempotencyKey?: string }
@@ -57,7 +59,7 @@ export interface WaitRecord {
   status: "open" | "resolved"; createdAt: number; resolvedAt: number | null; resolvedBy: string | null; response?: Json;
 }
 export interface UsageRecord { seq: number; runId: string; key: string; attempt: number; reportId: string; usage: TokenUsage; stopReason: string; at: number; source: "pi-sdk" }
-export type RunOutcome = { status: "succeeded"; output: Json } | { status: "failed"; error: string } | { status: "cancelled" };
+export type RunOutcome = { status: "succeeded"; output: Json } | { status: "failed"; error: string; failure?: ExecutionFailureRecord } | { status: "cancelled" };
 const terminal = new Set<RunStatus>(["succeeded", "failed", "cancelled"]);
 const active = new Set<RunStatus>(["running", "waiting", "pausing", "paused", "cancelling"]);
 const leafSql = "kind NOT IN ('map','parallel','subworkflow','worktree') AND NOT (kind='await' AND COALESCE(json_extract(metadata,'$.waiting'),0)=1) OR (kind='worktree' AND COALESCE(json_extract(metadata,'$.workspacePhase'),'allocating') != 'children')";
@@ -127,6 +129,9 @@ export class RunStore {
         PRIMARY KEY(run_id,activation_key,attempt),
         FOREIGN KEY(run_id,activation_key) REFERENCES workflow_activations(run_id,activation_key)
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS workflow_run_failures (
+        run_id TEXT PRIMARY KEY REFERENCES workflow_runs(id), failure TEXT NOT NULL
+      ) STRICT;
     `);
   }
   close(): void { this.database.close(); }
@@ -173,8 +178,9 @@ export class RunStore {
     });
   }
   get(id: string): RunRecord {
-    const row = this.database.prepare(`SELECT r.*, t.outcome AS task_outcome, s.prepared_id FROM workflow_runs r
-      LEFT JOIN workflow_task_outcomes t ON t.run_id=r.id LEFT JOIN workflow_run_starts s ON s.run_id=r.id WHERE r.id = ?`).get(id);
+    const row = this.database.prepare(`SELECT r.*, t.outcome AS task_outcome, s.prepared_id, f.failure FROM workflow_runs r
+      LEFT JOIN workflow_task_outcomes t ON t.run_id=r.id LEFT JOIN workflow_run_starts s ON s.run_id=r.id
+      LEFT JOIN workflow_run_failures f ON f.run_id=r.id WHERE r.id = ?`).get(id);
     if (!row) throw new Error(`Run not found: ${id}`);
     return {
       id: String(row.id), plan: JSON.parse(String(row.plan)) as ExecutionPlan, input: JSON.parse(String(row.input)) as Json,
@@ -184,6 +190,7 @@ export class RunStore {
       ...(row.prepared_id === null ? {} : { preparedId: String(row.prepared_id) }),
       ...(row.output === null ? {} : { output: JSON.parse(String(row.output)) as Json }),
       ...(row.error === null ? {} : { error: String(row.error) }),
+      ...(row.failure === null || !["failed","interrupted"].includes(String(row.status)) ? {} : { failure: JSON.parse(String(row.failure)) as ExecutionFailureRecord }),
       ...(row.status === "succeeded" ? { taskOutcome: row.task_outcome === null
         ? legacyOutcome(JSON.parse(String(row.output))) : JSON.parse(String(row.task_outcome)) as TaskOutcome } : {}),
     };
@@ -282,9 +289,11 @@ export class RunStore {
   markInterrupted(id: string, token: string, error: string): void {
     this.transaction(() => {
       this.owned(id, token);
-      this.database.prepare("UPDATE workflow_activations SET status='interrupted',error=?,finished_at=? WHERE run_id=? AND status='running'").run(error, Date.now(), id);
+      const failure = executionFailure("interrupted","execution","unknown",error).failure;
+      this.database.prepare("UPDATE workflow_activations SET status='interrupted',error=?,finished_at=?,metadata=json_set(metadata,'$.failure',json(?)) WHERE run_id=? AND status='running'").run(error, Date.now(), JSON.stringify(failure), id);
+      this.database.prepare("INSERT INTO workflow_run_failures(run_id,failure) VALUES(?,?) ON CONFLICT(run_id) DO UPDATE SET failure=excluded.failure").run(id,JSON.stringify(failure));
       this.database.prepare("UPDATE workflow_runs SET status='interrupted',owner_token=NULL,supervisor_pid=NULL,error=?,updated_at=? WHERE id=?").run(error, Date.now(), id);
-      this.event(id, "run.interrupted", { error });
+      this.event(id, "run.interrupted", { error, failure: JSON.parse(JSON.stringify(failure)) as Json });
     });
   }
   finish(id: string, token: string, outcome: RunOutcome): void {
@@ -294,6 +303,10 @@ export class RunStore {
       if (outcome.status === "cancelled" && run.desired !== "cancelled") throw new Error("Cancellation was not requested");
       const running = this.database.prepare("SELECT 1 FROM workflow_activations WHERE run_id=? AND status='running' LIMIT 1").get(id);
       if (running) throw new Error("Cannot finish with running activations");
+      const failure = outcome.status === "failed" ? outcome.failure ?? executionFailure("unknown","execution","unknown",outcome.error).failure : undefined;
+      if (failure && !parseExecutionFailure(failure)) throw new Error("Invalid structured execution failure");
+      if (failure) this.database.prepare("INSERT INTO workflow_run_failures(run_id,failure) VALUES(?,?) ON CONFLICT(run_id) DO UPDATE SET failure=excluded.failure").run(id,JSON.stringify(failure));
+      else this.database.prepare("DELETE FROM workflow_run_failures WHERE run_id=?").run(id);
       let taskOutcome: TaskOutcome | undefined;
       if (outcome.status === "succeeded") {
         const root = this.listActivations(id).find(a => a.kind === "finish" && a.status === "succeeded" &&
@@ -306,7 +319,7 @@ export class RunStore {
       this.database.prepare("UPDATE workflow_runs SET status=?,output=?,error=?,owner_token=NULL,supervisor_pid=NULL,updated_at=? WHERE id=?")
         .run(outcome.status, outcome.status === "succeeded" ? JSON.stringify(outcome.output) : null,
           outcome.status === "failed" ? outcome.error : null, Date.now(), id);
-      this.event(id, `run.${outcome.status}`, outcome.status === "succeeded" ? { output: outcome.output, taskOutcome: JSON.parse(JSON.stringify(taskOutcome)) as Json } : outcome.status === "failed" ? { error: outcome.error } : {});
+      this.event(id, `run.${outcome.status}`, outcome.status === "succeeded" ? { output: outcome.output, taskOutcome: JSON.parse(JSON.stringify(taskOutcome)) as Json } : outcome.status === "failed" ? { error: outcome.error, failure: JSON.parse(JSON.stringify(failure)) as Json } : {});
     });
   }
   beginActivation(id: string, token: string, context: RuntimeContext, options: { kind: string; sideEffect: boolean }): ActivationRecord {
@@ -318,10 +331,11 @@ export class RunStore {
       if (old && (old.kind !== options.kind || old.sideEffect !== options.sideEffect)) throw new Error(`Activation definition changed: ${key}`);
       if (old?.status === "succeeded") return old;
       if (old?.status === "running") throw new Error(`Activation is already running: ${key}`);
-      if (old?.sideEffect && !(old.kind === "worktree" && old.metadata.workspacePhase === "children")) throw new Error(`Uncertain side effect requires explicit retry authorization: ${key}`);
+      if (old?.sideEffect && !(old.kind === "worktree" && old.metadata.workspacePhase === "children")) throw executionFailure("uncertain-effect","recovery","unknown",`Uncertain side effect requires explicit retry authorization: ${key}`);
       // Preserve the complete prior checkpoint atomically before replacing the current attempt.
       if (old) this.database.prepare("INSERT INTO workflow_activation_history(run_id,activation_key,attempt,record) VALUES(?,?,?,?)")
         .run(id, key, old.attempt, JSON.stringify(old));
+      const { failure: _previousFailure, ...metadata } = old?.metadata ?? {};
       const now = Date.now();
       if (run.status === "waiting") {
         this.database.prepare("UPDATE workflow_runs SET status='running',updated_at=? WHERE id=?").run(now, id);
@@ -329,8 +343,8 @@ export class RunStore {
       }
       this.database.prepare(`INSERT INTO workflow_activations(run_id,activation_key,context,kind,side_effect,status,attempt,owner_token,started_at,metadata)
         VALUES(?,?,?,?,?,'running',?,?,?,?) ON CONFLICT(run_id,activation_key) DO UPDATE SET
-        status='running',attempt=excluded.attempt,owner_token=excluded.owner_token,started_at=excluded.started_at,finished_at=NULL,error=NULL,output=NULL`)
-        .run(id, key, JSON.stringify(context), options.kind, Number(options.sideEffect), (old?.attempt ?? 0) + 1, token, now, JSON.stringify(old?.metadata ?? {}));
+        status='running',attempt=excluded.attempt,owner_token=excluded.owner_token,started_at=excluded.started_at,finished_at=NULL,error=NULL,output=NULL,metadata=excluded.metadata`)
+        .run(id, key, JSON.stringify(context), options.kind, Number(options.sideEffect), (old?.attempt ?? 0) + 1, token, now, JSON.stringify(metadata));
       this.event(id, "activation.started", { key, kind: options.kind, attempt: (old?.attempt ?? 0) + 1 });
       return this.getActivation(id, key)!;
     });
@@ -488,12 +502,14 @@ export class RunStore {
       this.event(id, "activation.succeeded", { key, output });
     });
   }
-  failActivation(id: string, token: string, key: string, error: string): void {
+  failActivation(id: string, token: string, key: string, error: string, failure?: ExecutionFailureRecord): void {
     this.transaction(() => {
       this.runningActivation(id, token, key);
-      this.database.prepare("UPDATE workflow_activations SET status='failed',error=?,finished_at=? WHERE run_id=? AND activation_key=?")
-        .run(error, Date.now(), id, key);
-      this.event(id, "activation.failed", { key, error });
+      const detail = failure ?? executionFailure("unknown","execution","unknown",error).failure;
+      if (!parseExecutionFailure(detail)) throw new Error("Invalid structured execution failure");
+      this.database.prepare("UPDATE workflow_activations SET status='failed',error=?,finished_at=?,metadata=json_set(metadata,'$.failure',json(?)) WHERE run_id=? AND activation_key=?")
+        .run(error, Date.now(), JSON.stringify(detail), id, key);
+      this.event(id, "activation.failed", { key, error, failure: JSON.parse(JSON.stringify(detail)) as Json });
     });
   }
   setActivationMetadata(id: string, token: string, key: string, metadata: ActivationMetadata): void {

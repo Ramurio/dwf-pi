@@ -298,7 +298,14 @@ function renderHeader() {
   $("resume").hidden = !["paused", "pausing", "interrupted"].includes(r.status);
   $("cancel").hidden = finished.has(r.status);
   for (const id of ["pause", "resume", "cancel"]) $(id).disabled = state.busy;
-  if (r.error) notice(r.error);
+  if (r.error && !r.failure) notice(r.error);
+  const failurePanel = $("execution-failure");
+  failurePanel.hidden = !r.failure;
+  failurePanel.replaceChildren();
+  if (r.failure) {
+    failurePanel.append(failureView(r.failure,true));
+    if (r.error) { const details = el("details"); details.append(el("summary", "", "Техническая ошибка"), el("pre", "", r.error)); failurePanel.append(details); }
+  }
   const outcome = $("task-outcome");
   outcome.hidden = !r.taskOutcome;
   outcome.replaceChildren();
@@ -462,7 +469,8 @@ function renderInspector() {
         ),
       );
     if (a.result) row.append(el("p", "", a.result));
-    if (a.error) row.append(el("p", "", a.error));
+    if (a.failure) row.append(failureView(a.failure));
+    else if (a.error) row.append(el("p", "", a.error));
     if (a.findings.length) {
       const details = el("details");
       details.append(el("summary", "", `Замечания: ${a.findings.length}`));
@@ -475,6 +483,14 @@ function renderInspector() {
   aside.scrollTop = scroll;
 }
 const svgNS = "http://www.w3.org/2000/svg";
+function failureView(failure, runScope = false) {
+  const labels = { configuration:"Настройки",resource:"Ресурсы",provider:"Ответ провайдера",output:"Формат результата",process:"Процесс",protocol:"Обмен с worker",cancelled:"Прерывание",interrupted:"Потерян процесс","expression":"Выражение графа","uncertain-effect":"Нужна сверка действий",unknown:"Причина не уточнена" };
+  const phases = { setup:"подготовка",execution:"исполнение",output:"приём результата",routing:"выбор перехода",recovery:"восстановление",cleanup:"завершение процессов" };
+  const effects = { "not-started":"Исполнение задачи не началось.","read-only":"Операция выполнялась только с доступом на чтение.",unknown:"Результат внешних действий не подтверждён. Перед повтором нужна сверка." };
+  const panel=el("div","failure-detail");
+  panel.append(el("strong","",`${labels[failure.code] ?? labels.unknown} · ${phases[failure.phase] ?? "этап неизвестен"}`),el("p","",failure.message),el("p","muted",runScope ? "Это причина остановки. Состояние действий показано в деталях отдельных узлов." : effects[failure.effects] ?? effects.unknown));
+  return panel;
+}
 function renderAttempts(container, activation) {
   const id=state.id, identity=JSON.stringify([id,activation.key]), page=attemptPages.get(identity);
   const load=button(page.loading ? "Загружаем попытки…" : !page.opened ? `Попытки: ${activation.attempt}` : page.hasMore ? "Ещё попытки" : "Обновить попытки", async()=>{
@@ -492,7 +508,8 @@ function renderAttempts(container, activation) {
     card.append(el("strong","",`Попытка ${record.attempt}${record.attempt===snapshot.current.attempt ? " · последняя" : ""}`),badge(record.status));
     card.append(el("p","muted",`${date(record.startedAt)} · ${record.finishedAt===null ? "не завершена на момент запроса" : duration(record.finishedAt-record.startedAt)}`));
     if(record.kind==="agent")card.append(el("p","",record.accounting.usage ? `${number(record.accounting.usage.totalTokens)} ток. · ответов ${record.accounting.responses}${record.accounting.complete ? "" : " · частично"}` : "Расход этой попытки неизвестен: нет отчётов SDK."));
-    if(record.error)card.append(el("pre","",record.error));
+    if(record.metadata.failure)card.append(failureView(record.metadata.failure));
+    else if(record.error)card.append(el("pre","",record.error));
     if(Object.hasOwn(record,"output"))card.append(el("pre","",JSON.stringify(record.output,null,2)));
     if(Object.keys(record.metadata).length){const details=el("details");details.append(el("summary","","Данные попытки"),el("pre","",JSON.stringify(record.metadata,null,2)));card.append(details);}
     container.append(card);
@@ -1011,7 +1028,7 @@ async function refreshSnapshot() {
       renderHeader();
       renderPanel();
     }
-    notice(state.controlError ?? run.error);
+    notice(state.controlError ?? (run.failure ? null : run.error));
     $("connection").textContent = "● Данные обновляются";
   } catch (error) {
     if (id === state.id) {

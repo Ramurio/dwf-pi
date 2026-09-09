@@ -278,6 +278,7 @@ export function publicRunSummary(run: RunRecord) {
     cwd: run.cwd, status: run.status, desired: run.desired, supervisorPid: run.supervisorPid,
     createdAt: run.createdAt, updatedAt: run.updatedAt, heartbeatAt: run.heartbeatAt,
     ...(run.taskOutcome === undefined ? {} : { taskOutcome: run.taskOutcome }),
+    ...(run.failure === undefined ? {} : { failure: run.failure }),
     ...(run.output === undefined ? {} : { output: run.output }), ...(run.error === undefined ? {} : { error: run.error }),
   };
 }

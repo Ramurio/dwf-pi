@@ -1,3 +1,4 @@
+import { ExecutionFailure, executionFailure } from "./execution-failure.js";
 import { getAgentDir, ModelRuntime, type CreateModelRuntimeOptions } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import type { AvailableExecutionModel } from "./execution-plan.js";
@@ -20,12 +21,12 @@ export async function createWorkflowModelRuntime(options: WorkflowModelRuntimeOp
     runtime.registerNativeProvider(await createXaiSubscriptionProvider(grok || { agentDirectory: getAgentDir() }));
     registered = true;
     const refresh = await runtime.refresh({ providers: ["xai-auth"], allowNetwork: false, ...(options.signal ? { signal: options.signal } : {}) });
-    if (refresh.errors.size) throw new Error("Grok subscription cached catalog could not be restored");
+    if (refresh.errors.size) throw executionFailure("configuration","setup","not-started","Grok subscription cached catalog could not be restored");
   } catch (error) {
-    const message = error instanceof Error && /^(Grok subscription adapter is missing|Unsupported Grok adapter identity\/version|Grok subscription cached catalog)/.test(error.message)
-      ? error.message : "Grok subscription adapter could not be loaded; verify local pi-xai-oauth 1.5.2 installation";
+    const failure = error instanceof ExecutionFailure ? error : executionFailure("configuration","setup","not-started","Grok subscription adapter could not be loaded; verify local pi-xai-oauth 1.5.2 installation");
+    const message = failure.message;
     if (registered) { runtime.unregisterProvider("xai-auth"); await runtime.refresh({ allowNetwork: false }); }
-    if (requiredProvider === "xai-auth") throw new Error(message);
+    if (requiredProvider === "xai-auth") throw failure;
     onDiagnostic?.(message);
   }
   return runtime;

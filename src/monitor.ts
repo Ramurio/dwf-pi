@@ -1,3 +1,4 @@
+import { parseExecutionFailure } from "./execution-failure.js";
 import type { ActivationRecord, RunEvent, RunRecord } from "./run-store.js";
 import { activationUsage, summarizeUsage, tokenNumber, tokenSummary } from "./usage.js";
 import { renderRun, terminalText } from "./terminal.js";
@@ -56,6 +57,8 @@ function evidence(a: ActivationRecord): string {
     if (typeof output.decision === "string") return output.decision;
     if (typeof output.accepted === "boolean") return output.accepted ? "результат принят" : "результат НЕ принят";
   }
+  const failure = parseExecutionFailure(a.metadata.failure);
+  if (failure) return terminalText(`${failure.code}/${failure.phase} (${failure.effects}): ${failure.message}`,180);
   if (a.error) return terminalText(a.error, 180);
   return a.status === "succeeded" ? "готово" : statusNames[a.status] ?? a.status;
 }
@@ -118,6 +121,7 @@ export function monitorBody(run: RunRecord, records: readonly ActivationRecord[]
   lines.push("", "Проход 2+ = повтор узла. Ветки / элементы = параллельные задачи.");
   return lines;
 }
+const runError = (run: RunRecord) => run.failure ? `${run.failure.code}/${run.failure.phase}: ${run.failure.message}` : run.error ?? "";
 export function renderDashboard(run: RunRecord, records: readonly ActivationRecord[], options: MonitorOptions = {}): string {
   const width = Math.max(1, options.width ?? 100), height = Math.max(4, options.height ?? 24), now = options.now ?? Date.now();
   const elapsed = duration((terminal.has(run.status) ? run.updatedAt : now) - run.createdAt);
@@ -133,7 +137,7 @@ export function renderDashboard(run: RunRecord, records: readonly ActivationReco
     tokenSummary(records),
     run.plan.workflow.name,
     `${run.id} · ${options.presentation ? presentation.liveness.label : terminal.has(run.status) ? "запуск завершён" : `heartbeat: ${heartbeat} (по журналу)`}`,
-    run.error ? `Ошибка: ${run.error}` : run.status === "pausing" ? "Ждём завершения активных задач, затем пауза." : tabs,
+    runError(run) ? `Ошибка: ${runError(run)}` : run.status === "pausing" ? "Ждём завершения активных задач, затем пауза." : tabs,
     "─".repeat(width),
   ];
   const body = monitorBody(run, records, options);
@@ -149,10 +153,10 @@ export class MonitorLog {
   private records = new Map<string, string>();
   update(run: RunRecord, records: readonly ActivationRecord[], presentation = projectRun(run, records)): string[] {
     const lines: string[] = [];
-    const state = `${run.status}/${run.desired}/${presentation.liveness.state}`;
+    const state = `${run.status}/${run.desired}/${presentation.liveness.state}/${JSON.stringify(run.failure ?? null)}`;
     if (!this.state) lines.push(`${terminalText(run.plan.workflow.name)} · ${terminalText(run.id)}`);
     if (state !== this.state) {
-      lines.push(`Run: ${presentation.statusLabel.toUpperCase()}${run.error ? ` — ${terminalText(run.error)}` : ""} · ${tokenSummary(records)}`);
+      lines.push(`Run: ${presentation.statusLabel.toUpperCase()}${runError(run) ? ` — ${terminalText(runError(run))}` : ""} · ${tokenSummary(records)}`);
       if (presentation.taskOutcome) lines.push(`Task: ${presentation.taskOutcome.decision} · ${terminalText(presentation.taskOutcome.reason, 500)}`);
       if (presentation.liveness.state !== "unknown") lines.push(presentation.liveness.label);
     }

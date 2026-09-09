@@ -1,3 +1,4 @@
+import { parseExecutionFailure } from "../execution-failure.js";
 import type { ActivationRecord, RunRecord, WaitRecord, RunStore } from "../run-store.js";
 import { activationUsage, summarizeUsage } from "../usage.js";
 import { activationPath, type WorkerActivity } from "../monitor.js";
@@ -31,6 +32,7 @@ export function graphSnapshot(
     accepted: presentation.accepted,
     activeKeys: presentation.activeKeys,
     error: run.error ?? null,
+    failure: run.failure ?? null,
     usage: summarizeUsage(records),
     entryGraph: run.plan.workflow.entryGraph,
     graphs: Object.entries(run.plan.workflow.graphs).map(([id, graph]) => ({
@@ -82,6 +84,7 @@ export function graphSnapshot(
                 ? activity.get(a.key)!
                 : null,
             error: a.error ?? null,
+            failure: parseExecutionFailure(a.metadata.failure) ?? null,
             result: resultSummary(a),
             findings: findings(a),
           })),

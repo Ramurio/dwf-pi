@@ -1,3 +1,4 @@
+import { executionFailure } from "./execution-failure.js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createJiti } from "jiti";
@@ -49,8 +50,8 @@ export async function createXaiSubscriptionProvider(options: XaiProviderOptions)
   const packageRoot = options.packageRoot ?? join(options.agentDirectory, "npm/node_modules/pi-xai-oauth");
   let manifest: { name?: string; version?: string };
   try { manifest = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")); }
-  catch { throw new Error("Grok subscription adapter is missing or unreadable; pi-xai-oauth 1.5.2 is required"); }
-  if (!["pi-xai-oauth", "@blockedpath/pi-xai-oauth"].includes(manifest.name ?? "") || manifest.version !== xaiAdapterVersion) throw new Error("Unsupported Grok adapter identity/version; pi-xai-oauth 1.5.2 is required");
+  catch { throw executionFailure("configuration","setup","not-started","Grok subscription adapter is missing or unreadable; pi-xai-oauth 1.5.2 is required"); }
+  if (!["pi-xai-oauth", "@blockedpath/pi-xai-oauth"].includes(manifest.name ?? "") || manifest.version !== xaiAdapterVersion) throw executionFailure("configuration","setup","not-started","Unsupported Grok adapter identity/version; pi-xai-oauth 1.5.2 is required");
   const compat = await import("@earendil-works/pi-ai/compat");
   const virtualModules: Record<string, unknown> = {
     "@earendil-works/pi-ai": compat,

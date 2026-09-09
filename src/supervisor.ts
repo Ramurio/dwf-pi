@@ -2,7 +2,8 @@ import { parseArgs } from "node:util";
 import { Effect } from "effect";
 import { verifyExecutionPlan } from "./execution-plan.js";
 import { loadGeneratedModule } from "./generated-module.js";
-import { JournalRuntime } from "./run-runtime.js";
+import { JournalRuntime, describeFailureCause } from "./run-runtime.js";
+import { failureRecord, type ExecutionFailureRecord } from "./execution-failure.js";
 import { RunStore } from "./run-store.js";
 
 const { values } = parseArgs({ options: {
@@ -14,6 +15,7 @@ const runId = values.run;
 const owner = values.owner;
 const controller = new AbortController();
 let timer: NodeJS.Timeout | undefined;
+let observedFailure: ExecutionFailureRecord | undefined;
 const cancel = () => { try { store.requestControl(runId, "cancel"); } finally { controller.abort(); } };
 process.on("SIGTERM", cancel);
 process.on("SIGINT", cancel);
@@ -34,7 +36,10 @@ try {
       }
     } catch { controller.abort(); }
   }, 100);
-  const output = await Effect.runPromise(module.run(runtime, run.input), { signal: controller.signal });
+  const output = await Effect.runPromise(module.run(runtime, run.input).pipe(Effect.tapErrorCause(cause => Effect.sync(() => {
+    // A failing child's read-only status does not prove the whole graph made no writes.
+    observedFailure = {...describeFailureCause(cause),effects:"unknown"};
+  }))), { signal: controller.signal });
   // A final pause is still a pause: retain the completed output until resume/cancel.
   for (;;) {
     await runtime.gate(controller.signal);
@@ -56,7 +61,7 @@ try {
     } else {
       for (const item of activations.filter(item => item.status === "running")) store.failActivation(runId, owner, item.key, "Supervisor execution interrupted");
       store.finish(runId, owner, run.desired === "cancelled" ? { status: "cancelled" }
-        : { status: "failed", error: error instanceof Error ? error.message : String(error) });
+        : { status: "failed", error: error instanceof Error ? error.message : String(error), failure: observedFailure ?? failureRecord(error,{code:"unknown",phase:"setup",effects:"unknown",message:"Supervisor could not complete execution"}) });
     }
   }
   process.exitCode = run.desired === "cancelled" ? 0 : 1;

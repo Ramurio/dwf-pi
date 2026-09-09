@@ -12,7 +12,7 @@
 | Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Реализовано и проверено: await, run.waits/resolve, JSON-форма, idempotency, pause/resume, SIGKILL и worktree reattach; см. outcomes-and-waits.md |
 | Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Реализовано: controller.snapshot + projectRun, включая browser list и watch; проверка процессов отдельно от heartbeat, см. observation.md |
 | Usage | Учёт каждого ответа, cache/reasoning, попытки, dedup, отмена/ошибки, раскрытие сумм | Backend/API/UI реализованы; 65 targeted tests и браузерный fixture, см. usage.md. Общая приёмка с будущим recovery остаётся обязательной |
-| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История попыток, API/UI и раздельный usage реализованы; типы ошибок, policies и reconciliation ещё не начаты, см. attempt-history.md |
+| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts и typed failure code/phase/effects доступны в journal/API/UI; provider status, policies, output repair и reconciliation остаются, см. attempt-history.md и execution-failures.md |
 | Артефакты | Snapshot/digest, версии критериев, применимость checks/reviews, diff | Не начато |
 | Интеграция | Отдельный integration workspace, проверки объединения, контроль target head | Не начато |
 | Authoring | Рецепты в обычный граф, агрегация коллекций, schemas и dataflow diagnostics | Не начато |
@@ -162,3 +162,29 @@ cancelled; typecheck, browser syntax, строгий checkJs paging module и sk
 прошли. `/tmp/dynamicwf-attempts-full-20260910.log`. Контракт: attempt-history.md.
 Это завершает сохранение и просмотр attempts, но не typed failures, policies,
 output repair и reconciliation. Общий goal остаётся в полном объёме.
+
+
+### Структурированные причины сбоев
+
+`ExecutionFailure` переносит code/phase/effects/message через pi/check IPC, Effect,
+journal, CLI/MCP, browser и terminal monitor. Состояние task effects отделено от
+причины ошибки; общий run и структурные родители не наследуют read-only гарантию
+одного ребёнка. Ошибка output у писавшего worker остаётся с неизвестным исходом
+действий. Nonzero check exit и reviewer verdict сохраняют семантику данных графа.
+Убрана передача произвольного SDK текста по совпадению префикса; decoder проверяет
+закрытые поля и не выводит сырой повреждённый stdout. Известные локальные ошибки
+настройки Grok остаются диагностируемыми. SDK provider error без структурированного
+статуса не превращается в выдуманную temporary/auth классификацию.
+
+Проверены настоящий SDK write→invalid output, сохранение отчётов обоих ответов,
+ошибка до и после admission, malformed stdout, prefix spoofing, atomic failure/event,
+archive/current clearing, сохранение причины runtime→API→UI, терминальный краткий
+вывод и отсутствие дублей log. Native UI показывает причину остановки отдельно
+от not-started факта конкретной проверки; консоль без ошибок, fixtures очищены.
+
+Финальный обычный параллельный `npm test`: **269/269**, 59,3 секунды, без cancelled;
+typecheck, browser syntax, strict checkJs paging module и skill validation прошли.
+`/tmp/dynamicwf-failures-monitor-final-20260910.log`. Контракт: execution-failures.md.
+Не завершены: точные provider statuses, явные policies retry/collect, output repair
+с закрытыми write tools и reconciliation. Никаких автоматических повторов этот
+этап не вводит; общий goal сохраняет полный обязательный объём.

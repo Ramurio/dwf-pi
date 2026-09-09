@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { ExecutionFailureRecord } from "./execution-failure.js";
 import type { AgentConfig } from "./catalog.js";
 import type { Json, WorkflowDefinition } from "./graph.js";
 import type { TokenUsage } from "./usage.js";
@@ -47,7 +48,7 @@ export type PiWorkerMessage =
   | { type: "ready" }
   | { type: "event"; event: { type: string; [key: string]: unknown } }
   | { type: "result"; result: PiWorkerResult }
-  | { type: "error"; error: string };
+  | { type: "error"; error: string; failure?: ExecutionFailureRecord };
 
 export interface PreparedExecution {
   preparedId: string;

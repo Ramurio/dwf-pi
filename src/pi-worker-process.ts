@@ -1,4 +1,5 @@
 /** Dedicated child entry point. stdout is exclusively the versioned NDJSON protocol. */
+import { executionFailure, failureRecord } from "./execution-failure.js";
 import { executePiWorker } from "./pi-worker.js";
 import type { PiWorkerMessage, PiWorkerRequest } from "./execution-types.js";
 
@@ -16,6 +17,7 @@ process.stdout.on("error", cancel);
 // IPC may have closed while static imports were still loading.
 if (typeof process.send === "function" && !process.connected) cancel();
 send({ type: "ready" });
+let executionAdmitted = false;
 try {
   let text = "";
   for await (const chunk of process.stdin) {
@@ -23,14 +25,15 @@ try {
     text += chunk.toString();
   }
   const request = JSON.parse(text) as PiWorkerRequest;
+  executionAdmitted = true;
   const result = await executePiWorker(request, { signal: controller.signal, onEvent: event => { send({ type: "event", event }); } });
-  if (controller.signal.aborted) throw new Error("Pi worker cancelled");
+  if (controller.signal.aborted) throw executionFailure("cancelled","output","unknown","Pi worker cancelled");
   send({ type: "result", result });
 } catch (error) {
-  // Never forward arbitrary SDK/provider error text: it may include headers, prompts or credentials.
-  const message = controller.signal.aborted ? "Pi worker cancelled" : error instanceof Error && /^(Grok subscription adapter is missing|Unsupported Grok adapter identity\/version|Grok subscription cached catalog|Grok subscription adapter could not be loaded|Pi worker cancelled|submit_result |Pi worker completed without|Pi assistant turn failed|Pi changed configured|Configured model is not available|read-only worker cannot|Fresh worker cannot|Frozen skill|Unsafe frozen skill|Invalid frozen skill|Resource directory|Duplicate frozen skill|Unsupported pi worker|Unknown pi worker|Continued session workspace|Pi tool allowlist)/.test(error.message)
-    ? error.message : "Pi worker execution failed; inspect its private session transcript for details";
-  send({ type: "error", error: message });
+  // Only branded, closed failures cross IPC. Arbitrary SDK text is never admitted by a prefix match.
+  const failure = failureRecord(error, { code: controller.signal.aborted ? "cancelled" : "unknown",
+    phase: executionAdmitted ? "unknown" : "setup", effects: executionAdmitted ? "unknown" : "not-started", message: controller.signal.aborted ? "Pi worker cancelled" : "Pi worker failed before a structured result" });
+  send({ type: "error", error: failure.message, failure });
   process.exitCode = controller.signal.aborted ? 130 : 1;
 } finally {
   process.removeListener("SIGTERM", cancel);
