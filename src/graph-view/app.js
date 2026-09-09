@@ -1,4 +1,7 @@
 import { layoutGraph } from "./layout.js";
+import { UsagePages } from "./usage-pages.js";
+
+const usagePages = new UsagePages();
 
 const $ = (id) => document.getElementById(id);
 const names = {
@@ -149,7 +152,7 @@ function sum(records) {
     output,
     totalTokens,
     reported,
-    partial: missing > 0 || records.some((a) => a.attempt > 1),
+    partial: missing > 0 || records.some((a) => a.status === "running" || a.usageComplete === false || a.attempt > a.usageRecordedAttempts),
   };
 }
 function selectedGraph() {
@@ -229,7 +232,7 @@ function renderMetrics() {
     [
       "Токены",
       u.reported || !u.partial ? number(u.totalTokens) : "Нет отчётов",
-      u.partial ? "Неполные данные" : `${u.reported} отчётов от агентов`,
+      u.partial ? "Неполные данные" : `Агентов с отчётом: ${u.reported}${u.responses ? ` · ответов: ${u.responses}` : ""}`,
     ],
     [
       "Время",
@@ -250,7 +253,7 @@ function renderMetrics() {
     [
       "Оценка SDK",
       u.costReported ? `$${u.cost.toFixed(3)}` : "—",
-      u.partial || u.costReported < u.reported
+      u.costPartial
         ? "Частичная · не списание по подписке"
         : "Не списание по подписке",
     ],
@@ -420,7 +423,7 @@ function renderInspector() {
         el(
           "p",
           "",
-          `${number(a.usage.totalTokens)} ток. · вход ${number(a.usage.input)} · выход ${number(a.usage.output)}`,
+          `${number(a.usage.totalTokens)} ток. · вход без кэша ${number(a.usage.input)} · кэш ${a.usage.cacheRead === undefined ? "н/д" : number(a.usage.cacheRead)} · выход ${number(a.usage.output)}${a.usageComplete === false ? " · частично" : ""}`,
         ),
       );
     if (a.result) row.append(el("p", "", a.result));
@@ -754,15 +757,19 @@ function renderTokens() {
     u = state.run.usage;
   panel.replaceChildren(sectionHeading("Расход токенов"));
   const split = el("div", "token-breakdown");
-  for (const [label, value] of [
-    ["Всего", u.reported || !u.partial ? u.totalTokens : null],
-    ["Вход", u.input],
-    ["Выход", u.output],
+  for (const [label, value, partial] of [
+    ["Всего", u.reported || !u.partial ? u.totalTokens : null, u.partial],
+    ["Вход без кэша", u.reported || !u.partial ? u.input : null, u.partial],
+    ["Чтение кэша", u.cacheReadReported ? u.cacheRead : null, u.cacheReadPartial],
+    ["Запись кэша", u.cacheWriteReported ? u.cacheWrite : null, u.cacheWritePartial],
+    ["Выход", u.reported || !u.partial ? u.output : null, u.partial],
+    ["Reasoning (входит в выход)", u.reasoningReported ? u.reasoning : null, u.reasoningPartial],
   ]) {
     const item = el("div", "muted", label);
     item.append(
       el("strong", "", value === null ? "Нет отчётов" : number(value)),
     );
+    if (value !== null && partial) item.append(el("span", "", "Известная часть"));
     split.append(item);
   }
   panel.append(split);
@@ -770,13 +777,36 @@ function renderTokens() {
     u.partial ? "Данные неполные." : "Получены отчёты всех запущенных агентов.",
   ];
   if (u.pending) notes.push(`Ещё работают без отчёта: ${u.pending}.`);
+  if (u.incomplete) notes.push(`Расход ещё растёт или учтён частично: ${u.incomplete} агентов.`);
+  if (u.cacheReadPartial || u.cacheWritePartial) notes.push("Детализация кэша есть не у всех ответов или расход ещё растёт.");
   if (u.missing) notes.push(`Отчёт не сохранён: ${u.missing}.`);
   if (u.earlierAttempts)
     notes.push(`Не учтены отдельно предыдущие попытки: ${u.earlierAttempts}.`);
   notes.push(
-    "Счётчики обновляются после завершения worker. Total может включать кэш сверх input/output. Оценка SDK — не списание по подписке.",
+    "Новые запуски сохраняют расход после каждого ответа модели, включая уже известный расход при ошибке или отмене. Reasoning входит в выход. Оценка SDK — не списание по подписке.",
   );
   panel.append(el("div", "explanation", notes.join(" ")));
+  const ledger = el("div", "usage-ledger");
+  const selectedRun = state.id;
+  const page = usagePages.get(selectedRun);
+  for (const report of page.reports) {
+    const activation = allActivations().find(a => a.key === report.key);
+    const row = el("div", "detail-run");
+    row.append(el("strong", "", `${activation?.path ?? "Агент"} · попытка ${report.attempt} · ответ ${report.reportId}`),
+      el("p", "", `${number(report.usage.totalTokens)} ток. · вход ${number(report.usage.input)} · кэш ${report.usage.cacheRead === undefined ? "н/д" : number(report.usage.cacheRead)} · выход ${number(report.usage.output)} · ${report.stopReason} · pi SDK`));
+    ledger.append(row);
+  }
+  if (page.opened && !page.reports.length) ledger.append(el("p", "muted", "Поответных отчётов пока нет. Старые запуски сохраняли только итог worker."));
+  if (page.error) ledger.append(el("p", "explanation", page.error));
+  const load = button(page.loading ? "Загрузка…" : !page.opened ? "Показать исходные отчёты ответов" : page.hasMore ? "Следующие отчёты" : "Проверить новые отчёты", async () => {
+    const pending = usagePages.load(selectedRun, (id, cursor) => api(`usage?id=${encodeURIComponent(id)}&after=${cursor}`));
+    load.disabled = true;
+    load.textContent = "Загрузка…";
+    await pending;
+    if (state.id === selectedRun && state.tab === "tokens") renderTokens();
+  }, "child-button");
+  load.disabled = page.loading;
+  panel.append(load, ledger);
   const groups = new Map();
   const agents = allActivations().filter((a) => a.node.kind === "agent");
   for (const a of agents) {

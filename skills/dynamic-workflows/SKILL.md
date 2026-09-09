@@ -62,6 +62,8 @@ Launch with `run.start {"id":"...","cwd":"/absolute/workspace","input":...}`. Re
 
 `run.pause` stops admitting new work and drains active leaves before reporting `paused`; structural map/parallel parents can remain recorded as running at that checkpoint. `run.resume` continues the same live supervisor or recovers a verified-dead one. `run.cancel` interrupts workers and is irreversible for that run. Ctrl-C in the watcher only detaches the viewer. A caller timeout, closed tab, or stale heartbeat alone does not prove the run died; inspect the existing run rather than starting a duplicate.
 
+Use `run.usage {"id":"...","after":0,"limit":100}` to inspect token totals and the original per-response SDK reports; paginate with `nextAfter` while `hasMore`. New runs record each completed model response before validating the worker result, preserving known usage after failure/cancellation. Cache read/write is separate; reasoning is already part of output. A cancelled or unreported response remains partial. Older runs retain their worker totals without invented per-response records or cache detail.
+
 Completed checkpoints replay without repeating their operations. After a crash, a side-effect worker whose output was not committed is uncertain: its external action may already have happened. Recovery refuses to rerun it implicitly. Inspect the activation and real artifacts, report the uncertainty, and obtain an explicit resolution before repeating the action. Do not edit SQLite or erase checkpoint rows to force a retry. Pure transforms and structural parents can recover through their completed child checkpoints. The current interface does not offer manual active-graph mutation or a retry-authorization tool.
 
 ## Save and reuse

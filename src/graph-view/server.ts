@@ -38,7 +38,7 @@ export async function startGraphServer(
 ) {
   const files = new Map(
     await Promise.all(
-      ["index.html", "app.js", "layout.js", "style.css"].map(
+      ["index.html", "app.js", "layout.js", "usage-pages.js", "style.css"].map(
         async (name) =>
           [name, await readFile(new URL(name, import.meta.url))] as const,
       ),
@@ -143,6 +143,13 @@ export async function startGraphServer(
           supervisorAlive: observed.supervisorAlive,
           workersAlive: observed.workersAlive,
         });
+        return;
+      }
+      if (name === "usage") {
+        const id = url.searchParams.get("id") ?? runId;
+        if (!id) throw new Error("Select a run");
+        store.get(id);
+        json(store.usageReports(id, Number(url.searchParams.get("after") ?? 0), 100));
         return;
       }
       const body = files.get(name);

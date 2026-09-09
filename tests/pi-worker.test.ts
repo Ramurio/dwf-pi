@@ -47,12 +47,50 @@ test("actual SDK worker returns exact output, curated events, usage and persiste
   const f = await fixture(t, [() => submit()]);
   const result = await executePiWorker(f.request, f.options);
   assert.deepEqual(result.output, { answer: 42 });
-  assert.deepEqual(result.usage, { input: 2, output: 3, totalTokens: 5, cost: 0 });
+  assert.deepEqual(result.usage, { input: 2, output: 3, totalTokens: 5, cacheRead: 0, cacheWrite: 0, cost: 0 });
   assert.equal(f.calls.length, 1);
   assert.deepEqual(f.calls[0]?.tools?.map(tool => tool.name), ["submit_result"]);
   assert.ok(f.events.some((e: any) => e.type === "agent_settled"));
   assert.doesNotMatch(JSON.stringify(f.events), /TASK_MARKER|TEST_CREDENTIAL|answer/);
   assert.ok(SessionManager.open(result.sessionFile).getEntries().some(entry => entry.type === "message"));
+});
+
+test("usage is emitted before result validation, including cache and reasoning without double counting", async t => {
+  const message = submit({ answer: "invalid" });
+  message.usage = { ...message.usage, cacheRead: 40, cacheWrite: 7, reasoning: 2, totalTokens: 52 };
+  const f = await fixture(t, [() => message]);
+  await assert.rejects(executePiWorker(f.request, f.options), /strict output schema/);
+  const reports = f.events.filter((event: any) => event.type === "usage.report") as any[];
+  assert.equal(reports.length, 1);
+  assert.deepEqual(reports[0].usage, { input: 2, output: 3, cacheRead: 40, cacheWrite: 7, reasoning: 2, totalTokens: 52, cost: 0 });
+  assert.ok(f.events.some((event: any) => event.type === "usage.settled" && event.complete === true));
+  assert.ok(f.events.some((event: any) => event.type === "session.started"));
+});
+
+test("completed response usage is observable during the next turn and retained when cancelled", { timeout: 10_000 }, async t => {
+  const secondTurn = gate();
+  const first = reply([{ type: "toolCall", id: "ls", name: "ls", arguments: { path: "." } }], "toolUse");
+  first.usage = { ...first.usage, cacheRead: 50, totalTokens: 55 };
+  const f = await fixture(t, [() => first, async (_context, options) => {
+    secondTurn.resolve();
+    await new Promise<void>(resolve => {
+      if (options?.signal?.aborted) resolve();
+      else options?.signal?.addEventListener("abort", () => resolve(), { once: true });
+    });
+    return reply([], "aborted");
+  }]);
+  f.request.config.tools = ["ls"];
+  const controller = new AbortController();
+  const result = executePiWorker(f.request, { ...f.options, signal: controller.signal }).then(value => ({ value }), error => ({ error }));
+  try {
+    await secondTurn.promise;
+    assert.ok(f.events.some((event: any) => event.type === "usage.report" && event.reportId === "1" && event.usage.totalTokens === 55));
+    assert.ok(!f.events.some((event: any) => event.type === "usage.settled"));
+    controller.abort();
+    assert.ok("error" in await result);
+    assert.ok(f.events.some((event: any) => event.type === "usage.settled" && event.complete === false));
+    assert.ok(f.events.some((event: any) => event.type === "usage.report" && event.usage.cacheRead === 50));
+  } finally { controller.abort(); await result; }
 });
 
 for (const [name, step, expected] of [

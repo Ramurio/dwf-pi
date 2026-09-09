@@ -159,9 +159,12 @@ function tokenDetails(run: RunRecord, records: readonly ActivationRecord[]): str
     "Total — счётчик провайдера; он может включать кэш сверх input/output.",
     "Это суммарный расход всех вызовов, а не размер одного контекста."];
   if (total.pending) lines.push(`Ещё работают без отчёта: ${total.pending}. Их расход пока не включён.`);
+  if (total.incomplete) lines.push(`Продолжающийся или неполный учёт: ${total.incomplete} агентов.`);
+  lines.push(`Кэш: чтение ${total.cacheReadReported ? tokenNumber(total.cacheRead) : "н/д"} · запись ${total.cacheWriteReported ? tokenNumber(total.cacheWrite) : "н/д"}${total.cacheReadPartial || total.cacheWritePartial ? " · детализация неполная" : ""}.`);
+  if (total.reasoningReported) lines.push(`Reasoning: ${tokenNumber(total.reasoning)} (входит в выход; известная часть).`);
   if (total.missing) lines.push(`Нет отчёта у завершённых/прерванных агентов: ${total.missing}. Это не ноль.`);
   if (total.earlierAttempts) lines.push(`Предыдущих попыток без отдельного учёта: ${total.earlierAttempts}.`);
-  if (total.costReported) lines.push(`Оценка SDK: $${total.cost.toFixed(4)}${total.costReported !== total.reported || total.partial ? " (неполная)" : ""} — не списание по подписке.`);
+  if (total.costReported) lines.push(`Оценка SDK: $${total.cost.toFixed(4)}${total.costPartial ? " (неполная)" : ""} — не списание по подписке.`);
   lines.push("", "ПО МОДЕЛЯМ — доля от учтённых токенов");
   const groups = new Map<string, ActivationRecord[]>();
   for (const a of records.filter(a => a.kind === "agent")) {
@@ -182,6 +185,6 @@ function tokenDetails(run: RunRecord, records: readonly ActivationRecord[]): str
     lines.push(usage ? `  вход ${tokenNumber(usage.input)} · выход ${tokenNumber(usage.output)}` : `  ${a.status === "running" ? "ожидаем отчёт worker" : "отчёт не сохранён"}`);
   }
   if (!groups.size) lines.push("Агенты ещё не запускались. Команды и служебные узлы токены не расходуют.");
-  lines.push("", "Учёт обновляется после завершения worker, не по каждому новому токену.");
+  lines.push("", "Новые запуски сохраняют учёт после каждого ответа модели.", "Исходные отчёты ответов доступны через run.usage.");
   return lines;
 }

@@ -37,6 +37,26 @@ const flow: WorkflowDefinition = {
     },
   },
 };
+
+test("browser receives live response usage and a cursor ledger without private owner tokens", async () => {
+  await fixture(async ({ store, url }) => {
+    const { token } = store.reserveLaunch("run-ui");
+    const context = { scope: ["graph", "main"], graphId: "main", nodeId: "done", visit: 0 };
+    const key = activationKey(context);
+    store.beginActivation("run-ui", token, context, { kind: "agent", sideEffect: true });
+    store.startUsage("run-ui", token, key);
+    store.recordUsage("run-ui", token, key, "1", { input: 10, output: 3, cacheRead: 20, cacheWrite: 0, totalTokens: 33 }, "toolUse");
+    const response = await fetch(`${url}usage?id=run-ui`);
+    assert.equal(response.status, 200);
+    const page = await response.json() as any;
+    assert.equal(page.reports[0].usage.cacheRead, 20);
+    assert.equal(page.reports[0].usage.totalTokens, 33);
+    assert.doesNotMatch(JSON.stringify(page), new RegExp(token));
+    const next = await (await fetch(`${url}usage?id=run-ui&after=${page.nextAfter}`)).json() as any;
+    assert.equal(next.reports.length, 0);
+    assert.equal((await fetch(`${url}usage?id=run-ui&after=-1`)).status, 400);
+  });
+});
 async function fixture(
   work: (f: {
     store: RunStore;
@@ -77,7 +97,7 @@ const headers = (url: string) => ({
 test("local UI serves all assets and a safe projection; read-only requests preserve journal events", async () =>
   fixture(async (f) => {
     const before = f.store.events("run-ui");
-    for (const name of ["", "app.js", "layout.js", "style.css"]) {
+    for (const name of ["", "app.js", "layout.js", "usage-pages.js", "style.css"]) {
       const response = await fetch(f.url + name);
       assert.equal(response.status, 200);
       assert.match(

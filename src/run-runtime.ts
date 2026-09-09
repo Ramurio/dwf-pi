@@ -102,17 +102,28 @@ export class JournalRuntime implements WorkflowRuntime {
         resourceDirectory: join(this.directory, "resources", workerToken),
         ...(previous ? { sessionFile: previous } : {}),
       };
+      this.store.startUsage(this.run.id, this.token, key);
       this.checkReviewInput(node, config, input);
       try {
         const result = await runPiProcess(request, {
           signal, identity: workerToken,
-          onStarted: workerPid => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid, workerToken, workerKind: "pi", cwd: request.cwd }),
-          onEvent: event => this.store.appendEvent(this.run.id, this.token, "worker.event", { key, event: JSON.parse(JSON.stringify(event)) as Json }),
+          onStarted: workerPid => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid, workerToken, workerKind: "pi", cwd: request.cwd, model: { ...config.model }, thinking: config.thinking }),
+          onEvent: event => {
+            if (event.type === "usage.report") {
+              if (typeof event.reportId !== "string" || typeof event.stopReason !== "string") throw new Error("Invalid worker usage identity");
+              this.store.recordUsage(this.run.id, this.token, key, event.reportId, event.usage, event.stopReason);
+            } else if (event.type === "usage.settled") {
+              if (typeof event.complete !== "boolean") throw new Error("Invalid worker accounting completion");
+              this.store.settleUsage(this.run.id, this.token, key, event.complete);
+            } else if (event.type === "session.started" && typeof event.sessionFile === "string") {
+              this.store.setActivationMetadata(this.run.id, this.token, key, { sessionFile: event.sessionFile });
+            } else this.store.appendEvent(this.run.id, this.token, "worker.event", { key, event: JSON.parse(JSON.stringify(event)) as Json });
+          },
         });
         const output = validate(result.output);
         this.checkReviewOutput(node, config, input, output);
         this.store.setActivationMetadata(this.run.id, this.token, key, {
-          workerPid: null, sessionFile: result.sessionFile, usage: result.usage,
+          workerPid: null, sessionFile: result.sessionFile,
           model: result.model, thinking: result.thinking,
         });
         return output;

@@ -70,6 +70,8 @@ export function graphSnapshot(
             startedAt: a.startedAt,
             finishedAt: a.finishedAt,
             usage: activationUsage(a) ?? null,
+            usageComplete: a.metadata.usageComplete ?? (a.status === "succeeded" && a.metadata.usage !== undefined),
+            usageRecordedAttempts: a.metadata.usageRecordedAttempts ?? 1,
             activity:
               (activity.get(a.key)?.at ?? -1) >= a.startedAt
                 ? activity.get(a.key)!

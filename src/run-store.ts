@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { ExecutionPlan } from "./execution-types.js";
 import type { Json } from "./graph.js";
 import type { RuntimeContext } from "./runtime-contract.js";
+import { parseUsage, sumTokenUsage, type TokenUsage } from "./usage.js";
 
 export type RunStatus = "queued" | "running" | "pausing" | "paused" | "cancelling" | "cancelled" | "succeeded" | "failed" | "interrupted";
 export type DesiredRunStatus = "running" | "paused" | "cancelled";
@@ -41,6 +42,7 @@ export interface ActivationRecord {
   metadata: ActivationMetadata;
 }
 export interface RunEvent { seq: number; runId: string; type: string; payload: Json; at: number }
+export interface UsageRecord { seq: number; runId: string; key: string; attempt: number; reportId: string; usage: TokenUsage; stopReason: string; at: number; source: "pi-sdk" }
 export type RunOutcome = { status: "succeeded"; output: Json } | { status: "failed"; error: string } | { status: "cancelled" };
 const terminal = new Set<RunStatus>(["succeeded", "failed", "cancelled"]);
 const active = new Set<RunStatus>(["running", "pausing", "paused", "cancelling"]);
@@ -77,6 +79,20 @@ export class RunStore {
         type TEXT NOT NULL, payload TEXT NOT NULL, at INTEGER NOT NULL
       ) STRICT;
       CREATE INDEX IF NOT EXISTS workflow_run_events_cursor ON workflow_run_events(run_id, seq);
+      CREATE TABLE IF NOT EXISTS workflow_usage_attempts (
+        run_id TEXT NOT NULL, activation_key TEXT NOT NULL, attempt INTEGER NOT NULL,
+        complete INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(run_id, activation_key, attempt),
+        FOREIGN KEY(run_id, activation_key) REFERENCES workflow_activations(run_id, activation_key)
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS workflow_usage_reports (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL,
+        activation_key TEXT NOT NULL, attempt INTEGER NOT NULL, report_id TEXT NOT NULL,
+        usage TEXT NOT NULL, stop_reason TEXT NOT NULL, at INTEGER NOT NULL,
+        UNIQUE(run_id, activation_key, attempt, report_id),
+        FOREIGN KEY(run_id, activation_key, attempt) REFERENCES workflow_usage_attempts(run_id, activation_key, attempt)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS workflow_usage_cursor ON workflow_usage_reports(run_id, seq);
     `);
   }
   close(): void { this.database.close(); }
@@ -285,6 +301,62 @@ export class RunStore {
   }
   appendEvent(id: string, token: string, type: string, payload: Json): void {
     this.transaction(() => { this.owned(id, token); this.event(id, type, payload); });
+  }
+  startUsage(id: string, token: string, key: string): void {
+    this.transaction(() => {
+      const activation = this.runningActivation(id, token, key);
+      if (activation.kind !== "agent") throw new Error("Usage belongs to an agent activation");
+      this.database.prepare("INSERT INTO workflow_usage_attempts(run_id,activation_key,attempt) VALUES(?,?,?) ON CONFLICT DO NOTHING").run(id, key, activation.attempt);
+      this.projectUsage(activation);
+    });
+  }
+  /** One response is committed independently of output validation. Duplicate delivery is idempotent. */
+  recordUsage(id: string, token: string, key: string, reportId: string, value: unknown, stopReason: string): void {
+    const usage = parseUsage(value);
+    if (!usage || !/^[1-9][0-9]*$/.test(reportId) || !["pending", "stop", "length", "toolUse", "error", "aborted", "deferred"].includes(stopReason)) throw new Error("Invalid worker usage report");
+    this.transaction(() => {
+      const activation = this.runningActivation(id, token, key);
+      if (activation.kind !== "agent") throw new Error("Usage belongs to an agent activation");
+      const encoded = JSON.stringify(usage);
+      const old = this.database.prepare("SELECT usage,stop_reason FROM workflow_usage_reports WHERE run_id=? AND activation_key=? AND attempt=? AND report_id=?").get(id, key, activation.attempt, reportId);
+      if (old) {
+        if (old.usage !== encoded || old.stop_reason !== stopReason) throw new Error("Conflicting worker usage report identity");
+        return;
+      }
+      this.database.prepare("INSERT INTO workflow_usage_attempts(run_id,activation_key,attempt) VALUES(?,?,?) ON CONFLICT DO NOTHING").run(id, key, activation.attempt);
+      this.database.prepare("INSERT INTO workflow_usage_reports(run_id,activation_key,attempt,report_id,usage,stop_reason,at) VALUES(?,?,?,?,?,?,?)")
+        .run(id, key, activation.attempt, reportId, encoded, stopReason, Date.now());
+      this.projectUsage(activation);
+      this.event(id, "usage.reported", { key, attempt: activation.attempt, reportId, usage: JSON.parse(encoded) as Json, stopReason, source: "pi-sdk" });
+    });
+  }
+  settleUsage(id: string, token: string, key: string, complete: boolean): void {
+    this.transaction(() => {
+      const activation = this.runningActivation(id, token, key);
+      if (activation.kind !== "agent") throw new Error("Usage belongs to an agent activation");
+      this.database.prepare("INSERT INTO workflow_usage_attempts(run_id,activation_key,attempt,complete) VALUES(?,?,?,?) ON CONFLICT(run_id,activation_key,attempt) DO UPDATE SET complete=excluded.complete")
+        .run(id, key, activation.attempt, Number(complete));
+      this.projectUsage(activation);
+      this.event(id, "usage.settled", { key, attempt: activation.attempt, complete });
+    });
+  }
+  private projectUsage(activation: ActivationRecord): void {
+    const reports = this.database.prepare("SELECT usage FROM workflow_usage_reports WHERE run_id=? AND activation_key=? ORDER BY seq").all(activation.runId, activation.key)
+      .map(row => JSON.parse(String(row.usage)) as TokenUsage);
+    const attempts = this.database.prepare("SELECT attempt,complete FROM workflow_usage_attempts WHERE run_id=? AND activation_key=?").all(activation.runId, activation.key);
+    const metadata = { ...activation.metadata,
+      usageLedgerVersion: 1, usageReportCount: reports.length, usageRecordedAttempts: attempts.length,
+      usageComplete: attempts.length === activation.attempt && attempts.every(row => row.complete === 1),
+      ...(reports.length ? { usage: sumTokenUsage(reports) } : {}),
+    };
+    this.database.prepare("UPDATE workflow_activations SET metadata=? WHERE run_id=? AND activation_key=?").run(JSON.stringify(metadata), activation.runId, activation.key);
+  }
+  usageReports(id: string, after = 0, limit = 100): { reports: UsageRecord[]; nextAfter: number; hasMore: boolean } {
+    if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error("Invalid usage page cursor or limit (1–1000)");
+    const rows = this.database.prepare("SELECT * FROM workflow_usage_reports WHERE run_id=? AND seq>? ORDER BY seq LIMIT ?").all(id, after, limit + 1);
+    const reports: UsageRecord[] = rows.slice(0, limit).map(row => ({ seq: Number(row.seq), runId: String(row.run_id), key: String(row.activation_key), attempt: Number(row.attempt),
+      reportId: String(row.report_id), usage: JSON.parse(String(row.usage)) as TokenUsage, stopReason: String(row.stop_reason), at: Number(row.at), source: "pi-sdk" }));
+    return { reports, nextAfter: reports.at(-1)?.seq ?? after, hasMore: rows.length > limit };
   }
   events(id: string, after = 0): RunEvent[] {
     return this.database.prepare("SELECT * FROM workflow_run_events WHERE run_id=? AND seq>? ORDER BY seq").all(id, after).map(row => ({

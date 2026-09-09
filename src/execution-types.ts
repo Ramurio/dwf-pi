@@ -1,5 +1,6 @@
 import type { AgentConfig } from "./catalog.js";
 import type { Json, WorkflowDefinition } from "./graph.js";
+import type { TokenUsage } from "./usage.js";
 
 export const runtimeVersion = "dynamicwf-runtime-v1";
 export interface SkillFileSnapshot { path: string; base64: string; executable: boolean }
@@ -39,7 +40,7 @@ export interface PiWorkerResult {
   sessionFile: string;
   model: { provider: string; id: string };
   thinking: FrozenAgent["thinking"];
-  usage: { input: number; output: number; totalTokens: number; cost?: number };
+  usage: TokenUsage;
 }
 export type PiWorkerMessage =
   | { type: "ready" }

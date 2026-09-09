@@ -8,6 +8,8 @@ import { DatabaseSync } from "node:sqlite";
 import { RunStore, activationKey } from "../src/run-store.js";
 import type { ExecutionPlan } from "../src/execution-types.js";
 import type { RuntimeContext } from "../src/runtime-contract.js";
+import { parseUsage, sumTokenUsage, summarizeUsage } from "../src/usage.js";
+import { WorkflowService } from "../src/service.js";
 
 const plan = {
   version: 1, runtimeVersion: "dynamicwf-runtime-v1", compilerVersion: "test", source: "", sourceHash: "source", hash: "plan", agents: {},
@@ -16,6 +18,117 @@ const plan = {
 const context: RuntimeContext = { scope: ["root"], graphId: "main", nodeId: "work", visit: 0 };
 const key = activationKey(context);
 const create = (store: RunStore, id = "run") => store.create({ id, plan, input: { request: "test" }, cwd: "/tmp" });
+
+test("mixed provider breakdown retains known subtotals across journal reads and aggregate composition", async () => {
+  await withStores((store, second) => {
+    create(store); const { token } = store.reserveLaunch("run");
+    store.beginActivation("run", token, context, { kind: "agent", sideEffect: true });
+    store.startUsage("run", token, key);
+    const known = { input: 2, output: 3, totalTokens: 15, cacheRead: 10, cacheWrite: 0, cost: 0.1 };
+    const unknown = { input: 1, output: 1, totalTokens: 2 };
+    store.recordUsage("run", token, key, "1", known, "toolUse");
+    store.recordUsage("run", token, key, "2", unknown, "stop");
+    store.settleUsage("run", token, key, true);
+    store.completeActivation("run", token, key, null);
+    const summary = summarizeUsage(second.listActivations("run"));
+    assert.equal(summary.totalTokens, 17); assert.equal(summary.partial, false);
+    assert.equal(summary.cacheRead, 10); assert.equal(summary.cacheReadPartial, true);
+    assert.equal(summary.cacheWrite, 0); assert.equal(summary.cacheWriteReported, 1);
+    assert.equal(summary.cost, 0.1); assert.equal(summary.costPartial, true);
+    assert.equal(summary.reasoningReported, 0);
+    const aggregate = parseUsage(second.getActivation("run", key)!.metadata.usage)!;
+    assert.deepEqual(sumTokenUsage([aggregate, known]), sumTokenUsage([known, unknown, known]));
+    assert.equal(parseUsage({ ...known, partialFields: ["reasoning"] }), undefined);
+    assert.equal(parseUsage({ ...known, partialFields: ["input"] }), undefined);
+  });
+});
+
+test("response accounting persists before completion, deduplicates delivery and survives failed output", async () => {
+  await withStores(async (store, second, filename) => {
+    create(store);
+    const { token } = store.reserveLaunch("run");
+    store.beginActivation("run", token, context, { kind: "agent", sideEffect: true });
+    store.startUsage("run", token, key);
+    const usage = { input: 10, output: 4, cacheRead: 30, cacheWrite: 0, reasoning: 2, totalTokens: 44, cost: 0.02 };
+    store.recordUsage("run", token, key, "1", usage, "toolUse");
+    store.recordUsage("run", token, key, "1", usage, "toolUse");
+    assert.equal(second.usageReports("run").reports.length, 1);
+    assert.equal(second.events("run").filter(event => event.type === "usage.reported").length, 1);
+    assert.equal(summarizeUsage(second.listActivations("run")).totalTokens, 44);
+    assert.equal(summarizeUsage(second.listActivations("run")).partial, true);
+    assert.throws(() => store.recordUsage("run", token, key, "1", { ...usage, totalTokens: 45 }, "toolUse"), /Conflicting/);
+    assert.throws(() => store.recordUsage("run", "stale-owner", key, "2", usage, "stop"), /Stale/);
+    store.recordUsage("run", token, key, "2", usage, "stop");
+    store.settleUsage("run", token, key, true);
+    store.failActivation("run", token, key, "Invalid final result schema");
+    store.finish("run", token, { status: "failed", error: "Invalid final result schema" });
+    const summary = summarizeUsage(second.listActivations("run"));
+    assert.equal(summary.totalTokens, 88); assert.equal(summary.reasoning, 4); assert.equal(summary.cacheRead, 60);
+    assert.equal(summary.partial, false); // Task failed; accounting is complete.
+    const service = new WorkflowService(filename);
+    try {
+      const page = await service.dispatch("run.usage", { id: "run", limit: 1 }) as any;
+      assert.equal(page.reports.length, 1); assert.equal(page.hasMore, true);
+      const next = await service.dispatch("run.usage", { id: "run", after: page.nextAfter, limit: 1 }) as any;
+      assert.equal(next.reports[0].reportId, "2"); assert.equal(next.hasMore, false);
+      assert.doesNotMatch(JSON.stringify(page), new RegExp(token));
+      await assert.rejects(service.dispatch("run.usage", { id: "run", limit: 0 }), /limit/);
+      await assert.rejects(service.dispatch("run.usage", { id: "missing" }), /not found/);
+    } finally { service.close(); }
+  });
+});
+
+test("unknown final response after cancellation remains partial with known tokens preserved", async () => {
+  await withStores((store, second) => {
+    create(store); const { token } = store.reserveLaunch("run");
+    store.beginActivation("run", token, context, { kind: "agent", sideEffect: true });
+    store.startUsage("run", token, key);
+    store.recordUsage("run", token, key, "1", { input: 7, output: 2, totalTokens: 9 }, "toolUse");
+    store.requestControl("run", "cancel");
+    store.settleUsage("run", token, key, false);
+    store.failActivation("run", token, key, "cancelled");
+    store.finish("run", token, { status: "cancelled" });
+    const total = summarizeUsage(second.listActivations("run"));
+    assert.equal(total.totalTokens, 9); assert.equal(total.partial, true); assert.equal(total.cacheReported, 0);
+  });
+});
+
+test("response IDs are scoped to attempts and completed accounting from a prior attempt is retained", async () => {
+  await withStores((store, second) => {
+    create(store); const { token } = store.reserveLaunch("run");
+    // Model the safe-retry admission boundary; writing agents still require explicit authorization.
+    store.beginActivation("run", token, context, { kind: "agent", sideEffect: false });
+    store.startUsage("run", token, key);
+    store.recordUsage("run", token, key, "1", { input: 7, output: 2, totalTokens: 9 }, "stop");
+    store.settleUsage("run", token, key, true);
+    store.markInterrupted("run", token, "Verified supervisor exit after response");
+    const next = store.reserveLaunch("run").token;
+    store.beginActivation("run", next, context, { kind: "agent", sideEffect: false });
+    store.startUsage("run", next, key);
+    assert.equal(summarizeUsage(second.listActivations("run")).totalTokens, 9);
+    assert.equal(summarizeUsage(second.listActivations("run")).partial, true);
+    store.recordUsage("run", next, key, "1", { input: 3, output: 2, totalTokens: 5 }, "stop");
+    store.settleUsage("run", next, key, true);
+    store.completeActivation("run", next, key, { result: true });
+    const summary = summarizeUsage(second.listActivations("run"));
+    assert.equal(summary.totalTokens, 14); assert.equal(summary.partial, false); assert.equal(summary.earlierAttempts, 0);
+    assert.deepEqual(second.usageReports("run").reports.map(report => [report.attempt, report.reportId]), [[1, "1"], [2, "1"]]);
+  });
+});
+
+test("usage report and aggregate roll back if durable event insertion fails", async () => {
+  await withStores((store, second, filename) => {
+    create(store); const { token } = store.reserveLaunch("run");
+    store.beginActivation("run", token, context, { kind: "agent", sideEffect: true });
+    store.startUsage("run", token, key);
+    const database = new DatabaseSync(filename);
+    try { database.exec("CREATE TRIGGER reject_usage BEFORE INSERT ON workflow_run_events WHEN NEW.type='usage.reported' BEGIN SELECT RAISE(ABORT,'audit write failure'); END;"); }
+    finally { database.close(); }
+    assert.throws(() => store.recordUsage("run", token, key, "1", { input: 1, output: 2, totalTokens: 3 }, "stop"), /audit write failure/);
+    assert.equal(second.usageReports("run").reports.length, 0);
+    assert.equal(second.getActivation("run", key)?.metadata.usage, undefined);
+  });
+});
 
 async function withStores(work: (first: RunStore, second: RunStore, filename: string) => Promise<void> | void) {
   const directory = await mkdtemp(join(tmpdir(), "dynamicwf-journal-"));

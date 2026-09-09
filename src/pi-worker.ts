@@ -11,6 +11,7 @@ import type { Json } from "./graph.js";
 import type { PiWorkerMessage, PiWorkerRequest, PiWorkerResult } from "./execution-types.js";
 import { createOutputValidator } from "./output-schema.js";
 import { createWorkflowModelRuntime } from "./model-runtime.js";
+import { parseUsage, sumTokenUsage } from "./usage.js";
 
 export interface PiWorkerOptions {
   signal?: AbortSignal;
@@ -142,11 +143,32 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
     const initialMessages = session.messages.length;
     const previousStop = session.agent.shouldStopAfterTurn;
     session.agent.shouldStopAfterTurn = async (context, signal) => !admission || submissions > 0 || (await previousStop?.(context, signal) ?? false);
-    unsubscribe = session.subscribe(event => { const curated = curatedEvent(event); if (curated) options.onEvent?.(curated); });
+    let reportIndex = 0;
+    let usageComplete = false;
+    const reports: NonNullable<ReturnType<typeof parseUsage>>[] = [];
+    unsubscribe = session.subscribe(event => {
+      const curated = curatedEvent(event);
+      if (curated) options.onEvent?.(curated);
+      if (event.type === "message_end" && event.message.role === "assistant") {
+        const usage = parseUsage({ ...event.message.usage, cost: event.message.usage.cost?.total });
+        const reportId = String(++reportIndex);
+        if (usage) {
+          reports.push(usage);
+          options.onEvent?.({ type: "usage.report", reportId, usage, stopReason: event.message.stopReason });
+        } else options.onEvent?.({ type: "usage.unavailable", reportId });
+      }
+    });
+    if (session.sessionFile) options.onEvent?.({ type: "session.started", sessionFile: session.sessionFile });
     await options.onSession?.(session);
     checkAdmission();
-    await session.prompt(`Assigned task:\n${request.task}\n\nWorkflow input (JSON data):\n${JSON.stringify(request.input)}`, { expandPromptTemplates: false });
-    await session.waitForIdle();
+    try {
+      await session.prompt(`Assigned task:\n${request.task}\n\nWorkflow input (JSON data):\n${JSON.stringify(request.input)}`, { expandPromptTemplates: false });
+      await session.waitForIdle();
+      const turns = session.messages.slice(initialMessages).filter(message => message.role === "assistant");
+      usageComplete = !options.signal?.aborted && reports.length === turns.length && turns.length > 0 && !turns.some(message => ["error", "aborted"].includes(message.stopReason));
+    } finally {
+      options.onEvent?.({ type: "usage.settled", complete: usageComplete });
+    }
     checkAdmission();
     const messages = session.messages.slice(initialMessages).filter(message => message.role === "assistant");
     if (messages.some(message => message.stopReason === "error" || message.stopReason === "aborted")) throw new Error("Pi assistant turn failed or was aborted");
@@ -155,7 +177,7 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
     const sessionFile = session.sessionFile;
     if (!sessionFile) throw new Error("Pi worker session was not persisted");
     return { output, sessionFile, model: { ...config.model }, thinking: config.thinking,
-      usage: messages.reduce((sum, message) => ({ input: sum.input + message.usage.input, output: sum.output + message.usage.output, totalTokens: sum.totalTokens + message.usage.totalTokens, cost: (sum.cost ?? 0) + message.usage.cost.total }), { input: 0, output: 0, totalTokens: 0, cost: 0 }),
+      usage: sumTokenUsage(reports),
     };
   } finally {
     admission = false;

@@ -14,11 +14,12 @@ import { RunController } from "./run-controller.js";
 import type { ActivationRecord, RunEvent, RunRecord } from "./run-store.js";
 import { DraftStore } from "./store.js";
 import { PresetLibrary, presetName, presetRevision, presetSummary, type PresetScope } from "./presets.js";
+import { summarizeUsage } from "./usage.js";
 
 export const serviceToolNames = [
   "catalog.list", "catalog.describe", "catalog.models", "system.doctor", "workflow.schema", "workflow.create", "workflow.list", "workflow.inspect",
   "workflow.patch", "workflow.validate", "workflow.compile", "workflow.prepare", "run.start", "run.status",
-  "run.list", "run.inspect", "run.events", "run.pause", "run.resume", "run.cancel",
+  "run.list", "run.inspect", "run.events", "run.usage", "run.pause", "run.resume", "run.cancel",
   "preset.save", "preset.list", "preset.inspect", "preset.run",
 ] as const;
 export type ServiceToolName = typeof serviceToolNames[number];
@@ -132,6 +133,15 @@ export class WorkflowService {
         controller.observe(id); // Distinguish an unknown run from an empty event page; reconcile dead processes.
         const events = controller.store.events(id, after).map(publicEvent);
         return { events, nextAfter: events.at(-1)?.seq ?? after };
+      }
+      case "run.usage": {
+        const input = object(request, ["id", "after", "limit"]);
+        const id = identifier(input.id);
+        const controller = this.getController();
+        controller.store.get(id);
+        const after = input.after === undefined ? 0 : cursor(input.after);
+        const limit = input.limit === undefined ? 100 : cursor(input.limit);
+        return { summary: summarizeUsage(controller.store.listActivations(id)), ...controller.store.usageReports(id, after, limit) };
       }
       case "run.pause": case "run.resume": case "run.cancel": {
         const input = object(request, ["id"]);
