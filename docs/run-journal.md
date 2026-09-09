@@ -27,7 +27,22 @@ Identity is exactly `JSON.stringify([context.scope, context.graphId, context.nod
 
 `completed(id, key)` returns `{output}` only for succeeded rows, including explicit `null` output. A resumed scheduler can replay those outputs without executing the work again. Retrying an interrupted or failed pure/structural activation increments its attempt. Existing activation kind and side-effect classification cannot change.
 
-An interrupted or failed side-effect activation is never implicitly retried: its external operation may have happened even when its result was not journaled. There is deliberately no automatic exactly-once claim. This version provides no retry-authorization mutation; recovery reports the uncertain activation so a later explicit user-driven resolution can be designed without deleting audit history.
+An interrupted or failed side-effect activation is never implicitly repeated: its external operation may have happened even when its result was not journaled. A worktree in the children phase can reattach to its verified allocation and replay child checkpoints; uncertain child operations and allocation/commit phases still block recovery. There is deliberately no automatic exactly-once claim. This version provides no retry-authorization mutation.
+
+## Outcomes and waits
+
+Additive `workflow_task_outcomes` and `workflow_waits` tables preserve compatibility
+with existing journal rows. Root finish metadata, terminal run state and outcome
+event commit together; legacy end output is classified only by its accepted boolean.
+An arbitrary legacy value is unclassified and cannot become a tested preset.
+
+Await records bind request/reason/schema and response to one activation identity.
+`openWait` is owner-fenced, `resolveWait` is a client action validated against the
+persisted schema, and duplicate identical responses produce no second event.
+Response and resolution event commit atomically. Waiting leaves do not prevent
+operator pause; other admitted leaves keep running. `waiting` is observed when
+there are open await leaves and no executing leaves, while desired stays running.
+See [outcomes-and-waits.md](outcomes-and-waits.md) for resolution and recovery.
 
 ## Crash recovery responsibilities
 

@@ -48,6 +48,8 @@ function recorder(agent?: WorkflowRuntime["agent"], check?: WorkflowRuntime["che
     worktree: () => Effect.fail(new Error("Unexpected worktree node")),
     integrate: () => Effect.fail(new Error("Unexpected integrate node")),
     check: check ?? (() => Effect.fail(new Error("Unexpected check node"))),
+    finish: (_context, _node, _reason, _evidence, value) => Effect.succeed(value),
+    wait: () => Effect.fail(new Error("Unexpected await node")),
   };
   return { runtime, steps };
 }

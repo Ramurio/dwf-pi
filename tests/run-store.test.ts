@@ -19,6 +19,32 @@ const context: RuntimeContext = { scope: ["root"], graphId: "main", nodeId: "wor
 const key = activationKey(context);
 const create = (store: RunStore, id = "run") => store.create({ id, plan, input: { request: "test" }, cwd: "/tmp" });
 
+test("wait admission is fenced and resolution commits atomically with its event", async () => {
+  await withStores((store, second, filename) => {
+    create(store); const { token } = store.reserveLaunch("run");
+    const schema = { type: "object", properties: { answer: { type: "boolean" } }, required: ["answer"], additionalProperties: false };
+    store.beginActivation("run", token, context, { kind: "await", sideEffect: false });
+    assert.throws(() => store.openWait("run", "stale", key, "Need answer", null, schema), /Stale/);
+    const wait = store.openWait("run", token, key, "Need answer", null, schema);
+    assert.equal(store.openWait("run", token, key, "Need answer", null, schema).id, wait.id);
+    assert.throws(() => store.openWait("run", token, key, "Changed", null, schema), /differs/);
+    const injection = new DatabaseSync(filename);
+    try {
+      injection.exec("CREATE TRIGGER reject_wait_event BEFORE INSERT ON workflow_run_events WHEN NEW.type='wait.resolved' BEGIN SELECT RAISE(ABORT, 'injected wait event failure'); END");
+      assert.throws(() => store.resolveWait("run", wait.id, { answer: true }, "agent"), /injected/);
+      assert.equal(second.getWait("run", wait.id).status, "open");
+      assert.equal(second.events("run").filter(e => e.type === "wait.resolved").length, 0);
+      injection.exec("DROP TRIGGER reject_wait_event");
+      store.resolveWait("run", wait.id, { answer: true }, "agent");
+      second.resolveWait("run", wait.id, { answer: true }, "duplicate");
+      assert.equal(second.getWait("run", wait.id).resolvedBy, "agent");
+      assert.equal(second.events("run").filter(e => e.type === "wait.resolved").length, 1);
+      create(store, "other");
+      assert.throws(() => second.resolveWait("other", wait.id, { answer: false }, "agent"), /not found in this run/);
+    } finally { injection.close(); }
+  });
+});
+
 test("mixed provider breakdown retains known subtotals across journal reads and aggregate composition", async () => {
   await withStores((store, second) => {
     create(store); const { token } = store.reserveLaunch("run");

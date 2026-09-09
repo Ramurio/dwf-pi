@@ -42,6 +42,12 @@ snapshot до запуска. `parseWorkflow` валидирует, клонир
 | integrate | `sources: Expr` | Явное слияние завершённых worktree-результатов этого run; фактический head и merged commits |
 | check | `command: string`, `args: string[]`, `cwd?: string` | Результат процесса; точную выходную форму закрепляет runtime |
 | end | `value: Expr` | Результат текущего графа |
+| finish | `decision: accepted/rejected/inconclusive`, `reason: Expr`, `evidence: Expr`, `value: Expr` | Результат графа и отдельное решение о его приёмке |
+| await | `reason: Expr`, `input: Expr`, `responseSchema: object` | Сохраняемый ответ по строгой схеме |
+
+Контракты завершения и ожидания, API и восстановление описаны в
+[outcomes-and-waits.md](outcomes-and-waits.md). `finish`, как и `end`, терминален.
+`await` продолжает граф по обычным рёбрам после ответа; schema проверяется до запуска.
 
 `map.items` во время исполнения должен дать JSON-массив. Каждый элемент становится
 `input` отдельного child instance. `subworkflow.input` и `parallel.children[].input`
@@ -64,12 +70,12 @@ snapshot до запуска. `parseWorkflow` валидирует, клонир
 
 Один исходящий edge — обычная последовательность. Несколько условных — выбор пути.
 Fan-out задаётся узлами map/parallel, а не несколькими безусловными edges. Возврат
-к ранее посещённому узлу — цикл, разрешён без maxIterations по умолчанию. End не
+к ранее посещённому узлу — цикл, разрешён без maxIterations по умолчанию. End/finish не
 имеет исходящих edges. Рекурсивные ссылки на child graph запрещены, включая
 взаимную рекурсию через map/parallel/subworkflow.
 
 Валидатор проверяет существование входов/ссылок, уникальность IDs, достижимость
-всех узлов из entry, наличие структурного пути от каждого узла до end и
+всех узлов из entry, наличие структурного пути от каждого узла до end/finish и
 достижимость каждого graph из entryGraph. Он **не вычисляет условия**: статический
 путь к end не доказывает, что конкретный запуск завершится. Цикл review→repair
 может продолжаться до approve; остановка/pause относится к runtime.

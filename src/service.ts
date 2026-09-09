@@ -20,7 +20,7 @@ export const serviceToolNames = [
   "catalog.list", "catalog.describe", "catalog.models", "system.doctor", "workflow.schema", "workflow.create", "workflow.list", "workflow.inspect",
   "workflow.patch", "workflow.validate", "workflow.compile", "workflow.prepare", "run.start", "run.status",
   "run.list", "run.inspect", "run.events", "run.usage", "run.pause", "run.resume", "run.cancel",
-  "preset.save", "preset.list", "preset.inspect", "preset.run",
+  "preset.save", "preset.list", "preset.inspect", "preset.run", "run.waits", "run.resolve",
 ] as const;
 export type ServiceToolName = typeof serviceToolNames[number];
 export type WorkflowServiceOptions = Omit<PrepareExecutionOptions, "cwd"> & { cwd?: string };
@@ -150,6 +150,19 @@ export class WorkflowService {
         await controller.control(id, tool.slice(4) as "pause" | "resume" | "cancel");
         return publicObservation(controller.observe(id));
       }
+      case "run.waits": {
+        const input = object(request, ["id"]);
+        const controller = this.getController(), id = identifier(input.id);
+        return { ...publicObservation(controller.observe(id)), waits: controller.store.waits(id) };
+      }
+      case "run.resolve": {
+        const input = object(request, ["id", "waitId", "response", "resolvedBy"]);
+        if (!Object.hasOwn(input, "response")) throw new Error("Wait response is required");
+        const controller = this.getController(), id = identifier(input.id);
+        const wait = await controller.resolve(id, identifier(input.waitId), input.response as Json,
+          input.resolvedBy === undefined ? "client" : nonemptyString(input.resolvedBy, "resolvedBy"));
+        return { ...publicObservation(controller.observe(id)), wait };
+      }
       case "preset.save": {
         const input = object(request, ["id", "name", "scope", "cwd"]);
         const scope = presetScope(input.scope) ?? "project";
@@ -219,6 +232,7 @@ export function publicRunSummary(run: RunRecord) {
     }))),
     cwd: run.cwd, status: run.status, desired: run.desired, supervisorPid: run.supervisorPid,
     createdAt: run.createdAt, updatedAt: run.updatedAt, heartbeatAt: run.heartbeatAt,
+    ...(run.taskOutcome === undefined ? {} : { taskOutcome: run.taskOutcome }),
     ...(run.output === undefined ? {} : { output: run.output }), ...(run.error === undefined ? {} : { error: run.error }),
   };
 }

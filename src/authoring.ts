@@ -1,6 +1,7 @@
 import { Type } from "typebox";
 import { Check, Errors } from "typebox/value";
 import { resolveAgentConfig } from "./catalog.js";
+import { createOutputValidator } from "./output-schema.js";
 import { EdgeSchema, NodeSchema, validateWorkflow, type Edge, type Expr, type Graph, type Node, type ValidationResult, type WorkflowDefinition } from "./graph.js";
 
 export interface CreateDraftInput { id: string; name: string; entryGraph?: string }
@@ -111,6 +112,8 @@ function checkNodeConfig(node: Node): void {
   switch (node.kind) {
     case "agent": checkExpression(node.task); if (node.input) checkExpression(node.input); break;
     case "transform": case "end": checkExpression(node.value); break;
+    case "finish": checkExpression(node.reason); checkExpression(node.evidence); checkExpression(node.value); break;
+    case "await": checkExpression(node.reason); checkExpression(node.input); createOutputValidator(node.responseSchema); break;
     case "branch": if (node.input) checkExpression(node.input); break;
     case "subworkflow": case "worktree": checkExpression(node.input); break;
     case "integrate": checkExpression(node.sources); break;

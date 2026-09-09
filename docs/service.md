@@ -66,6 +66,11 @@ persistent store path. Catalog/schema calls do not create a database.
 | `run.pause` | run `id` | Public state after pause request |
 | `run.resume` | run `id` | Public state after resume request |
 | `run.cancel` | run `id` | Public state after cancellation request |
+| `run.waits` | run `id` | Observed public state and durable wait records |
+| `run.resolve` | run `id`, `waitId`, `response`, optional `resolvedBy` | Persisted answer and observed state; same-answer retry is idempotent |
+
+Completed summaries include `taskOutcome` independently of technical status/output.
+See [outcomes-and-waits.md](outcomes-and-waits.md) for resolution, pause and recovery.
 
 `run.start.id` identifies a draft; all other run operations take the returned run ID.
 A missing run input defaults to JSON `null`; explicit `false`, `0`, `""`, objects,

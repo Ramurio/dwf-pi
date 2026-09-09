@@ -8,8 +8,8 @@
 
 | Направление | Требуемый результат | Состояние / доказательство |
 | --- | --- | --- |
-| Результаты | Явные outcome, причина, доказательства; rejected не становится tested preset | Не начато |
-| Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Не начато |
+| Результаты | Явные outcome, причина, доказательства; rejected не становится tested preset | Реализовано и проверено: root finish, отдельный outcome, legacy unclassified, запрет непринятых presets; evidence пока объявленные данные, их привязка к artifacts — отдельная строка |
+| Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Реализовано и проверено: await, run.waits/resolve, JSON-форма, idempotency, pause/resume, SIGKILL и worktree reattach; см. outcomes-and-waits.md |
 | Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Не начато |
 | Usage | Учёт каждого ответа, cache/reasoning, попытки, dedup, отмена/ошибки, раскрытие сумм | Backend/API/UI реализованы; 65 targeted tests и браузерный fixture, см. usage.md. Общая приёмка с будущим recovery остаётся обязательной |
 | Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | Не начато |
@@ -58,6 +58,28 @@ supervisor в worktree; повтор start; patch после prepare; конфл
   за 95,7 секунды; `/tmp/dynamicwf-usage-routes-full-20260910.log`.
   Нестабильность обычного параллельного прогона этим не считается исправленной.
 
-Следующий блок: явные outcomes и сохраняемый await, затем общая проекция наблюдения.
-Остальные строки сохраняют полный обязательный объём; два завершённых изменения
-не означают завершение общего goal.
+Следующий блок: общая проекция наблюдения и трасса переходов. Остальные строки
+сохраняют полный обязательный объём; завершённые изменения не означают завершение
+общего goal.
+
+### Outcomes / await
+
+Технический успех отделён от приёмки, root finish сохраняет решение/причину/evidence,
+непринятый результат нельзя сохранить tested preset. Await содержит durable request,
+строгую схему и ответ; CLI/MCP/UI используют один resolver. Восстановление после
+SIGKILL сохраняет wait ID и завершённые записи, включая children-фазу worktree.
+Ручная пауза и независимые ветки сохраняют свою семантику. Новые планы v2;
+golden v1 fixture проверяет исходные байты/hash и запуск на новом runtime.
+
+Полный последовательный набор после основной реализации: **228/228**, 122 секунды,
+`/tmp/dynamicwf-await-full-20260910.log`; typecheck и skill validation прошли.
+Затем добавлены проверки authoring новых узлов, независимой работающей ветки рядом
+с await и отказа reattach при изменённых owner/path/repository/branch. Финальная
+целевая проверка: **30/30**, 52,8 секунды, typecheck прошёл;
+`/tmp/dynamicwf-await-final-targeted-20260910.log`.
+Native browser QA: неверный тип, сохранение черновика при паузе, answer→pause→resume,
+rejected с причиной и evidence; без моделей и пользовательского journal.
+
+Общая liveness-проекция, certified artifact evidence, schema-driven формы вместо
+JSON-поля, retry/reconciliation и нестабильность параллельного тестового запуска
+не объявлены выполненными этим этапом.

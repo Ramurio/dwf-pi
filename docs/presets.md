@@ -1,5 +1,10 @@
 # Пресеты успешных workflow
 
+Для сохранения требуются `status:succeeded` и `taskOutcome.decision:accepted`.
+Технически завершённый rejected/inconclusive/unclassified запуск не считается
+проверенным пресетом. Старый `end` с `accepted:true` совместим. См.
+[результаты и ожидания](outcomes-and-waits.md).
+
 Пресет сохраняет **execution plan успешного запуска**: граф, сгенерированный source,
 модель, thinking, полный system prompt, tools, permissions, session policy, output
 schema и байты подключённых skills. Он не сохраняет input/output запуска, usage,

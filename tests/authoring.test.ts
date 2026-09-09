@@ -6,6 +6,18 @@ import { validateWorkflow, type Node } from "../src/graph.js";
 const end: Node = { id: "done", kind: "end", value: { op: "ref", path: ["input"] } };
 const draft = () => createDraft({ id: "example", name: "Review loop" });
 
+test("authoring validates await contracts and all finish expression roots before saving a patch", () => {
+  const wait: Node = { id: "answer", kind: "await", reason: { op: "literal", value: "Need evidence" }, input: { op: "ref", path: ["input"] }, responseSchema: { type: "object" } };
+  const finish: Node = { id: "done", kind: "finish", decision: "accepted", reason: { op: "literal", value: "Answer received" }, evidence: { op: "literal", value: [] }, value: { op: "ref", path: ["nodes", "answer"] } };
+  const add = (node: Node): AuthoringOperation => ({ op: "addNode", graphId: "main", node });
+  const result = applyPatch(draft(), { expectedRevision: 1, operations: [add(wait), add(finish), { op: "connect", graphId: "main", edge: { from: "answer", to: "done" } }] });
+  assert.equal(result.validation.valid, true);
+  for (const node of [ { ...wait, reason: { op: "ref", path: ["process"] } }, { ...finish, evidence: { op: "ref", path: ["process"] } } ] as Node[]) {
+    assert.throws(() => applyPatch(draft(), { expectedRevision: 1, operations: [add(node)] }), /Reference root/);
+  }
+  assert.throws(() => applyPatch(draft(), { expectedRevision: 1, operations: [add({ ...wait, responseSchema: { type: "string" } })] }), /object/);
+});
+
 test("builds a review loop entirely through graph operations and reports readiness", () => {
   let workflow = draft();
   assert.equal(workflow.revision, 1);

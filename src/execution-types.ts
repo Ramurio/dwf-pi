@@ -2,7 +2,7 @@ import type { AgentConfig } from "./catalog.js";
 import type { Json, WorkflowDefinition } from "./graph.js";
 import type { TokenUsage } from "./usage.js";
 
-export const runtimeVersion = "dynamicwf-runtime-v1";
+export const runtimeVersion = "dynamicwf-runtime-v2";
 export interface SkillFileSnapshot { path: string; base64: string; executable: boolean }
 export interface SkillSnapshot { name: string; hash: string; files: SkillFileSnapshot[] }
 export interface FrozenAgent {
@@ -17,7 +17,7 @@ export interface FrozenAgent {
 }
 export interface ExecutionPlan {
   version: 1;
-  runtimeVersion: typeof runtimeVersion;
+  runtimeVersion: "dynamicwf-runtime-v1" | typeof runtimeVersion;
   compilerVersion: string;
   workflow: WorkflowDefinition;
   source: string;

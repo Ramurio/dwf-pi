@@ -17,6 +17,8 @@ run(runtime: WorkflowRuntime, input: Json): Effect.Effect<Json, Error>
 - `transform`: возвращает вычисленное value.
 - `branch`: возвращает вычисленный input; без binding — копию input текущего graph. Затем выбирается edge.
 - `end`: возвращает вычисленное value как результат graph invocation, без следующей стрелки.
+- `finish`: вычисляет reason/evidence/value, сохраняет решение через `runtime.finish` и завершает invocation.
+- `await`: вычисляет reason/input, вызывает `runtime.wait`; после сохраняемого ответа выбирает обычный edge.
 - `subworkflow`: вызывает конкретную сгенерированную child graph function с её input.
 - `map`: требует массив items и вызывает child function через `Effect.forEach`. Результат — массив в порядке входных items, независимо от порядка завершения.
 - `parallel`: генерирует функции отдельных ветвей и `Effect.forEach`. Результат — объект, ключи которого равны child IDs; порядок включения соответствует порядку children.

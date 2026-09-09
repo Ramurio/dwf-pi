@@ -6,8 +6,11 @@ import type { ExecutionPlan } from "./execution-types.js";
 import type { Json } from "./graph.js";
 import type { RuntimeContext } from "./runtime-contract.js";
 import { parseUsage, sumTokenUsage, type TokenUsage } from "./usage.js";
+import { assertJson, createOutputValidator } from "./output-schema.js";
+import { explicitOutcome, legacyOutcome, type TaskOutcome, type TaskDecision } from "./task-outcome.js";
+import { isDeepStrictEqual } from "node:util";
 
-export type RunStatus = "queued" | "running" | "pausing" | "paused" | "cancelling" | "cancelled" | "succeeded" | "failed" | "interrupted";
+export type RunStatus = "queued" | "running" | "waiting" | "pausing" | "paused" | "cancelling" | "cancelled" | "succeeded" | "failed" | "interrupted";
 export type DesiredRunStatus = "running" | "paused" | "cancelled";
 export interface RunRecord {
   id: string;
@@ -23,6 +26,7 @@ export interface RunRecord {
   heartbeatAt: number | null;
   output?: Json;
   error?: string;
+  taskOutcome?: TaskOutcome;
 }
 export type ActivationStatus = "running" | "succeeded" | "failed" | "interrupted";
 export interface ActivationMetadata { workerPid?: number | null; sessionFile?: string; [key: string]: Json | undefined }
@@ -42,10 +46,15 @@ export interface ActivationRecord {
   metadata: ActivationMetadata;
 }
 export interface RunEvent { seq: number; runId: string; type: string; payload: Json; at: number }
+export interface WaitRecord {
+  id: string; runId: string; key: string; reason: string; input: Json; responseSchema: Record<string, unknown>;
+  status: "open" | "resolved"; createdAt: number; resolvedAt: number | null; resolvedBy: string | null; response?: Json;
+}
 export interface UsageRecord { seq: number; runId: string; key: string; attempt: number; reportId: string; usage: TokenUsage; stopReason: string; at: number; source: "pi-sdk" }
 export type RunOutcome = { status: "succeeded"; output: Json } | { status: "failed"; error: string } | { status: "cancelled" };
 const terminal = new Set<RunStatus>(["succeeded", "failed", "cancelled"]);
-const active = new Set<RunStatus>(["running", "pausing", "paused", "cancelling"]);
+const active = new Set<RunStatus>(["running", "waiting", "pausing", "paused", "cancelling"]);
+const leafSql = "kind NOT IN ('map','parallel','subworkflow','worktree') AND NOT (kind='await' AND COALESCE(json_extract(metadata,'$.waiting'),0)=1) OR (kind='worktree' AND COALESCE(json_extract(metadata,'$.workspacePhase'),'allocating') != 'children')";
 export function activationKey(context: RuntimeContext): string {
   return JSON.stringify([context.scope, context.graphId, context.nodeId, context.visit]);
 }
@@ -93,6 +102,16 @@ export class RunStore {
         FOREIGN KEY(run_id, activation_key, attempt) REFERENCES workflow_usage_attempts(run_id, activation_key, attempt)
       ) STRICT;
       CREATE INDEX IF NOT EXISTS workflow_usage_cursor ON workflow_usage_reports(run_id, seq);
+      CREATE TABLE IF NOT EXISTS workflow_task_outcomes (
+        run_id TEXT PRIMARY KEY REFERENCES workflow_runs(id), outcome TEXT NOT NULL
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS workflow_waits (
+        id TEXT PRIMARY KEY, run_id TEXT NOT NULL, activation_key TEXT NOT NULL,
+        reason TEXT NOT NULL, input TEXT NOT NULL, response_schema TEXT NOT NULL,
+        status TEXT NOT NULL, created_at INTEGER NOT NULL, resolved_at INTEGER, resolved_by TEXT, response TEXT,
+        UNIQUE(run_id, activation_key),
+        FOREIGN KEY(run_id, activation_key) REFERENCES workflow_activations(run_id, activation_key)
+      ) STRICT;
     `);
   }
   close(): void { this.database.close(); }
@@ -122,7 +141,7 @@ export class RunStore {
     });
   }
   get(id: string): RunRecord {
-    const row = this.database.prepare("SELECT * FROM workflow_runs WHERE id = ?").get(id);
+    const row = this.database.prepare("SELECT r.*, t.outcome AS task_outcome FROM workflow_runs r LEFT JOIN workflow_task_outcomes t ON t.run_id=r.id WHERE r.id = ?").get(id);
     if (!row) throw new Error(`Run not found: ${id}`);
     return {
       id: String(row.id), plan: JSON.parse(String(row.plan)) as ExecutionPlan, input: JSON.parse(String(row.input)) as Json,
@@ -131,6 +150,8 @@ export class RunStore {
       createdAt: Number(row.created_at), updatedAt: Number(row.updated_at), heartbeatAt: row.heartbeat_at === null ? null : Number(row.heartbeat_at),
       ...(row.output === null ? {} : { output: JSON.parse(String(row.output)) as Json }),
       ...(row.error === null ? {} : { error: String(row.error) }),
+      ...(row.status === "succeeded" ? { taskOutcome: row.task_outcome === null
+        ? legacyOutcome(JSON.parse(String(row.output))) : JSON.parse(String(row.task_outcome)) as TaskOutcome } : {}),
     };
   }
   listRuns(): RunRecord[] {
@@ -191,7 +212,7 @@ export class RunStore {
       const run = this.owned(id, token);
       const record = this.runningActivation(id, token, key);
       if (record.kind !== "worktree" || record.metadata.workspacePhase !== "children") throw new Error("Worktree is not ready to commit");
-      if (run.desired !== "running" || run.status !== "running") return false;
+      if (run.desired !== "running" || !["running", "waiting"].includes(run.status)) return false;
       const metadata = { ...record.metadata, workspacePhase: "committing" };
       this.database.prepare("UPDATE workflow_activations SET metadata=? WHERE run_id=? AND activation_key=?").run(JSON.stringify(metadata), id, key);
       this.event(id, "activation.metadata", { key, metadata: JSON.parse(JSON.stringify(metadata)) as Json });
@@ -204,10 +225,23 @@ export class RunStore {
       // A concurrent resume/cancel can supersede the supervisor's observation.
       if (run.desired !== "paused") return;
       if (run.status === "paused") return;
-      const leaves = this.database.prepare("SELECT 1 FROM workflow_activations WHERE run_id=? AND status='running' AND (kind NOT IN ('map','parallel','subworkflow','worktree') OR (kind='worktree' AND COALESCE(json_extract(metadata,'$.workspacePhase'),'allocating') != 'children')) LIMIT 1").get(id);
+      const leaves = this.database.prepare(`SELECT 1 FROM workflow_activations WHERE run_id=? AND status='running' AND (${leafSql}) LIMIT 1`).get(id);
       if (leaves) throw new Error(`Cannot pause while leaf activations are running: ${id}`);
       this.database.prepare("UPDATE workflow_runs SET status='paused',updated_at=? WHERE id=?").run(Date.now(), id);
       this.event(id, "run.paused", {});
+    });
+  }
+  /** Waiting is an observed lack of runnable leaves, not an operator pause. */
+  updateWaiting(id: string, token: string): void {
+    this.transaction(() => {
+      const run = this.owned(id, token);
+      if (run.desired !== "running" || !["running", "waiting"].includes(run.status)) return;
+      const pending = this.database.prepare("SELECT 1 FROM workflow_activations WHERE run_id=? AND status='running' AND kind='await' AND json_extract(metadata,'$.waiting')=1 LIMIT 1").get(id);
+      const leaves = this.database.prepare(`SELECT 1 FROM workflow_activations WHERE run_id=? AND status='running' AND (${leafSql}) LIMIT 1`).get(id);
+      const status = pending && !leaves ? "waiting" : "running";
+      if (status === run.status) return;
+      this.database.prepare("UPDATE workflow_runs SET status=?,updated_at=? WHERE id=?").run(status, Date.now(), id);
+      this.event(id, `run.${status}`, {});
     });
   }
   /** Caller MUST verify the supervisor and its workers are dead before invoking this recovery fence. */
@@ -226,29 +260,94 @@ export class RunStore {
       if (outcome.status === "cancelled" && run.desired !== "cancelled") throw new Error("Cancellation was not requested");
       const running = this.database.prepare("SELECT 1 FROM workflow_activations WHERE run_id=? AND status='running' LIMIT 1").get(id);
       if (running) throw new Error("Cannot finish with running activations");
+      let taskOutcome: TaskOutcome | undefined;
+      if (outcome.status === "succeeded") {
+        const root = this.listActivations(id).find(a => a.kind === "finish" && a.status === "succeeded" &&
+          a.context.graphId === run.plan.workflow.entryGraph && isDeepStrictEqual(a.context.scope, ["graph", run.plan.workflow.entryGraph]));
+        const declared = root?.metadata.taskOutcome as unknown as TaskOutcome | undefined;
+        taskOutcome = declared ? explicitOutcome(declared.decision as TaskDecision, declared.reason, declared.evidence) : legacyOutcome(outcome.output);
+        this.database.prepare("INSERT INTO workflow_task_outcomes(run_id,outcome) VALUES(?,?) ON CONFLICT(run_id) DO UPDATE SET outcome=excluded.outcome")
+          .run(id, JSON.stringify(taskOutcome));
+      }
       this.database.prepare("UPDATE workflow_runs SET status=?,output=?,error=?,owner_token=NULL,supervisor_pid=NULL,updated_at=? WHERE id=?")
         .run(outcome.status, outcome.status === "succeeded" ? JSON.stringify(outcome.output) : null,
           outcome.status === "failed" ? outcome.error : null, Date.now(), id);
-      this.event(id, `run.${outcome.status}`, outcome.status === "succeeded" ? { output: outcome.output } : outcome.status === "failed" ? { error: outcome.error } : {});
+      this.event(id, `run.${outcome.status}`, outcome.status === "succeeded" ? { output: outcome.output, taskOutcome: JSON.parse(JSON.stringify(taskOutcome)) as Json } : outcome.status === "failed" ? { error: outcome.error } : {});
     });
   }
   beginActivation(id: string, token: string, context: RuntimeContext, options: { kind: string; sideEffect: boolean }): ActivationRecord {
     return this.transaction(() => {
       const run = this.owned(id, token);
-      if (run.desired !== "running" || run.status !== "running") throw new Error(`Run is not accepting work: ${run.desired}/${run.status}`);
+      if (run.desired !== "running" || !["running", "waiting"].includes(run.status)) throw new Error(`Run is not accepting work: ${run.desired}/${run.status}`);
       const key = activationKey(context);
       const old = this.getActivation(id, key);
       if (old && (old.kind !== options.kind || old.sideEffect !== options.sideEffect)) throw new Error(`Activation definition changed: ${key}`);
       if (old?.status === "succeeded") return old;
       if (old?.status === "running") throw new Error(`Activation is already running: ${key}`);
-      if (old?.sideEffect) throw new Error(`Uncertain side effect requires explicit retry authorization: ${key}`);
+      if (old?.sideEffect && !(old.kind === "worktree" && old.metadata.workspacePhase === "children")) throw new Error(`Uncertain side effect requires explicit retry authorization: ${key}`);
       const now = Date.now();
+      if (run.status === "waiting") {
+        this.database.prepare("UPDATE workflow_runs SET status='running',updated_at=? WHERE id=?").run(now, id);
+        this.event(id, "run.running", {});
+      }
       this.database.prepare(`INSERT INTO workflow_activations(run_id,activation_key,context,kind,side_effect,status,attempt,owner_token,started_at,metadata)
         VALUES(?,?,?,?,?,'running',?,?,?,?) ON CONFLICT(run_id,activation_key) DO UPDATE SET
         status='running',attempt=excluded.attempt,owner_token=excluded.owner_token,started_at=excluded.started_at,finished_at=NULL,error=NULL,output=NULL`)
         .run(id, key, JSON.stringify(context), options.kind, Number(options.sideEffect), (old?.attempt ?? 0) + 1, token, now, JSON.stringify(old?.metadata ?? {}));
       this.event(id, "activation.started", { key, kind: options.kind, attempt: (old?.attempt ?? 0) + 1 });
       return this.getActivation(id, key)!;
+    });
+  }
+  openWait(id: string, token: string, key: string, reason: string, input: Json, responseSchema: Record<string, unknown>): WaitRecord {
+    if (!reason.trim()) throw new Error("Wait requires a nonempty reason");
+    assertJson(input); createOutputValidator(responseSchema);
+    return this.transaction(() => {
+      const activation = this.runningActivation(id, token, key);
+      if (activation.kind !== "await") throw new Error("Only await activations can open a wait");
+      const existing = this.database.prepare("SELECT id FROM workflow_waits WHERE run_id=? AND activation_key=?").get(id, key);
+      let wait: WaitRecord;
+      if (existing) {
+        wait = this.getWait(id, String(existing.id));
+        if (wait.reason !== reason || !isDeepStrictEqual(wait.input, input) || !isDeepStrictEqual(wait.responseSchema, responseSchema)) throw new Error("Persisted wait differs from frozen request");
+      } else {
+        const waitId = `wait-${randomUUID()}`;
+        this.database.prepare("INSERT INTO workflow_waits(id,run_id,activation_key,reason,input,response_schema,status,created_at) VALUES(?,?,?,?,?,?,'open',?)")
+          .run(waitId, id, key, reason, JSON.stringify(input), JSON.stringify(responseSchema), Date.now());
+        wait = this.getWait(id, waitId);
+        this.event(id, "wait.opened", { id: waitId, key, reason, input, responseSchema: responseSchema as Json });
+      }
+      const metadata = { ...activation.metadata, waitId: wait.id, waitReason: reason, waiting: wait.status === "open" };
+      this.database.prepare("UPDATE workflow_activations SET metadata=? WHERE run_id=? AND activation_key=?").run(JSON.stringify(metadata), id, key);
+      return wait;
+    });
+  }
+  getWait(id: string, waitId: string): WaitRecord {
+    const row = this.database.prepare("SELECT * FROM workflow_waits WHERE run_id=? AND id=?").get(id, waitId);
+    if (!row) throw new Error("Wait not found in this run");
+    return { id: String(row.id), runId: id, key: String(row.activation_key), reason: String(row.reason), input: JSON.parse(String(row.input)) as Json,
+      responseSchema: JSON.parse(String(row.response_schema)) as Record<string, unknown>, status: row.status as WaitRecord["status"], createdAt: Number(row.created_at),
+      resolvedAt: row.resolved_at === null ? null : Number(row.resolved_at), resolvedBy: row.resolved_by === null ? null : String(row.resolved_by),
+      ...(row.response === null ? {} : { response: JSON.parse(String(row.response)) as Json }) };
+  }
+  waits(id: string): WaitRecord[] {
+    this.get(id);
+    return this.database.prepare("SELECT id FROM workflow_waits WHERE run_id=? ORDER BY created_at,id").all(id).map(row => this.getWait(id, String(row.id)));
+  }
+  resolveWait(id: string, waitId: string, response: Json, resolvedBy: string): WaitRecord {
+    assertJson(response);
+    if (!resolvedBy.trim()) throw new Error("Resolution source must be nonempty");
+    return this.transaction(() => {
+      const run = this.get(id), wait = this.getWait(id, waitId);
+      if (wait.status === "resolved") {
+        if (!isDeepStrictEqual(wait.response, response)) throw new Error("Wait already resolved with a different response");
+        return wait;
+      }
+      if (terminal.has(run.status) || run.desired === "cancelled") throw new Error("Cannot resolve a wait in an ended or cancelling run");
+      const valid = createOutputValidator(wait.responseSchema)(response);
+      this.database.prepare("UPDATE workflow_waits SET status='resolved',response=?,resolved_by=?,resolved_at=? WHERE run_id=? AND id=?")
+        .run(JSON.stringify(valid), resolvedBy, Date.now(), id, waitId);
+      this.event(id, "wait.resolved", { id: waitId, key: wait.key, response: valid, resolvedBy });
+      return this.getWait(id, waitId);
     });
   }
   getActivation(id: string, key: string): ActivationRecord | undefined {

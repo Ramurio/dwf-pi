@@ -11,7 +11,7 @@ import { RunStore } from "../src/run-store.js";
 import { WorkflowService } from "../src/service.js";
 
 const workflow: WorkflowDefinition = { schemaVersion: 1, id: "echo", name: "Echo input", revision: 1, entryGraph: "main", graphs: {
-  main: { entry: "done", nodes: [{ id: "done", kind: "end", value: { op: "ref", path: ["input"] } }], edges: [] },
+  main: { entry: "done", nodes: [{ id: "done", kind: "finish", decision: "accepted", reason: { op: "literal", value: "Echo input preserved" }, evidence: { op: "literal", value: [] }, value: { op: "ref", path: ["input"] } }], edges: [] },
 } };
 async function fixture(work: (directory: string, store: RunStore, library: PresetLibrary) => Promise<void>) {
   const directory = await mkdtemp(join(tmpdir(), "dwf-presets-"));
@@ -22,7 +22,7 @@ async function fixture(work: (directory: string, store: RunStore, library: Prese
 async function savedRun(store: RunStore, directory: string, id: string, value = workflow) {
   store.create({ id, plan: await prepareExecutionPlan(value, { cwd: directory }), cwd: directory, input: "PRIVATE_RUN_INPUT" });
   const { token } = store.reserveLaunch(id);
-  store.finish(id, token, { status: "succeeded", output: "PRIVATE_RUN_OUTPUT" });
+  store.finish(id, token, { status: "succeeded", output: { accepted: true, result: "PRIVATE_RUN_OUTPUT" } });
   return store.get(id);
 }
 

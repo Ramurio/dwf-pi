@@ -9,6 +9,7 @@ import { runCheckProcess, runPiProcess, ProcessCancelled } from "./process-clien
 import { activationKey, RunStore, type RunRecord } from "./run-store.js";
 import { GitWorkspaces, parseWorkspaceSources, type GitOperationOptions, type WorkspaceRecord } from "./workspaces.js";
 import type { RuntimeContext, WorkflowRuntime } from "./runtime-contract.js";
+import { explicitOutcome } from "./task-outcome.js";
 
 const errorOf = (error: unknown) => error instanceof Error ? error : new Error(String(error));
 const slotKey = (context: RuntimeContext) => JSON.stringify([context.scope, context.graphId, context.nodeId]);
@@ -41,16 +42,44 @@ export class JournalRuntime implements WorkflowRuntime {
       if (signal?.aborted) throw new ProcessCancelled();
       const current = this.current();
       if (current.desired === "cancelled") throw new ProcessCancelled();
-      if (current.desired === "running" && current.status === "running") return;
+      if (current.desired === "running" && ["running", "waiting"].includes(current.status)) return;
       this.updatePause();
       await sleep(100, undefined, signal ? { signal } : {});
     }
   }
   updatePause(): void {
     const current = this.current();
+    if (current.desired === "running") { this.store.updateWaiting(this.run.id, this.token); return; }
     if (current.desired !== "paused" || current.status === "paused") return;
-    const hasLeaves = this.store.listActivations(this.run.id).some(item => item.status === "running" && (!["map", "parallel", "subworkflow", "worktree"].includes(item.kind) || (item.kind === "worktree" && item.metadata.workspacePhase !== "children")));
+    const hasLeaves = this.store.listActivations(this.run.id).some(item => item.status === "running" && !(item.kind === "await" && item.metadata.waiting === true) && (!["map", "parallel", "subworkflow", "worktree"].includes(item.kind) || (item.kind === "worktree" && item.metadata.workspacePhase !== "children")));
     if (!hasLeaves) this.store.markPaused(this.run.id, this.token);
+  }
+
+  finish(context: RuntimeContext, node: Extract<Node, { kind: "finish" }>, reason: Json, evidence: Json, value: Json): Effect.Effect<Json, Error> {
+    return Effect.try({ try: () => {
+      const outcome = explicitOutcome(node.decision, reason, evidence);
+      this.store.setActivationMetadata(this.run.id, this.token, activationKey(context), { taskOutcome: JSON.parse(JSON.stringify(outcome)) as Json });
+      return value;
+    }, catch: errorOf });
+  }
+  wait(context: RuntimeContext, node: Extract<Node, { kind: "await" }>, reason: Json, input: Json): Effect.Effect<Json, Error> {
+    return processEffect(async signal => {
+      if (typeof reason !== "string" || !reason.trim()) throw new Error("Wait reason must evaluate to a nonempty string");
+      const key = activationKey(context);
+      const request = this.store.openWait(this.run.id, this.token, key, reason, input, node.responseSchema);
+      this.updatePause();
+      for (;;) {
+        this.current();
+        const wait = this.store.getWait(this.run.id, request.id);
+        if (wait.status === "resolved") {
+          await this.gate(signal);
+          this.store.setActivationMetadata(this.run.id, this.token, key, { waiting: false });
+          this.store.updateWaiting(this.run.id, this.token);
+          return wait.response!;
+        }
+        await sleep(100, undefined, { signal });
+      }
+    });
   }
   step(context: RuntimeContext, work: () => Effect.Effect<Json, Error>): Effect.Effect<Json, Error> {
     const runtime = this;
@@ -165,9 +194,13 @@ export class JournalRuntime implements WorkflowRuntime {
     return Effect.gen(function* () {
       const key = activationKey(context);
       const childScope = [...context.scope, "node", node.id, "visit", String(context.visit), "worktree", "graph", node.graphId];
-      runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspacePhase: "allocating", childScope });
-      const allocation = yield* processEffect(signal => runtime.workspaces.allocate(runtime.workspaceCwd(context), key, node.base,
-        runtime.gitOptions(context, signal), allocation => runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspace: { ...allocation } })));
+      const previous = runtime.store.getActivation(runtime.run.id, key)!.metadata;
+      const resuming = previous.workspacePhase === "children" && previous.workspace !== undefined;
+      if (!resuming) runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspacePhase: "allocating", childScope });
+      const allocation = yield* processEffect(signal => resuming
+        ? runtime.workspaces.reattach(runtime.workspaceCwd(context), key, previous.workspace!, runtime.gitOptions(context, signal))
+        : runtime.workspaces.allocate(runtime.workspaceCwd(context), key, node.base,
+          runtime.gitOptions(context, signal), allocation => runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspace: { ...allocation } })));
       runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspacePhase: "children" });
       const result = yield* child(childScope);
       for (;;) {

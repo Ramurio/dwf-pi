@@ -50,6 +50,17 @@ export class GitWorkspaces {
       return { ...allocation, head };
     });
   }
+  /** Resume only the children phase: allocation is known, and no parent commit was admitted. */
+  async reattach(source: string, key: string, value: Json, options: GitOperationOptions = {}): Promise<WorkspaceAllocation> {
+    if (!value || typeof value !== "object" || Array.isArray(value) || typeof value.path !== "string" ||
+      typeof value.branch !== "string" || typeof value.base !== "string") throw new Error("Invalid persisted workspace allocation");
+    const allocation = { path: value.path, branch: value.branch, base: value.base };
+    if (allocation.branch !== `dynamicwf/${this.runId}/${digest(key)}`) throw new Error("Persisted workspace belongs to a different activation");
+    await this.assertAllocation(allocation, options);
+    await this.noOperation(allocation.path, options);
+    if (await this.commonDirectory(allocation.path, options) !== await this.commonDirectory(source, options)) throw new Error("Persisted workspace belongs to a different repository");
+    return allocation;
+  }
   async integrate(target: string, sources: Json, owned: readonly WorkspaceRecord[], options: GitOperationOptions = {}): Promise<Json> {
     const cwd = await realpath(target);
     const records = parseWorkspaceSources(sources);

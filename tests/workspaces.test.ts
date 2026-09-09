@@ -90,6 +90,23 @@ test("worktrees preserve branch changes and use task-local commit identity; dirt
   } finally { await rm(f.directory, { recursive: true, force: true }); }
 });
 
+test("reattach preserves dirty files but refuses different owners, paths, repositories and branches", async () => {
+  const f = await fixture(), other = await fixture();
+  try {
+    const manager = new GitWorkspaces("run-reattach", join(f.directory, "run"));
+    const allocation = await manager.allocate(f.repo, "child", undefined);
+    await writeFile(join(allocation.path, "pending.txt"), "preserve me");
+    assert.deepEqual(await manager.reattach(f.repo, "child", { ...allocation }), allocation);
+    await assert.rejects(manager.reattach(f.repo, "other-child", { ...allocation }), /different activation/);
+    await assert.rejects(manager.reattach(f.repo, "child", { ...allocation, path: f.repo }), /does not belong/);
+    await assert.rejects(manager.reattach(other.repo, "child", { ...allocation }), /different repository/);
+    git(allocation.path, "checkout", "-b", "externally-changed");
+    await assert.rejects(manager.reattach(f.repo, "child", { ...allocation }), /branch changed/);
+    assert.equal(await readFile(join(allocation.path, "pending.txt"), "utf8"), "preserve me");
+    assert.equal(git(f.repo, "rev-parse", "HEAD"), f.base);
+  } finally { await rm(f.directory, { recursive: true, force: true }); await rm(other.directory, { recursive: true, force: true }); }
+});
+
 test("real parallel child graphs edit separate worktrees and explicit integration merges both", async () => {
   const f = await fixture();
   const controller = new RunController(join(f.directory, "state.sqlite"));

@@ -2,11 +2,14 @@ import { layoutGraph } from "./layout.js";
 import { UsagePages } from "./usage-pages.js";
 
 const usagePages = new UsagePages();
+const waitDrafts = new Map();
+const outcomeNames = { accepted: "Результат принят", rejected: "Результат не принят", inconclusive: "Недостаточно данных для приёмки", unclassified: "Приёмка не объявлена" };
 
 const $ = (id) => document.getElementById(id);
 const names = {
   queued: "Ожидание",
   running: "В работе",
+  waiting: "Ждёт ответа",
   pausing: "Приостановка",
   paused: "Пауза",
   cancelling: "Отмена…",
@@ -38,6 +41,8 @@ const kinds = {
   transform: "Преобразование",
   branch: "Развилка",
   end: "Результат",
+  finish: "Результат",
+  await: "Ожидание ответа",
 };
 const structural = new Set(["worktree", "parallel", "map", "subworkflow"]);
 const finished = new Set(["succeeded", "failed", "cancelled"]);
@@ -103,7 +108,7 @@ function attention(node) {
       return true;
     })
     .some((a) =>
-      /request_changes|inconclusive|exit [1-9]|не принят/.test(a.result ?? ""),
+      /request_changes|rejected|inconclusive|exit [1-9]|не принят/.test(a.result ?? ""),
     );
 }
 function badge(status) {
@@ -284,17 +289,35 @@ function renderHeader() {
   const status = $("run-status");
   status.className = `badge ${r.status}`;
   status.textContent = names[r.status] ?? r.status;
-  $("result").textContent =
-    r.accepted === true
+  $("result").textContent = r.taskOutcome ? outcomeNames[r.taskOutcome.decision] : r.accepted === true
       ? "Результат принят"
       : r.accepted === false
         ? "Результат не принят"
         : "";
-  $("pause").hidden = !["queued", "running"].includes(r.status);
+  $("pause").hidden = !["queued", "running", "waiting"].includes(r.status);
   $("resume").hidden = !["paused", "pausing", "interrupted"].includes(r.status);
   $("cancel").hidden = finished.has(r.status);
   for (const id of ["pause", "resume", "cancel"]) $(id).disabled = state.busy;
   if (r.error) notice(r.error);
+  const outcome = $("task-outcome");
+  outcome.hidden = !r.taskOutcome;
+  outcome.replaceChildren();
+  if (r.taskOutcome) {
+    outcome.className = `outcome ${r.taskOutcome.decision}`;
+    outcome.append(el("strong", "", outcomeNames[r.taskOutcome.decision]), el("p", "", r.taskOutcome.reason));
+    if (r.taskOutcome.evidence.length) {
+      const details = el("details");
+      details.append(el("summary", "", `Доказательства: ${r.taskOutcome.evidence.length}`), el("pre", "", JSON.stringify(r.taskOutcome.evidence, null, 2)));
+      outcome.append(details);
+    }
+    if (r.taskOutcome.source === "legacy") outcome.append(el("small", "muted", "Результат прочитан из прежнего формата end."));
+  }
+  const waits = (r.waits ?? []).filter(w => w.status === "open");
+  const summary = $("wait-summary");
+  summary.hidden = !waits.length || finished.has(r.status);
+  summary.replaceChildren();
+  if (!summary.hidden) summary.append(el("strong", "", `Ожидают ответа: ${waits.length}`), el("p", "", waits.map(w => w.reason).join(" · ")),
+    button("Открыть ожидания", () => setTab("now"), "child-button"));
   renderMetrics();
 }
 function setTab(tab) {
@@ -304,6 +327,9 @@ function setTab(tab) {
   if (state.run) renderPanel();
 }
 function renderPanel() {
+  const focused = document.activeElement;
+  const editingWait = focused?.dataset?.waitId;
+  const selection = editingWait ? [focused.selectionStart, focused.selectionEnd] : null;
   $("graph-panel").hidden = state.tab !== "graph";
   $("content-panel").hidden = state.tab === "graph";
   if (state.tab === "graph") renderGraph();
@@ -311,6 +337,10 @@ function renderPanel() {
   else if (state.tab === "history") renderHistory();
   else renderTokens();
   renderInspector();
+  if (editingWait) {
+    const field = document.getElementById(`wait-response-${editingWait}`);
+    if (field) { field.focus({ preventScroll: true }); field.setSelectionRange(...selection); }
+  }
 }
 function selectNode(graphId, id) {
   state.graph = graphId;
@@ -677,6 +707,35 @@ function taskRow(a) {
 function renderNow() {
   const panel = $("content-panel");
   panel.replaceChildren(sectionHeading("Текущая работа"));
+  if (!finished.has(state.run.status)) for (const wait of state.run.waits ?? []) {
+    if (wait.status !== "open") continue;
+    let draft = waitDrafts.get(wait.id);
+    if (!draft) { draft = { text: "", busy: false, error: null }; waitDrafts.set(wait.id, draft); }
+    const card = el("section", "wait-card"), selectedRun = state.id;
+    card.append(el("h3", "", wait.reason));
+    const details = el("details");
+    details.append(el("summary", "", "Данные и формат ответа"), el("pre", "", JSON.stringify({ input: wait.input, responseSchema: wait.responseSchema }, null, 2)));
+    const field = el("textarea");
+    field.id = `wait-response-${wait.id}`; field.dataset.waitId = wait.id;
+    field.setAttribute("aria-label", `Ответ: ${wait.reason}`);
+    field.placeholder = "Ответ в формате JSON"; field.value = draft.text; field.rows = 5;
+    field.addEventListener("input", () => { draft.text = field.value; });
+    const submit = button(draft.busy ? "Сохраняем…" : "Сохранить ответ", async () => {
+      if (draft.busy) return;
+      draft.busy = true; draft.error = null; submit.disabled = true;
+      try {
+        const response = JSON.parse(draft.text);
+        await api("resolve", { method: "POST", headers: { "Content-Type": "application/json", "X-Dynamicwf-View": "1" }, body: JSON.stringify({ id: selectedRun, waitId: wait.id, response }) });
+        await refreshSnapshot();
+      } catch (error) { draft.error = error.message; }
+      finally { draft.busy = false; if (state.id === selectedRun && state.tab === "now") renderPanel(); }
+    }, "child-button");
+    submit.disabled = draft.busy;
+    card.append(details, field, submit);
+    if (draft.error) { const error = el("p", "notice", draft.error); error.setAttribute("role", "alert"); card.append(error); }
+    if (state.run.desired === "paused") card.append(el("p", "muted", "Ответ сохранится. Работа продолжится после снятия паузы."));
+    panel.append(card);
+  }
   const active = allActivations().filter((a) =>
     state.run.activeKeys.includes(a.key),
   );

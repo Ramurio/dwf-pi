@@ -379,6 +379,20 @@ h1 {
   stroke: #a2adbd;
   stroke-width: 1.6;
 }
+.outcome, .wait-card {
+  padding: 16px;
+  margin: 16px 0;
+  border: 1px solid #d9e1eb;
+  border-radius: 8px;
+  background: #f9fbfd;
+}
+.outcome.accepted { border-color: #93c8b4; background: #f2fffa; }
+.outcome.rejected, .outcome.inconclusive, .outcome.waiting, .wait-card { border-color: #d4b779; background: #fffaf0; }
+.outcome p, .wait-card p { margin: 8px 0; }
+.outcome pre, .wait-card pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.wait-card textarea { display: block; box-sizing: border-box; width: 100%; margin: 12px 0; padding: 12px; font: inherit; }
+.badge.waiting { background: #fff1d4; color: #805b17; }
+.graph-node.waiting .node-box { fill: #fffaf0; stroke: #ba8b35; }
 .edge-underlay {
   fill: none;
   stroke: #f9fbfd;

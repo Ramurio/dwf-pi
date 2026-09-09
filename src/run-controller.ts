@@ -129,4 +129,11 @@ export class RunController {
     }
     return run;
   }
+  async resolve(id: string, waitId: string, response: Json, resolvedBy = "client") {
+    this.observe(id);
+    const wait = this.store.resolveWait(id, waitId, response, resolvedBy);
+    const run = this.store.get(id);
+    if (run.ownerToken === null && run.desired === "running" && ["queued", "interrupted"].includes(run.status)) await this.launch(id);
+    return wait;
+  }
 }

@@ -3,7 +3,7 @@ import { lstat, readdir, readFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { resolveAgentConfig, type AgentConfig } from "./catalog.js";
-import { compileWorkflow, compilerVersion } from "./compiler.js";
+import { compileWorkflow, compilerVersion, type CompilerVersion } from "./compiler.js";
 import { assertParallelWriterIsolation } from "./workspaces.js";
 import { runtimeVersion, type ExecutionPlan, type FrozenAgent, type SkillSnapshot } from "./execution-types.js";
 import { assertJson, createOutputValidator, defaultOutputSchema } from "./output-schema.js";
@@ -69,8 +69,10 @@ export function verifyExecutionPlan(value: unknown): ExecutionPlan {
   assertJson(value);
   const plan = object(value, "execution plan");
   keys(plan, ["version", "runtimeVersion", "compilerVersion", "workflow", "source", "sourceHash", "agents", "hash"], "execution plan");
-  if (plan.version !== 1 || plan.runtimeVersion !== runtimeVersion || plan.compilerVersion !== compilerVersion) throw new Error("Unsupported execution plan/compiler/runtime version");
-  const compiled = compileWorkflow(plan.workflow);
+  const compatible = plan.runtimeVersion === runtimeVersion && plan.compilerVersion === compilerVersion ||
+    plan.runtimeVersion === "dynamicwf-runtime-v1" && plan.compilerVersion === "dynamicwf-effect-v1";
+  if (plan.version !== 1 || !compatible) throw new Error("Unsupported execution plan/compiler/runtime version");
+  const compiled = compileWorkflow(plan.workflow, plan.compilerVersion as CompilerVersion);
   if (plan.source !== compiled.source || plan.sourceHash !== compiled.hash) throw new Error("Execution plan compiled source or source hash mismatch");
   const agents = object(plan.agents, "agents");
   keys(agents, Object.keys(compiled.workflow.graphs), "agent graphs");

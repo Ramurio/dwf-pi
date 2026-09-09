@@ -5,6 +5,19 @@ import { RunController } from "../run-controller.js";
 import { collectActivity, type WorkerActivity } from "../monitor.js";
 import { summarizeUsage } from "../usage.js";
 import { graphSnapshot } from "./model.js";
+import type { Json } from "../graph.js";
+
+async function resolutionBody(request: IncomingMessage) {
+  let body = "";
+  for await (const chunk of request) {
+    body += String(chunk);
+    if (Buffer.byteLength(body) > 1024 * 1024) throw new Error("Request too large");
+  }
+  const value = JSON.parse(body) as Record<string, unknown>;
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some(key => !["id", "waitId", "response"].includes(key)) ||
+    typeof value.id !== "string" || typeof value.waitId !== "string" || !Object.hasOwn(value, "response")) throw new Error("Invalid wait resolution");
+  return { id: value.id, waitId: value.waitId, response: value.response as Json };
+}
 
 async function controlBody(
   request: IncomingMessage,
@@ -84,7 +97,7 @@ export async function startGraphServer(
       response.end(JSON.stringify(value));
     };
     try {
-      if (request.method === "POST" && name === "control") {
+      if (request.method === "POST" && ["control", "resolve"].includes(name)) {
         if (
           request.headers.origin !== `http://${expected}` ||
           request.headers["content-type"] !== "application/json" ||
@@ -93,8 +106,13 @@ export async function startGraphServer(
           json({ error: "Control requires this local page" }, 403);
           return;
         }
-        const body = await controlBody(request);
-        await controller.control(body.id, body.command);
+        if (name === "resolve") {
+          const body = await resolutionBody(request);
+          await controller.resolve(body.id, body.waitId, body.response, "browser");
+        } else {
+          const body = await controlBody(request);
+          await controller.control(body.id, body.command);
+        }
         json({ ok: true });
         return;
       }
@@ -112,6 +130,7 @@ export async function startGraphServer(
               id: run.id,
               name: run.plan.workflow.name,
               status: run.status,
+              taskOutcome: run.taskOutcome ?? null,
               createdAt: run.createdAt,
               cwd: run.cwd,
               usage: summarizeUsage(store.listActivations(run.id)),
@@ -139,6 +158,7 @@ export async function startGraphServer(
             observed.run,
             store.listActivations(id),
             cache.activity,
+            store.waits(id),
           ),
           supervisorAlive: observed.supervisorAlive,
           workersAlive: observed.workersAlive,

@@ -1,6 +1,8 @@
 import { Type } from "typebox";
 import { Check, Errors } from "typebox/value";
 import { AgentConfigSchema, roleNames, resolveAgentConfig, type AgentConfig, type RoleName } from "./catalog.js";
+import { createOutputValidator } from "./output-schema.js";
+import type { TaskDecision } from "./task-outcome.js";
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Expr =
@@ -15,6 +17,8 @@ export type Expr =
 export type Node = { id: string } & (
   | { kind: "agent"; role: RoleName; task: Expr; input?: Expr; config?: AgentConfig }
   | { kind: "transform" | "end"; value: Expr }
+  | { kind: "finish"; decision: TaskDecision; reason: Expr; evidence: Expr; value: Expr }
+  | { kind: "await"; reason: Expr; input: Expr; responseSchema: Record<string, unknown> }
   | { kind: "branch"; input?: Expr }
   | { kind: "subworkflow"; graphId: string; input: Expr }
   | { kind: "worktree"; graphId: string; input: Expr; base?: string }
@@ -49,6 +53,8 @@ const definitions = {
   Node: Type.Union([
     node("agent", { role: Type.Enum(roleNames), task: expr, input: Type.Optional(expr), config: Type.Optional(AgentConfigSchema) }),
     node("transform", { value: expr }), node("end", { value: expr }),
+    node("finish", { decision: Type.Enum(["accepted", "rejected", "inconclusive"]), reason: expr, evidence: expr, value: expr }),
+    node("await", { reason: expr, input: expr, responseSchema: Type.Record(Type.String(), Type.Unknown()) }),
     node("branch", { input: Type.Optional(expr) }),
     node("subworkflow", { graphId: id, input: expr }),
     node("worktree", { graphId: id, input: expr, base: Type.Optional(Type.String({ minLength: 1, pattern: "^[^\\u0000]+$" })) }),
@@ -124,6 +130,10 @@ export function validateWorkflow(value: unknown): ValidationResult {
         try { resolveAgentConfig(item.role, item.config); }
         catch (error) { add(`${path}.config`, error instanceof Error ? error.message : "Invalid effective agent configuration"); }
       }
+      if (item.kind === "await") {
+        try { createOutputValidator(item.responseSchema); }
+        catch (error) { add(`${path}.responseSchema`, error instanceof Error ? error.message : "Invalid response schema"); }
+      }
     }
     for (const target of refs) if (!graphIds.has(target)) add(base, `Referenced graph does not exist: ${target}`);
     const next = new Map<string, Set<string>>();
@@ -134,7 +144,7 @@ export function validateWorkflow(value: unknown): ValidationResult {
       const path = `${base}.edges[${i}]`;
       if (!nodes.has(edge.from)) add(`${path}.from`, `Unknown node: ${edge.from}`);
       if (!nodes.has(edge.to)) add(`${path}.to`, `Unknown node: ${edge.to}`);
-      if (nodes.get(edge.from)?.kind === "end") add(path, "End node cannot have outgoing edges");
+      if (["end", "finish"].includes(nodes.get(edge.from)?.kind ?? "")) add(path, "End node cannot have outgoing edges");
       const key = JSON.stringify(edge);
       if (edgeKeys.has(key)) add(path, "Duplicate edge");
       edgeKeys.add(key);
@@ -146,7 +156,7 @@ export function validateWorkflow(value: unknown): ValidationResult {
       const sources = previous.get(edge.to) ?? new Set<string>(); sources.add(edge.from); previous.set(edge.to, sources);
     }
     const reachable = walk([graph.entry], next);
-    const canEnd = walk(graph.nodes.filter((item) => item.kind === "end").map((item) => item.id), previous);
+    const canEnd = walk(graph.nodes.filter((item) => item.kind === "end" || item.kind === "finish").map((item) => item.id), previous);
     for (const item of graph.nodes) {
       if (!reachable.has(item.id)) add(base, `Unreachable node: ${item.id}`);
       if (!canEnd.has(item.id)) add(base, `Node has no structural path to an end: ${item.id}`);
@@ -180,6 +190,8 @@ function expressions(node: Node): Expr[] {
   switch (node.kind) {
     case "agent": return node.input ? [node.task, node.input] : [node.task];
     case "transform": case "end": return [node.value];
+    case "finish": return [node.value, node.reason, node.evidence];
+    case "await": return [node.reason, node.input];
     case "branch": return node.input ? [node.input] : [];
     case "subworkflow": case "worktree": return [node.input];
     case "integrate": return [node.sources];

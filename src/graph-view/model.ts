@@ -1,4 +1,4 @@
-import type { ActivationRecord, RunRecord } from "../run-store.js";
+import type { ActivationRecord, RunRecord, WaitRecord } from "../run-store.js";
 import { activationUsage, summarizeUsage } from "../usage.js";
 import { activationPath, activeWork, type WorkerActivity } from "../monitor.js";
 
@@ -7,6 +7,7 @@ export function graphSnapshot(
   run: RunRecord,
   records: readonly ActivationRecord[],
   activity: ReadonlyMap<string, WorkerActivity> = new Map(),
+  waits: readonly WaitRecord[] = [],
 ) {
   return {
     cwd: run.cwd,
@@ -17,8 +18,11 @@ export function graphSnapshot(
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
     heartbeatAt: run.heartbeatAt,
-    accepted:
-      run.output &&
+    taskOutcome: run.taskOutcome ?? null,
+    waits,
+    accepted: run.taskOutcome
+      ? run.taskOutcome.decision === "accepted" ? true : run.taskOutcome.decision === "rejected" ? false : null
+      : run.output &&
       typeof run.output === "object" &&
       !Array.isArray(run.output) &&
       typeof run.output.accepted === "boolean"
@@ -39,8 +43,8 @@ export function graphSnapshot(
           (a, b) =>
             b.startedAt - a.startedAt || b.context.visit - a.context.visit,
         );
-        const status = activations.some((a) => a.status === "running")
-          ? "running"
+        const status = activations.some((a) => a.status === "running" && a.metadata.waiting !== true)
+          ? "running" : activations.some(a => a.status === "running" && a.metadata.waiting === true) ? "waiting"
           : (ordered[0]?.status ?? "unvisited");
         const config = run.plan.agents[id]?.[node.id];
         return {
@@ -64,7 +68,7 @@ export function graphSnapshot(
             scope: JSON.stringify(a.context.scope),
             key: a.key,
             path: activationPath(a),
-            status: a.status,
+            status: a.status === "running" && a.metadata.waiting === true ? "waiting" : a.status,
             visit: a.context.visit + 1,
             attempt: a.attempt,
             startedAt: a.startedAt,
@@ -92,6 +96,8 @@ export function graphSnapshot(
   };
 }
 function resultSummary(a: ActivationRecord): string | null {
+  const outcome = a.metadata.taskOutcome;
+  if (outcome && typeof outcome === "object" && !Array.isArray(outcome)) return `${outcome.decision}: ${outcome.reason}`;
   const value = a.output;
   if (!value || typeof value !== "object" || Array.isArray(value))
     return typeof value === "string" ? value.slice(0, 500) : null;

@@ -11,7 +11,7 @@ export interface MonitorOptions {
 const structural = new Set(["parallel", "map", "subworkflow", "worktree"]);
 const terminal = new Set(["succeeded", "failed", "cancelled"]);
 const statusNames: Record<string, string> = {
-  queued: "ОЖИДАНИЕ", running: "В РАБОТЕ", pausing: "ПРИОСТАНОВКА", paused: "ПАУЗА",
+  queued: "ОЖИДАНИЕ", running: "В РАБОТЕ", waiting: "ЖДЁТ ОТВЕТА", pausing: "ПРИОСТАНОВКА", paused: "ПАУЗА",
   cancelling: "ОТМЕНА…", cancelled: "ОТМЕНЁН", succeeded: "ЗАВЕРШЁН", failed: "ОШИБКА", interrupted: "ПРЕРВАН",
 };
 export const duration = (ms: number): string => {
@@ -48,9 +48,13 @@ function descendant(parent: ActivationRecord, child: ActivationRecord): boolean 
 }
 export function activeWork(records: readonly ActivationRecord[]): ActivationRecord[] {
   const active = records.filter(a => a.status === "running");
-  return active.filter(a => !structural.has(a.kind) || !active.some(child => child !== a && descendant(a, child)));
+  return active.filter(a => !(a.kind === "await" && a.metadata.waiting === true) && (!structural.has(a.kind) || !active.some(child => child !== a && descendant(a, child))));
 }
 function evidence(a: ActivationRecord): string {
+  const declared = a.metadata.taskOutcome;
+  if (declared && typeof declared === "object" && !Array.isArray(declared)) {
+    return declared.decision === "accepted" ? "результат принят" : declared.decision === "rejected" ? "результат НЕ принят" : "inconclusive";
+  }
   const output = a.output;
   if (output && typeof output === "object" && !Array.isArray(output)) {
     if (typeof output.exitCode === "number") return `exit ${output.exitCode}`;
@@ -86,6 +90,11 @@ export function monitorBody(run: RunRecord, records: readonly ActivationRecord[]
   if (view === "history") return ["Последние завершённые задачи — новые сверху", "Проход = повтор узла; попытка = восстановление того же прохода.", "", ...completed.map(historyLine), ...(!completed.length ? ["Завершённых задач пока нет."] : [])];
   const active = activeWork(records);
   const lines = [run.status === "paused" ? "ПАУЗА — новые задачи не запускаются" : "СЕЙЧАС"];
+  if (run.taskOutcome) lines.push(`Результат: ${run.taskOutcome.decision} · ${terminalText(run.taskOutcome.reason, 500)}`);
+  for (const a of records.filter(a => a.status === "running" && a.metadata.waiting === true)) {
+    lines.push(`? ${activationPath(a)} — ${terminalText(String(a.metadata.waitReason), 500)}`,
+      `  ${a.metadata.waitId} · контракт ответа: dynamicwf run.waits`);
+  }
   if (!active.length) lines.push(terminal.has(run.status) ? "Активных задач нет." : "Ожидание следующего шага.");
   for (const a of active) {
     const config = run.plan.agents[a.context.graphId]?.[a.context.nodeId];
@@ -115,7 +124,9 @@ export function renderDashboard(run: RunRecord, records: readonly ActivationReco
   const elapsed = duration((terminal.has(run.status) ? run.updatedAt : now) - run.createdAt);
   const heartbeat = run.heartbeatAt === null ? "ещё нет" : `${duration(now - run.heartbeatAt)} назад`;
   let outcome = "";
-  if (run.output && typeof run.output === "object" && !Array.isArray(run.output) && run.output.accepted === false) outcome = " · РЕЗУЛЬТАТ НЕ ПРИНЯТ";
+  if (run.taskOutcome?.decision === "rejected" || !run.taskOutcome && run.output && typeof run.output === "object" && !Array.isArray(run.output) && run.output.accepted === false) outcome = " · РЕЗУЛЬТАТ НЕ ПРИНЯТ";
+  else if (run.taskOutcome?.decision === "inconclusive") outcome = " · НЕДОСТАТОЧНО ДАННЫХ";
+  else if (run.taskOutcome?.decision === "unclassified") outcome = " · ПРИЁМКА НЕ ОБЪЯВЛЕНА";
   const view = options.view ?? "overview";
   const tabs = `${view === "overview" ? "[1 Сейчас]" : "1 Сейчас"}   ${view === "history" ? "[2 История]" : "2 История"}   ${view === "graph" ? "[3 Схема]" : "3 Схема"}   ${view === "tokens" ? "[4 Токены]" : "4 Токены"}`;
   const heading = [

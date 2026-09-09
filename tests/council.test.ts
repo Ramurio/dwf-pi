@@ -42,6 +42,8 @@ function votes(decisions: Decision[]): Record<Perspective, Vote> {
 }
 function runtime(results: Record<Perspective, Vote>, onCall?: (perspective: Perspective, task: string, input: Record<string, Json>) => void): WorkflowRuntime {
   return {
+    finish: (_context, _node, _reason, _evidence, value) => Effect.succeed(value),
+    wait: () => Effect.fail(new Error("Unexpected await node")),
     step(_context, work) { return Effect.suspend(work); },
     agent(_context, _node, task, input) {
       return Effect.sync(() => {
