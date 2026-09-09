@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
+import { openWorkflowDatabase } from "./sqlite.js";
 import type { ExecutionPlan } from "./execution-types.js";
 import type { Json } from "./graph.js";
 import type { RuntimeContext } from "./runtime-contract.js";
@@ -63,13 +62,7 @@ export function activationKey(context: RuntimeContext): string {
 export class RunStore {
   private readonly database: DatabaseSync;
   constructor(filename: string) {
-    if (filename !== ":memory:") mkdirSync(dirname(resolve(filename)), { recursive: true, mode: 0o700 });
-    this.database = new DatabaseSync(filename);
-    this.database.exec(`
-      PRAGMA busy_timeout = 5000;
-      PRAGMA journal_mode = WAL;
-      PRAGMA synchronous = FULL;
-      PRAGMA foreign_keys = ON;
+    this.database = openWorkflowDatabase(filename, `
       CREATE TABLE IF NOT EXISTS workflow_runs (
         id TEXT PRIMARY KEY, plan TEXT NOT NULL, input TEXT NOT NULL, cwd TEXT NOT NULL,
         status TEXT NOT NULL, desired TEXT NOT NULL, owner_token TEXT, supervisor_pid INTEGER,

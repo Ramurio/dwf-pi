@@ -1,18 +1,12 @@
-import { mkdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync } from "node:sqlite";
+import { openWorkflowDatabase } from "./sqlite.js";
 import { applyPatch, createDraft } from "./authoring.js";
 import type { WorkflowDefinition } from "./graph.js";
 
 export class DraftStore {
   private readonly database: DatabaseSync;
   constructor(filename: string) {
-    if (filename !== ":memory:") mkdirSync(dirname(resolve(filename)), { recursive: true, mode: 0o700 });
-    this.database = new DatabaseSync(filename);
-    this.database.exec(`
-      PRAGMA busy_timeout = 5000;
-      PRAGMA journal_mode = WAL;
-      PRAGMA synchronous = FULL;
+    this.database = openWorkflowDatabase(filename, `
       CREATE TABLE IF NOT EXISTS workflow_drafts (
         id TEXT PRIMARY KEY,
         revision INTEGER NOT NULL CHECK(revision > 0),

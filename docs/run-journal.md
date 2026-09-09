@@ -2,6 +2,19 @@
 
 `RunStore` in `src/run-store.ts` persists an immutable `ExecutionPlan`, input and working directory, plus mutable run control state, node activations and ordered events. It uses separate tables from `DraftStore`, so both may share a database file without coupling draft revisions to active runs. Every process opens its own SQLite connection. Initialization sets `busy_timeout` before WAL; commits use `synchronous=FULL`.
 
+Both stores use `openWorkflowDatabase`: connection/WAL setup gets short busy waits,
+and a failed BUSY attempt closes its connection before retrying within a five-second
+initialization window. Schema creation is transactional; successful connections
+retain the existing 5000ms busy timeout for ordinary operations. Application writes
+are never retried by this helper. SQLite can decline to invoke a busy handler when
+waiting would cause a lock-promotion deadlock; a long busy timeout alone does not
+cover every initialization race. [SQLite busy handler contract](https://www.sqlite.org/c3ref/busy_handler.html).
+
+Validation includes 24 simultaneous CLI initializations, an actual competing
+exclusive transaction, WAL/FULL/FK settings, preservation of committed data and
+rollback after invalid schema SQL. The fix does not establish general safe retries
+for workflow operations or resolve the separate incomplete-stdin process timeout.
+
 ## Launch ownership and control
 
 `create({id, plan, input, cwd})` creates a queued run. `reserveLaunch(id)` atomically returns `{token, run}` and changes a queued/interrupted run with desired `running` and no owner to `running`. A second launcher fails. The launcher passes this token to its supervisor, which calls `attachPid(id, token, pid)`. Attaching a different PID to the same reservation fails. The reservation-to-attach gap is still owned: a missing PID alone does not authorize a second launch.
