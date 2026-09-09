@@ -21,7 +21,7 @@
 | Browser | Обзор результата, трасса/причины, timeline/checkpoint, council, artifacts/diff, usage | Не начато |
 | Presets | Формы запуска, явное сохранение, версии/diff, копирование в draft | Не начато |
 | Browser navigation | Deep links, reload state, terminal handoff, project search, opt-in notifications | Не начато |
-| Graph readability | Раздельные порты/рёбра, обход узлов, подписи, стабильный обзор с раскрытием scopes | Начата маршрутизация; геометрические fixtures и browser QA обязательны |
+| Graph readability | Раздельные порты/рёбра, обход узлов, подписи, стабильный обзор с раскрытием scopes | Маршруты/порты/подписи реализованы, 10 browser API/layout tests и in-app QA; обзор с раскрытием групп ещё не начат |
 | Run comparison | Согласованные trace/timeline, сравнение проходов и первое расхождение с версией критериев | Не начато |
 | Journal | Компактные reads, content-addressed plans/resources, paging/events, streaming logs | Не начато |
 | Retention | Размеры и явная проверяемая очистка принадлежащих run данных | Не начато |

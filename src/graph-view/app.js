@@ -543,27 +543,35 @@ function renderGraph() {
   }
   svg.append(defs);
   for (const edge of layout.edges) {
+    // A small background stroke makes a crossing distinguishable from a junction.
+    svg.append(svgEl("path", { class: "edge-underlay", d: edge.path }));
     const path = svgEl("path", {
       class: `edge${edge.loop ? " loop" : ""}`,
       d: edge.path,
+      "data-edge-index": edge.index,
       "marker-end": `url(#${edge.loop ? "loop-arrow" : "arrow"})`,
     });
     path.append(
       svgEl(
         "title",
         {},
-        `${edge.from} → ${edge.to}${edge.conditional ? " (условие)" : ""}`,
+        `${edge.from} → ${edge.to} · переход ${edge.order}${edge.conditional ? ` · ${JSON.stringify(edge.condition)}` : " · без условия"}`,
       ),
     );
     svg.append(path);
-    if (edge.loop || edge.conditional)
+  }
+  // Labels are painted after every connector, so later crossings cannot clip them.
+  for (const edge of layout.edges) {
+    if (edge.label) {
+      svg.append(svgEl("rect", { ...edge.labelBox, class: "edge-label-mask", rx: 3 }));
       svg.append(
         svgEl(
           "text",
           { x: edge.labelX, y: edge.labelY, class: "edge-label" },
-          edge.loop ? "повтор" : "условие",
+          edge.label,
         ),
       );
+    }
   }
   for (const node of graph.nodes) {
     const pos = layout.positions.get(node.id),

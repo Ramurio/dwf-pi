@@ -379,6 +379,14 @@ h1 {
   stroke: #a2adbd;
   stroke-width: 1.6;
 }
+.edge-underlay {
+  fill: none;
+  stroke: #f9fbfd;
+  stroke-width: 6;
+}
+.edge-label-mask {
+  fill: #f9fbfd;
+}
 .edge.loop {
   stroke: #bd8f43;
   stroke-dasharray: 5 4;

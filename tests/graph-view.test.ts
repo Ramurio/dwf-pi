@@ -320,3 +320,66 @@ test("cross-layer edges in an acyclic graph are not mislabeled as repeated execu
     0,
   );
 });
+
+test("parallel conditions get separate ports, tracks and labels; status updates never move the graph", () => {
+  const graph = { entry: "a", nodes: [{ id: "a" }, { id: "b" }], edges: [
+    { from: "a", to: "b", conditional: true }, { from: "a", to: "b", conditional: true },
+    { from: "a", to: "b", conditional: false },
+  ] };
+  const layout = layoutGraph(graph);
+  assert.equal(new Set(layout.edges.map((e: any) => e.path)).size, 3);
+  assert.equal(new Set(layout.edges.map((e: any) => e.points[0].x)).size, 3);
+  assert.equal(new Set(layout.edges.map((e: any) => e.points.at(-1).x)).size, 3);
+  assert.equal(new Set(layout.edges.map((e: any) => e.labelY)).size, 3);
+  assert.deepEqual(layout.edges.map((e: any) => e.label), ["условие · 1", "условие · 2", "иначе · 3"]);
+  assert.deepEqual(layoutGraph({ ...graph, nodes: graph.nodes.map(n => ({ ...n, status: "running", usage: { totalTokens: 100 } })) }), layout);
+});
+
+test("a shortcut does not turn the forward half of a repair loop into a return", () => {
+  const graph = { entry: "plan", nodes: ["plan", "code", "review", "done"].map(id => ({ id })), edges: [
+    { from: "plan", to: "code" }, { from: "plan", to: "review" }, { from: "code", to: "review" },
+    { from: "review", to: "code" }, { from: "review", to: "done" },
+  ] };
+  const layout = layoutGraph(graph);
+  assert.equal(layout.edges.find((e: any) => e.from === "code" && e.to === "review").loop, false);
+  assert.equal(layout.edges.find((e: any) => e.from === "review" && e.to === "code").loop, true);
+  assert.ok(layout.positions.get("review").y > layout.positions.get("code").y);
+});
+
+test("routes and label masks avoid every node across joins, dense fan-out, multiple cycles and disconnected scopes", () => {
+  const graphs = [
+    { entry: "a", nodes: ["a", "b", "c", "d", "unused"].map(id => ({ id })), edges: [
+      { from: "a", to: "b" }, { from: "a", to: "c" }, { from: "b", to: "d" }, { from: "c", to: "d" },
+      { from: "d", to: "a", conditional: true }, { from: "d", to: "b", conditional: true }, { from: "b", to: "b", conditional: true },
+    ] },
+    ...[1, 4, 12, 30].map(count => ({ entry: "start",
+      nodes: ["start", ...Array.from({ length: count }, (_, i) => `child${i}`), "join"].map(id => ({ id })),
+      edges: [...Array.from({ length: count }, (_, i) => ({ from: "start", to: `child${i}`, conditional: true })),
+        ...Array.from({ length: count }, (_, i) => ({ from: `child${i}`, to: "join" })),
+        { from: "join", to: "start", conditional: true }, { from: "join", to: "join", conditional: true }],
+    })),
+  ];
+  for (const graph of graphs) {
+    const layout = layoutGraph(graph);
+    const labels = layout.edges.filter((e: any) => e.label).map((e: any) => e.labelBox);
+    for (const edge of layout.edges) {
+      assert.doesNotMatch(edge.path, /NaN|undefined|Infinity/);
+      for (let i = 1; i < edge.points.length; i++) {
+        const a = edge.points[i - 1], b = edge.points[i];
+        assert.ok(a.x === b.x || a.y === b.y, "routes must be orthogonal");
+        for (const box of layout.positions.values()) {
+          const crosses = a.x === b.x
+            ? a.x > box.x && a.x < box.x + box.width && Math.max(a.y, b.y) > box.y && Math.min(a.y, b.y) < box.y + box.height
+            : a.y > box.y && a.y < box.y + box.height && Math.max(a.x, b.x) > box.x && Math.min(a.x, b.x) < box.x + box.width;
+          assert.equal(crosses, false, `${edge.from}→${edge.to} crosses a node`);
+        }
+      }
+    }
+    const disjoint = (a: any, b: any) => a.x + a.width <= b.x || b.x + b.width <= a.x || a.y + a.height <= b.y || b.y + b.height <= a.y;
+    for (const [i, label] of labels.entries()) {
+      assert.ok(label.x >= 0 && label.y >= 0 && label.x + label.width <= layout.width && label.y + label.height <= layout.height);
+      for (const box of layout.positions.values()) assert.ok(disjoint(label, box), "label must not overlap a node");
+      for (const other of labels.slice(i + 1)) assert.ok(disjoint(label, other), "labels must not overlap");
+    }
+  }
+});
