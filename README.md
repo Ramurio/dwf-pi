@@ -21,6 +21,7 @@ pause/resume/cancel, durable journal, CLI/MCP, переносимый skill, т�
 - [Требования и критерии приёмки](docs/requirements.md)
 - [Вопросы и открытые решения](docs/questions.md)
 - [Ответы пользователя и принятые решения](docs/decisions.md)
+- [Разбор проекта и приоритеты развития — 2026-09-10](docs/project-review-2026-09-10.md)
 - [Архитектурное предложение](docs/architecture-proposal.md)
 - [Итоги и сравнительные исследования](docs/research/README.md)
 - [Результаты реализации и проверок](docs/progress.md)
