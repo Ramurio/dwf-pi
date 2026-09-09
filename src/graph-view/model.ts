@@ -1,6 +1,7 @@
 import type { ActivationRecord, RunRecord, WaitRecord } from "../run-store.js";
 import { activationUsage, summarizeUsage } from "../usage.js";
-import { activationPath, activeWork, type WorkerActivity } from "../monitor.js";
+import { activationPath, type WorkerActivity } from "../monitor.js";
+import { activationState, projectRun } from "../observation.js";
 
 /** Read-only projection: no owner tokens, prompts, credentials, session paths or raw logs. */
 export function graphSnapshot(
@@ -8,6 +9,7 @@ export function graphSnapshot(
   records: readonly ActivationRecord[],
   activity: ReadonlyMap<string, WorkerActivity> = new Map(),
   waits: readonly WaitRecord[] = [],
+  presentation = projectRun(run, records),
 ) {
   return {
     cwd: run.cwd,
@@ -18,17 +20,11 @@ export function graphSnapshot(
     createdAt: run.createdAt,
     updatedAt: run.updatedAt,
     heartbeatAt: run.heartbeatAt,
-    taskOutcome: run.taskOutcome ?? null,
+    taskOutcome: presentation.taskOutcome,
+    presentation,
     waits,
-    accepted: run.taskOutcome
-      ? run.taskOutcome.decision === "accepted" ? true : run.taskOutcome.decision === "rejected" ? false : null
-      : run.output &&
-      typeof run.output === "object" &&
-      !Array.isArray(run.output) &&
-      typeof run.output.accepted === "boolean"
-        ? run.output.accepted
-        : null,
-    activeKeys: activeWork(records).map((a) => a.key),
+    accepted: presentation.accepted,
+    activeKeys: presentation.activeKeys,
     error: run.error ?? null,
     usage: summarizeUsage(records),
     entryGraph: run.plan.workflow.entryGraph,
@@ -68,7 +64,7 @@ export function graphSnapshot(
             scope: JSON.stringify(a.context.scope),
             key: a.key,
             path: activationPath(a),
-            status: a.status === "running" && a.metadata.waiting === true ? "waiting" : a.status,
+            status: activationState(a),
             visit: a.context.visit + 1,
             attempt: a.attempt,
             startedAt: a.startedAt,

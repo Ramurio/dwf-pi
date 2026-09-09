@@ -90,6 +90,12 @@ includes `supervisorAlive` and `workersAlive`; a database PID alone does not pro
 liveness. `run.inspect` omits activation owner/worker fencing tokens. Public events
 also remove the internal launch reservation and worker fencing tokens.
 
+`presentation` is shared with browser and watch: technical status/intent, task
+outcome, active/waiting activation keys and separately sampled process liveness.
+Liveness distinguishes supervised, orphaned-workers, launching, stopped and unknown;
+the observed timestamp is telemetry, not a timeout policy. Controller snapshot
+samples OS processes and journal records; it is not an atomic OS/database transaction.
+
 The event cursor `after` is a nonnegative safe integer, initially 0. Pass the returned
 `nextAfter` to the next request. An empty page preserves the supplied cursor. Unknown
 runs produce an error instead of a misleading empty page. There is currently no

@@ -1,6 +1,7 @@
 import { summarizeUsage, tokenNumber, tokenSummary } from "./usage.js";
 import type { Node } from "./graph.js";
 import type { ActivationRecord, RunRecord } from "./run-store.js";
+import { activationState, projectRun } from "./observation.js";
 
 /** No workflow-provided byte can become a terminal escape, new row or bidi directive. */
 export function terminalText(value: string, limit = 180): string {
@@ -10,18 +11,19 @@ export function terminalText(value: string, limit = 180): string {
 }
 const counts = (records: readonly ActivationRecord[]) => ({
   succeeded: records.filter(a => a.status === "succeeded").length,
-  running: records.filter(a => a.status === "running").length,
+  running: records.filter(a => activationState(a) === "running").length,
+  waiting: records.filter(a => activationState(a) === "waiting").length,
   failed: records.filter(a => a.status === "failed").length,
   interrupted: records.filter(a => a.status === "interrupted").length,
 });
 const identity = (record: ActivationRecord) => `${terminalText(record.context.graphId)}.${terminalText(record.context.nodeId)} scope=${terminalText(JSON.stringify(record.context.scope), 2_000)} visit=${record.context.visit}`;
 const progress = (activations: readonly ActivationRecord[]) => {
   const count = counts(activations);
-  return `${count.succeeded} succeeded · ${count.running} running · ${count.failed} failed · ${count.interrupted} interrupted (${activations.length} recorded activations)`;
+  return `${count.succeeded} succeeded · ${count.running} running${count.waiting ? ` · ${count.waiting} waiting` : ""} · ${count.failed} failed · ${count.interrupted} interrupted (${activations.length} recorded activations)`;
 };
 const stateLabel = (run: RunRecord) => `${run.status}${run.status !== run.desired && !["succeeded", "failed", "cancelled"].includes(run.status) ? `; desired ${run.desired}` : ""}`;
 export function renderRunSummary(run: RunRecord, activations: readonly ActivationRecord[]): string {
-  const active = activations.filter(a => a.status === "running");
+  const active = activations.filter(a => activationState(a) === "running");
   const preview = active.slice(0, 4).map(identity).join(" | ");
   return `${terminalText(run.id)}: ${stateLabel(run)} · ${progress(activations)}${preview ? ` · active ${preview}${active.length > 4 ? ` | … ${active.length - 4} more` : ""}` : ""}`;
 }
@@ -31,16 +33,19 @@ function nodeLabel(node: Node): string {
 function nodeState(records: readonly ActivationRecord[]): string {
   if (!records.length) return "○ not visited";
   const count = counts(records);
-  const state = count.running ? "▶ running" : count.interrupted ? "! interrupted" : count.failed ? "× failed" : "✓ succeeded";
+  const state = count.running ? "▶ running" : count.waiting ? "? waiting" : count.interrupted ? "! interrupted" : count.failed ? "× failed" : "✓ succeeded";
   return records.length === 1 ? state : `${state} · ${count.succeeded}/${records.length} recorded visits succeeded`;
 }
 /** All graph definitions and explicit edges, followed by concrete running activation identities. */
-export function renderRun(run: RunRecord, activations: readonly ActivationRecord[]): string {
+export function renderRun(run: RunRecord, activations: readonly ActivationRecord[], presentation = projectRun(run, activations)): string {
   const lines = [
     `${terminalText(run.plan.workflow.name)} · ${terminalText(run.plan.workflow.id)} revision ${run.plan.workflow.revision}`,
     `Run ${terminalText(run.id)} · ${stateLabel(run)}`,
     `Journal: ${progress(activations)} · ${tokenSummary(activations)}`,
   ];
+  if (presentation.taskOutcome) lines.push(`Task: ${presentation.taskOutcome.decision} · ${terminalText(presentation.taskOutcome.reason, 500)}`);
+  if (presentation.liveness.state !== "unknown") lines.push(presentation.liveness.label);
+  for (const record of activations.filter(a => activationState(a) === "waiting")) lines.push(`Wait ${terminalText(String(record.metadata.waitId))}: ${terminalText(String(record.metadata.waitReason), 500)}`);
   for (const [graphId, graph] of Object.entries(run.plan.workflow.graphs)) {
     lines.push("", `┌ Graph ${terminalText(graphId)} · entry ${terminalText(graph.entry)}`);
     for (const node of graph.nodes) {
@@ -57,7 +62,7 @@ export function renderRun(run: RunRecord, activations: readonly ActivationRecord
     }
     lines.push("└");
   }
-  const active = activations.filter(a => a.status === "running");
+  const active = activations.filter(a => activationState(a) === "running");
   if (active.length) {
     lines.push("", run.status === "paused" ? "Paused structural activations:" : "Running activations:");
     for (const record of active) lines.push(`  ▶ ${identity(record)} · attempt ${record.attempt}`);

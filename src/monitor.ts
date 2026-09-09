@@ -1,12 +1,15 @@
 import type { ActivationRecord, RunEvent, RunRecord } from "./run-store.js";
 import { activationUsage, summarizeUsage, tokenNumber, tokenSummary } from "./usage.js";
 import { renderRun, terminalText } from "./terminal.js";
+import { activationState, projectRun, type RunPresentation } from "./observation.js";
+export { activeWork } from "./observation.js";
 
 export type MonitorView = "overview" | "history" | "graph" | "tokens";
 export interface WorkerActivity { at: number; label: string }
 export interface MonitorOptions {
   width?: number; height?: number; now?: number; view?: MonitorView; offset?: number;
   activity?: ReadonlyMap<string, WorkerActivity>;
+  presentation?: RunPresentation;
 }
 const structural = new Set(["parallel", "map", "subworkflow", "worktree"]);
 const terminal = new Set(["succeeded", "failed", "cancelled"]);
@@ -41,14 +44,6 @@ export function activationPath(a: ActivationRecord): string {
     } else { parts.push(scope[i]!); i++; }
   }
   return terminalText([...parts, `${a.context.nodeId} · проход ${a.context.visit + 1}${a.attempt > 1 ? ` · попытка ${a.attempt}` : ""}`].join(" / "), 2_000);
-}
-function descendant(parent: ActivationRecord, child: ActivationRecord): boolean {
-  const prefix = [...parent.context.scope, "node", parent.context.nodeId, "visit", String(parent.context.visit)];
-  return prefix.every((part, i) => child.context.scope[i] === part);
-}
-export function activeWork(records: readonly ActivationRecord[]): ActivationRecord[] {
-  const active = records.filter(a => a.status === "running");
-  return active.filter(a => !(a.kind === "await" && a.metadata.waiting === true) && (!structural.has(a.kind) || !active.some(child => child !== a && descendant(a, child))));
 }
 function evidence(a: ActivationRecord): string {
   const declared = a.metadata.taskOutcome;
@@ -85,17 +80,22 @@ export function collectActivity(events: readonly RunEvent[], activity: Map<strin
 export function monitorBody(run: RunRecord, records: readonly ActivationRecord[], options: MonitorOptions = {}): string[] {
   const now = options.now ?? Date.now(), view = options.view ?? "overview";
   if (view === "tokens") return tokenDetails(run, records);
-  if (view === "graph") return ["Схема: возможные переходы, не история выполнения.", ...renderRun(run, records).split("\n").slice(3)];
+  if (view === "graph") return ["Схема: возможные переходы, не история выполнения.", ...renderRun(run, records, options.presentation).split("\n").slice(3)];
   const completed = records.filter(a => a.status !== "running" && significant(a)).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0));
   if (view === "history") return ["Последние завершённые задачи — новые сверху", "Проход = повтор узла; попытка = восстановление того же прохода.", "", ...completed.map(historyLine), ...(!completed.length ? ["Завершённых задач пока нет."] : [])];
-  const active = activeWork(records);
+  const projection = options.presentation ?? projectRun(run, records);
+  const active = records.filter(a => projection.activeKeys.includes(a.key));
   const lines = [run.status === "paused" ? "ПАУЗА — новые задачи не запускаются" : "СЕЙЧАС"];
-  if (run.taskOutcome) lines.push(`Результат: ${run.taskOutcome.decision} · ${terminalText(run.taskOutcome.reason, 500)}`);
+  const taskOutcome = projection.taskOutcome;
+  if (taskOutcome) lines.push(`Результат: ${taskOutcome.decision} · ${terminalText(taskOutcome.reason, 500)}`);
   for (const a of records.filter(a => a.status === "running" && a.metadata.waiting === true)) {
     lines.push(`? ${activationPath(a)} — ${terminalText(String(a.metadata.waitReason), 500)}`,
       `  ${a.metadata.waitId} · контракт ответа: dynamicwf run.waits`);
   }
   if (!active.length) lines.push(terminal.has(run.status) ? "Активных задач нет." : "Ожидание следующего шага.");
+  if (run.status === "paused") for (const a of records.filter(a => a.status === "running" && structural.has(a.kind))) {
+    lines.push(`  ${activationPath(a)} — контейнер на паузе`);
+  }
   for (const a of active) {
     const config = run.plan.agents[a.context.graphId]?.[a.context.nodeId];
     lines.push(`▶ ${activationPath(a)}   ${duration((a.finishedAt ?? now) - a.startedAt)}`);
@@ -120,20 +120,19 @@ export function monitorBody(run: RunRecord, records: readonly ActivationRecord[]
 }
 export function renderDashboard(run: RunRecord, records: readonly ActivationRecord[], options: MonitorOptions = {}): string {
   const width = Math.max(1, options.width ?? 100), height = Math.max(4, options.height ?? 24), now = options.now ?? Date.now();
-  const active = activeWork(records).filter(a => !structural.has(a.kind)).length;
   const elapsed = duration((terminal.has(run.status) ? run.updatedAt : now) - run.createdAt);
   const heartbeat = run.heartbeatAt === null ? "ещё нет" : `${duration(now - run.heartbeatAt)} назад`;
+  const presentation = options.presentation ?? projectRun(run, records);
+  const active = presentation.activeKeys.length;
   let outcome = "";
-  if (run.taskOutcome?.decision === "rejected" || !run.taskOutcome && run.output && typeof run.output === "object" && !Array.isArray(run.output) && run.output.accepted === false) outcome = " · РЕЗУЛЬТАТ НЕ ПРИНЯТ";
-  else if (run.taskOutcome?.decision === "inconclusive") outcome = " · НЕДОСТАТОЧНО ДАННЫХ";
-  else if (run.taskOutcome?.decision === "unclassified") outcome = " · ПРИЁМКА НЕ ОБЪЯВЛЕНА";
+  if (presentation.taskOutcome && presentation.taskOutcome.decision !== "accepted") outcome = ` · ${presentation.outcomeLabel!.toUpperCase()}`;
   const view = options.view ?? "overview";
   const tabs = `${view === "overview" ? "[1 Сейчас]" : "1 Сейчас"}   ${view === "history" ? "[2 История]" : "2 История"}   ${view === "graph" ? "[3 Схема]" : "3 Схема"}   ${view === "tokens" ? "[4 Токены]" : "4 Токены"}`;
   const heading = [
-    `DYNAMICWF  ${statusNames[run.status] ?? run.status}${outcome} · ${elapsed} · задач сейчас: ${active}`,
+    `DYNAMICWF  ${presentation.statusLabel.toUpperCase()}${outcome} · ${elapsed} · задач сейчас: ${active}`,
     tokenSummary(records),
     run.plan.workflow.name,
-    `${run.id} · ${terminal.has(run.status) ? "запуск завершён" : `heartbeat: ${heartbeat} (по журналу)`}`,
+    `${run.id} · ${options.presentation ? presentation.liveness.label : terminal.has(run.status) ? "запуск завершён" : `heartbeat: ${heartbeat} (по журналу)`}`,
     run.error ? `Ошибка: ${run.error}` : run.status === "pausing" ? "Ждём завершения активных задач, затем пауза." : tabs,
     "─".repeat(width),
   ];
@@ -148,15 +147,21 @@ export function renderDashboard(run: RunRecord, records: readonly ActivationReco
 export class MonitorLog {
   private state = "";
   private records = new Map<string, string>();
-  update(run: RunRecord, records: readonly ActivationRecord[]): string[] {
+  update(run: RunRecord, records: readonly ActivationRecord[], presentation = projectRun(run, records)): string[] {
     const lines: string[] = [];
-    const state = `${run.status}/${run.desired}`;
+    const state = `${run.status}/${run.desired}/${presentation.liveness.state}`;
     if (!this.state) lines.push(`${terminalText(run.plan.workflow.name)} · ${terminalText(run.id)}`);
-    if (state !== this.state) lines.push(`Run: ${statusNames[run.status] ?? run.status}${run.error ? ` — ${terminalText(run.error)}` : ""} · ${tokenSummary(records)}`);
-    const initialVisible = new Set([...activeWork(records), ...records.filter(a => a.status !== "running" && significant(a)).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0)).slice(0, 5)].map(a => a.key));
+    if (state !== this.state) {
+      lines.push(`Run: ${presentation.statusLabel.toUpperCase()}${run.error ? ` — ${terminalText(run.error)}` : ""} · ${tokenSummary(records)}`);
+      if (presentation.taskOutcome) lines.push(`Task: ${presentation.taskOutcome.decision} · ${terminalText(presentation.taskOutcome.reason, 500)}`);
+      if (presentation.liveness.state !== "unknown") lines.push(presentation.liveness.label);
+    }
+    const initialVisible = new Set([...records.filter(a => presentation.activeKeys.includes(a.key) || presentation.waitingKeys.includes(a.key)), ...records.filter(a => a.status !== "running" && significant(a)).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0)).slice(0, 5)].map(a => a.key));
     for (const a of records) {
-      const value = `${a.status}/${a.attempt}`;
-      if (significant(a) && (this.state || initialVisible.has(a.key)) && this.records.get(a.key) !== value) lines.push(a.status === "running" ? `▶ ${activationPath(a)} — начат` : historyLine(a));
+      const value = `${activationState(a)}/${a.attempt}`;
+      if (significant(a) && (this.state || initialVisible.has(a.key)) && this.records.get(a.key) !== value) lines.push(activationState(a) === "waiting"
+        ? `? ${activationPath(a)} — ${terminalText(String(a.metadata.waitReason), 500)} · ${terminalText(String(a.metadata.waitId))}`
+        : a.status === "running" ? `▶ ${activationPath(a)} — начат` : historyLine(a));
       this.records.set(a.key, value);
     }
     this.state = state;

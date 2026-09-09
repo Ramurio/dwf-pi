@@ -3,7 +3,6 @@ import { UsagePages } from "./usage-pages.js";
 
 const usagePages = new UsagePages();
 const waitDrafts = new Map();
-const outcomeNames = { accepted: "Результат принят", rejected: "Результат не принят", inconclusive: "Недостаточно данных для приёмки", unclassified: "Приёмка не объявлена" };
 
 const $ = (id) => document.getElementById(id);
 const names = {
@@ -198,7 +197,7 @@ function renderRuns() {
       el(
         "small",
         "",
-        `${names[run.status] ?? run.status} · ${date(run.createdAt)}`,
+        `${run.presentation.outcomeLabel ?? run.presentation.statusLabel} · ${date(run.createdAt)}`,
       ),
       el(
         "small",
@@ -231,7 +230,7 @@ function renderMetrics() {
   const r = state.run,
     u = r.usage,
     active = allActivations().filter(
-      (a) => r.activeKeys.includes(a.key) && !structural.has(a.node.kind),
+      (a) => r.activeKeys.includes(a.key),
     );
   const values = [
     [
@@ -249,11 +248,7 @@ function renderMetrics() {
     [
       "Работают сейчас",
       String(active.length),
-      r.supervisorAlive
-        ? "Supervisor активен"
-        : finished.has(r.status)
-          ? "Все задачи завершены"
-          : "Supervisor не подтверждён",
+      r.presentation.liveness.label,
     ],
     [
       "Оценка SDK",
@@ -288,12 +283,8 @@ function renderHeader() {
   $("cwd").title = r.cwd;
   const status = $("run-status");
   status.className = `badge ${r.status}`;
-  status.textContent = names[r.status] ?? r.status;
-  $("result").textContent = r.taskOutcome ? outcomeNames[r.taskOutcome.decision] : r.accepted === true
-      ? "Результат принят"
-      : r.accepted === false
-        ? "Результат не принят"
-        : "";
+  status.textContent = r.presentation.statusLabel;
+  $("result").textContent = r.presentation.outcomeLabel ?? "";
   $("pause").hidden = !["queued", "running", "waiting"].includes(r.status);
   $("resume").hidden = !["paused", "pausing", "interrupted"].includes(r.status);
   $("cancel").hidden = finished.has(r.status);
@@ -304,7 +295,7 @@ function renderHeader() {
   outcome.replaceChildren();
   if (r.taskOutcome) {
     outcome.className = `outcome ${r.taskOutcome.decision}`;
-    outcome.append(el("strong", "", outcomeNames[r.taskOutcome.decision]), el("p", "", r.taskOutcome.reason));
+    outcome.append(el("strong", "", r.presentation.outcomeLabel), el("p", "", r.taskOutcome.reason));
     if (r.taskOutcome.evidence.length) {
       const details = el("details");
       details.append(el("summary", "", `Доказательства: ${r.taskOutcome.evidence.length}`), el("pre", "", JSON.stringify(r.taskOutcome.evidence, null, 2)));
@@ -925,6 +916,7 @@ async function refreshSnapshot() {
     state.graph ??= run.entryGraph;
     const signature = JSON.stringify({
       ...run,
+      presentation: { ...run.presentation, liveness: { ...run.presentation.liveness, observedAt: null } },
       heartbeatAt: null,
       updatedAt: finished.has(run.status) ? run.updatedAt : null,
     });
@@ -946,7 +938,9 @@ async function refreshRuns() {
   try {
     const data = await api("runs");
     state.runs = data.runs;
-    const signature = JSON.stringify(data);
+    const signature = JSON.stringify({ ...data, runs: data.runs.map(run => ({ ...run,
+      presentation: { ...run.presentation, liveness: { ...run.presentation.liveness, observedAt: null } },
+    })) });
     if (signature !== state.listSignature) {
       state.listSignature = signature;
       renderRuns();

@@ -126,15 +126,14 @@ export async function startGraphServer(
           runs: store
             .listRuns()
             .reverse()
-            .map((run) => ({
-              id: run.id,
-              name: run.plan.workflow.name,
-              status: run.status,
-              taskOutcome: run.taskOutcome ?? null,
-              createdAt: run.createdAt,
-              cwd: run.cwd,
-              usage: summarizeUsage(store.listActivations(run.id)),
-            })),
+            .map((saved) => {
+              const { run, activations, presentation } = controller.snapshot(saved.id);
+              return {
+                id: run.id, name: run.plan.workflow.name, status: run.status,
+                taskOutcome: presentation.taskOutcome, presentation,
+                createdAt: run.createdAt, cwd: run.cwd, usage: summarizeUsage(activations),
+              };
+            }),
         });
         return;
       }
@@ -144,7 +143,7 @@ export async function startGraphServer(
           json({ error: "Select a run" }, 400);
           return;
         }
-        const observed = controller.observe(id);
+        const observed = controller.snapshot(id);
         let cache = activityCache.get(id);
         if (!cache) {
           cache = { cursor: 0, activity: new Map() };
@@ -156,9 +155,10 @@ export async function startGraphServer(
         json({
           ...graphSnapshot(
             observed.run,
-            store.listActivations(id),
+            observed.activations,
             cache.activity,
             store.waits(id),
+            observed.presentation,
           ),
           supervisorAlive: observed.supervisorAlive,
           workersAlive: observed.workersAlive,

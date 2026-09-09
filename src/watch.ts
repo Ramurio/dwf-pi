@@ -1,12 +1,12 @@
 import { parseArgs } from "node:util";
 import { emitKeypressEvents } from "node:readline";
 import { setTimeout as sleep } from "node:timers/promises";
-import { RunStore } from "./run-store.js";
+import { RunController } from "./run-controller.js";
 import { defaultStorePath } from "./service.js";
 import { renderRun, terminalText } from "./terminal.js";
 import { collectActivity, MonitorLog, monitorBody, renderDashboard, type MonitorView, type WorkerActivity } from "./monitor.js";
 
-let store: RunStore | undefined;
+let controller: RunController | undefined;
 const stop = new AbortController();
 const detach = () => stop.abort();
 let drawing = false, raw = false, previousRaw = false;
@@ -30,7 +30,8 @@ try {
     process.stdout.write("Usage: dynamicwf watch --run <id> [--store state.sqlite] [--once] [--graph] [--plain]\n1 Now · 2 History · 3 Graph · 4 Tokens · arrows/PgUp/PgDn scroll · q/Ctrl-C detach\n--once: compact snapshot; --graph --once: full graph; --plain: append-only changes.\nThe workflow continues when you close the monitor.\n");
   } else {
     if (!values.run) throw new Error("Specify --run <id>; use --help");
-    store = new RunStore(values.store ?? defaultStorePath());
+    controller = new RunController(values.store ?? defaultStorePath());
+    const store = controller.store;
     process.on("SIGINT", detach);
     process.on("SIGTERM", detach);
     process.stdout.on("error", pipeError);
@@ -52,15 +53,14 @@ try {
     let previous = "", cursor = 0;
     const activity = new Map<string, WorkerActivity>(), log = new MonitorLog();
     while (!stop.signal.aborted) {
-      const run = store.get(values.run);
-      const activations = store.listActivations(run.id);
+      const { run, activations, presentation } = controller.snapshot(values.run);
       const events = store.events(run.id, cursor);
       if (events.length) cursor = events.at(-1)!.seq;
       collectActivity(events, activity);
       if (values.once || tty) {
         offset = Math.min(offset, Math.max(0, monitorBody(run, activations, { view, activity }).length - Math.max(0, (process.stdout.rows || 25) - 9)));
-        const rendered = values.once && values.graph ? renderRun(run, activations) : renderDashboard(run, activations, {
-          width: Math.max(1, (process.stdout.columns || 101) - 1), height: Math.max(4, (process.stdout.rows || 25) - 1), view, offset, activity,
+        const rendered = values.once && values.graph ? renderRun(run, activations, presentation) : renderDashboard(run, activations, {
+          width: Math.max(1, (process.stdout.columns || 101) - 1), height: Math.max(4, (process.stdout.rows || 25) - 1), view, offset, activity, presentation,
         });
         if (rendered !== previous) {
           if (drawing) process.stdout.write("\u001b[H\u001b[2J");
@@ -68,7 +68,7 @@ try {
           previous = rendered;
         }
       } else {
-        const lines = log.update(run, activations);
+        const lines = log.update(run, activations, presentation);
         if (lines.length) process.stdout.write(`${lines.join("\n")}\n`);
       }
       if (values.once) break;
@@ -87,5 +87,5 @@ try {
   process.off("SIGTERM", detach);
   if (raw) { process.stdin.off("keypress", onKey); process.stdin.setRawMode(previousRaw); process.stdin.pause(); }
   if (drawing) process.stdout.write("\u001b[?25h\u001b[?1049l");
-  store?.close();
+  controller?.close();
 }

@@ -10,7 +10,7 @@
 | --- | --- | --- |
 | Результаты | Явные outcome, причина, доказательства; rejected не становится tested preset | Реализовано и проверено: root finish, отдельный outcome, legacy unclassified, запрет непринятых presets; evidence пока объявленные данные, их привязка к artifacts — отдельная строка |
 | Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Реализовано и проверено: await, run.waits/resolve, JSON-форма, idempotency, pause/resume, SIGKILL и worktree reattach; см. outcomes-and-waits.md |
-| Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Не начато |
+| Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Реализовано: controller.snapshot + projectRun, включая browser list и watch; проверка процессов отдельно от heartbeat, см. observation.md |
 | Usage | Учёт каждого ответа, cache/reasoning, попытки, dedup, отмена/ошибки, раскрытие сумм | Backend/API/UI реализованы; 65 targeted tests и браузерный fixture, см. usage.md. Общая приёмка с будущим recovery остаётся обязательной |
 | Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | Не начато |
 | Артефакты | Snapshot/digest, версии критериев, применимость checks/reviews, diff | Не начато |
@@ -58,7 +58,7 @@ supervisor в worktree; повтор start; patch после prepare; конфл
   за 95,7 секунды; `/tmp/dynamicwf-usage-routes-full-20260910.log`.
   Нестабильность обычного параллельного прогона этим не считается исправленной.
 
-Следующий блок: общая проекция наблюдения и трасса переходов. Остальные строки
+Следующий блок: трасса переходов и причины маршрутизации. Остальные строки
 сохраняют полный обязательный объём; завершённые изменения не означают завершение
 общего goal.
 
@@ -80,6 +80,26 @@ golden v1 fixture проверяет исходные байты/hash и зап�
 Native browser QA: неверный тип, сохранение черновика при паузе, answer→pause→resume,
 rejected с причиной и evidence; без моделей и пользовательского journal.
 
-Общая liveness-проекция, certified artifact evidence, schema-driven формы вместо
+Certified artifact evidence, schema-driven формы вместо
 JSON-поля, retry/reconciliation и нестабильность параллельного тестового запуска
 не объявлены выполненными этим этапом.
+
+### Общая проекция наблюдения
+
+`projectRun` связывает outcome, активные/ждущие activation keys и отдельные факты
+о процессах. Watch больше не оставляет устаревший running до обращения из другого
+клиента. Service, browser list/snapshot и terminal используют controller.snapshot.
+Clock-only polling не вызывает переотрисовку формы и новый append-only log.
+Native QA подтвердил interrupted после SIGKILL, сохранение вводимого ответа и
+продолжение того же run до rejected. Подробности и границы: observation.md.
+
+Полный последовательный прогон выявил отдельную гонку инициализации SQLite:
+**233/234**, `database is locked` у одного из 24 CLI, журнал
+`/tmp/dynamicwf-observation-full-20260910.log`. Вынесена общая transactional schema
+initialization с закрытием соединения после BUSY и ограниченным повтором только
+инициализации. После исправления **17/17** store tests и **2/2** проверок реального
+lock/rollback прошли. После всех изменений обычный параллельный `npm test` прошёл:
+**236/236**, 57,6 секунды, без cancelled; typecheck также прошёл.
+`/tmp/dynamicwf-observation-sqlite-parallel-20260910.log`.
+Прежний incomplete-stdin timeout в этом прогоне не повторился; его отдельная
+причина не локализована и не объявлена исправленной одним успешным прогоном.

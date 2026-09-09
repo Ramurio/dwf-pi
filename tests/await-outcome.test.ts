@@ -10,6 +10,7 @@ import { WorkflowService } from "../src/service.js";
 import { PresetLibrary } from "../src/presets.js";
 import { validateWorkflow, type Expr, type Node, type WorkflowDefinition } from "../src/graph.js";
 import { verifyExecutionPlan } from "../src/execution-plan.js";
+import { fileURLToPath } from "node:url";
 import { startGraphServer } from "../src/graph-view/server.js";
 import { graphSnapshot } from "../src/graph-view/model.js";
 import { renderDashboard } from "../src/monitor.js";
@@ -86,7 +87,11 @@ test("await survives supervisor death and service replacement; resolving resumes
     const request = c.store.waits(run.id)[0]!;
     assert.equal(request.status, "open"); assert.deepEqual(request.input, { criteria: "evidence" });
     process.kill(waiting.supervisorPid!, "SIGKILL");
-    await waitFor(c, run.id, "interrupted");
+    // Watch is the first observer after the crash; it must not report stale running/waiting.
+    const watched = execFileSync(process.execPath, ["--import", import.meta.resolve("tsx"), fileURLToPath(new URL("../src/watch.ts", import.meta.url)),
+      "--run", run.id, "--store", filename, "--once"], { encoding: "utf8", timeout: 10_000, stdio: ["ignore", "pipe", "pipe"] });
+    assert.match(watched, /ПРЕРВАН/);
+    assert.equal(c.store.get(run.id).status, "interrupted");
     const service = new WorkflowService(filename);
     try {
       await assert.rejects(service.dispatch("run.resolve", { id: run.id, waitId: request.id, response: { allow: "yes" } }), /allow must be boolean/);
@@ -218,6 +223,16 @@ test("browser resolves the frozen contract, rejects foreign origin and malformed
     try {
       const state = await snapshot(), wait = state.waits[0];
       assert.equal(state.status, "waiting"); assert.deepEqual(state.activeKeys, []);
+      assert.equal(state.presentation.liveness.state, "supervised");
+      assert.equal(state.presentation.waitingKeys.length, 1);
+      const service = new WorkflowService(filename);
+      try {
+        const status = await service.dispatch("run.status", { id: run.id }) as any;
+        const normalized = (p: any) => ({ ...p, liveness: { ...p.liveness, observedAt: null } });
+        assert.deepEqual(normalized(status.presentation), normalized(state.presentation));
+        const list = await (await fetch(`${server.url}runs`)).json() as any;
+        assert.deepEqual(normalized(list.runs[0].presentation), normalized(state.presentation));
+      } finally { service.close(); }
       assert.equal(state.graphs[0].nodes[0].status, "waiting");
       assert.deepEqual(wait.responseSchema, responseSchema);
       const post = (response: unknown, h = headers, extra = {}) => fetch(`${server.url}resolve`, {

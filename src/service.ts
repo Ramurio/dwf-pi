@@ -108,17 +108,17 @@ export class WorkflowService {
         const workflow = this.getDrafts().get(id);
         if (tool === "workflow.prepare") return prepareExecutionPlan(workflow, { ...options, cwd });
         const run = await this.getController().start(workflow, Object.hasOwn(input, "input") ? input.input as Json : null, cwd, options);
-        return publicRunSummary(run);
+        return publicObservation(this.getController().snapshot(run.id));
       }
       case "run.list": {
         object(request, []);
         const controller = this.getController();
-        return controller.store.listRuns().map(run => publicObservation(controller.observe(run.id)));
+        return controller.store.listRuns().map(run => publicObservation(controller.snapshot(run.id)));
       }
       case "run.status": case "run.inspect": {
         const input = object(request, ["id"]);
         const controller = this.getController();
-        const observed = controller.observe(identifier(input.id));
+        const observed = controller.snapshot(identifier(input.id));
         const summary = publicObservation(observed);
         return tool === "run.status" ? summary : {
           ...summary, input: observed.run.input, workflow: observed.run.plan.workflow,
@@ -130,7 +130,7 @@ export class WorkflowService {
         const id = identifier(input.id);
         const after = input.after === undefined ? 0 : cursor(input.after);
         const controller = this.getController();
-        controller.observe(id); // Distinguish an unknown run from an empty event page; reconcile dead processes.
+        controller.snapshot(id); // Distinguish an unknown run from an empty event page; reconcile dead processes.
         const events = controller.store.events(id, after).map(publicEvent);
         return { events, nextAfter: events.at(-1)?.seq ?? after };
       }
@@ -148,12 +148,12 @@ export class WorkflowService {
         const id = identifier(input.id);
         const controller = this.getController();
         await controller.control(id, tool.slice(4) as "pause" | "resume" | "cancel");
-        return publicObservation(controller.observe(id));
+        return publicObservation(controller.snapshot(id));
       }
       case "run.waits": {
         const input = object(request, ["id"]);
         const controller = this.getController(), id = identifier(input.id);
-        return { ...publicObservation(controller.observe(id)), waits: controller.store.waits(id) };
+        return { ...publicObservation(controller.snapshot(id)), waits: controller.store.waits(id) };
       }
       case "run.resolve": {
         const input = object(request, ["id", "waitId", "response", "resolvedBy"]);
@@ -161,7 +161,7 @@ export class WorkflowService {
         const controller = this.getController(), id = identifier(input.id);
         const wait = await controller.resolve(id, identifier(input.waitId), input.response as Json,
           input.resolvedBy === undefined ? "client" : nonemptyString(input.resolvedBy, "resolvedBy"));
-        return { ...publicObservation(controller.observe(id)), wait };
+        return { ...publicObservation(controller.snapshot(id)), wait };
       }
       case "preset.save": {
         const input = object(request, ["id", "name", "scope", "cwd"]);
@@ -199,7 +199,7 @@ export class WorkflowService {
           const record = await library.read(name, revision);
           if (tool === "preset.inspect") return { ...presetSummary(record), scope: current, directory: library.root, plan: record.plan };
           const run = await this.getController().startPrepared(record.plan, Object.hasOwn(input, "input") ? input.input as Json : null, cwd);
-          return { ...publicRunSummary(run), preset: { name, scope: current, revision: record.revision } };
+          return { ...publicObservation(this.getController().snapshot(run.id)), preset: { name, scope: current, revision: record.revision } };
         }
         throw new Error(`Preset not found: ${name}`);
       }
@@ -236,8 +236,8 @@ export function publicRunSummary(run: RunRecord) {
     ...(run.output === undefined ? {} : { output: run.output }), ...(run.error === undefined ? {} : { error: run.error }),
   };
 }
-function publicObservation(observed: ReturnType<RunController["observe"]>) {
-  return { ...publicRunSummary(observed.run), supervisorAlive: observed.supervisorAlive, workersAlive: observed.workersAlive };
+function publicObservation(observed: ReturnType<RunController["snapshot"]>) {
+  return { ...publicRunSummary(observed.run), supervisorAlive: observed.supervisorAlive, workersAlive: observed.workersAlive, presentation: observed.presentation };
 }
 function publicActivation(record: ActivationRecord) {
   const { ownerToken: _, metadata, ...fields } = record;

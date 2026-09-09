@@ -9,6 +9,7 @@ import type { ExecutionPlan } from "./execution-types.js";
 import type { Json } from "./graph.js";
 import { assertJson } from "./output-schema.js";
 import { RunStore, type RunRecord } from "./run-store.js";
+import { projectRun } from "./observation.js";
 
 const supervisorPath = fileURLToPath(new URL("./supervisor.ts", import.meta.url));
 function commandLine(pid: number): string | undefined {
@@ -34,6 +35,14 @@ export class RunController {
     this.store = new RunStore(this.filename);
   }
   close(): void { this.store.close(); }
+  snapshot(id: string) {
+    const observed = this.observe(id), activations = this.store.listActivations(id);
+    const presentation = projectRun(observed.run, activations, {
+      supervisorAlive: observed.supervisorAlive, workersAlive: observed.workersAlive, observedAt: Date.now(),
+      launchPending: observed.run.ownerToken !== null && observed.run.supervisorPid === null && !observed.supervisorAlive,
+    });
+    return { ...observed, activations, presentation };
+  }
   directory(id: string): string { return join(dirname(this.filename), "runs", id); }
   async start(workflow: unknown, input: Json, cwd: string, options: Omit<PrepareExecutionOptions, "cwd"> = {}): Promise<RunRecord> {
     const workspace = await realpath(cwd);
