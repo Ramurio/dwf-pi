@@ -8,6 +8,7 @@ import ts from "typescript";
 import { compileWorkflow } from "../src/compiler.js";
 import type { Expr, Graph, Json, WorkflowDefinition } from "../src/graph.js";
 import type { RuntimeContext, WorkflowRuntime } from "../src/runtime-contract.js";
+import { chooseEdge } from "../src/expressions.js";
 
 const literal = (value: Json): Expr => ({ op: "literal", value });
 const ref = (...path: string[]): Expr => ({ op: "ref", path });
@@ -43,6 +44,7 @@ async function load(t: TestContext, workflow: WorkflowDefinition) {
 function recorder(agent?: WorkflowRuntime["agent"], check?: WorkflowRuntime["check"]) {
   const steps: RuntimeContext[] = [];
   const runtime: WorkflowRuntime = {
+    route: (context, edges, scope) => Effect.try(() => chooseEdge(context.nodeId, edges, scope)),
     step(context, work) { return Effect.suspend(() => { steps.push(structuredClone(context)); return work(); }); },
     agent: agent ?? (() => Effect.fail(new Error("Unexpected agent node"))),
     worktree: () => Effect.fail(new Error("Unexpected worktree node")),

@@ -159,6 +159,7 @@ export async function startGraphServer(
             cache.activity,
             store.waits(id),
             observed.presentation,
+            store.transitionSummary(id),
           ),
           supervisorAlive: observed.supervisorAlive,
           workersAlive: observed.workersAlive,
@@ -170,6 +171,12 @@ export async function startGraphServer(
         if (!id) throw new Error("Select a run");
         store.get(id);
         json(store.usageReports(id, Number(url.searchParams.get("after") ?? 0), 100));
+        return;
+      }
+      if (name === "trace") {
+        const id = url.searchParams.get("id") ?? runId;
+        if (!id) throw new Error("Select a run");
+        json({ planHash: store.get(id).plan.hash, summary: store.transitionSummary(id), ...store.transitions(id, Number(url.searchParams.get("after") ?? 0), 100) });
         return;
       }
       const body = files.get(name);

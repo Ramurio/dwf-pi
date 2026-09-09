@@ -1,4 +1,4 @@
-import type { ActivationRecord, RunRecord, WaitRecord } from "../run-store.js";
+import type { ActivationRecord, RunRecord, WaitRecord, RunStore } from "../run-store.js";
 import { activationUsage, summarizeUsage } from "../usage.js";
 import { activationPath, type WorkerActivity } from "../monitor.js";
 import { activationState, projectRun } from "../observation.js";
@@ -10,6 +10,7 @@ export function graphSnapshot(
   activity: ReadonlyMap<string, WorkerActivity> = new Map(),
   waits: readonly WaitRecord[] = [],
   presentation = projectRun(run, records),
+  trace: ReturnType<RunStore["transitionSummary"]> = { supported: false, count: 0, failed: 0, lastSeq: 0, edges: [] },
 ) {
   return {
     cwd: run.cwd,
@@ -22,6 +23,7 @@ export function graphSnapshot(
     heartbeatAt: run.heartbeatAt,
     taskOutcome: presentation.taskOutcome,
     presentation,
+    trace,
     waits,
     accepted: presentation.accepted,
     activeKeys: presentation.activeKeys,
@@ -82,7 +84,9 @@ export function graphSnapshot(
           })),
         };
       }),
-      edges: graph.edges.map((edge) => ({
+      edges: graph.edges.map((edge, index) => ({
+        index,
+        traversals: trace.edges.filter(e => e.graphId === id && e.edgeIndex === index),
         from: edge.from,
         to: edge.to,
         conditional: Boolean(edge.when),

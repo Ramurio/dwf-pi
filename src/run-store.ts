@@ -8,6 +8,7 @@ import { parseUsage, sumTokenUsage, type TokenUsage } from "./usage.js";
 import { assertJson, createOutputValidator } from "./output-schema.js";
 import { explicitOutcome, legacyOutcome, type TaskOutcome, type TaskDecision } from "./task-outcome.js";
 import { isDeepStrictEqual } from "node:util";
+import type { RoutingDecision } from "./expressions.js";
 
 export type RunStatus = "queued" | "running" | "waiting" | "pausing" | "paused" | "cancelling" | "cancelled" | "succeeded" | "failed" | "interrupted";
 export type DesiredRunStatus = "running" | "paused" | "cancelled";
@@ -45,6 +46,7 @@ export interface ActivationRecord {
   metadata: ActivationMetadata;
 }
 export interface RunEvent { seq: number; runId: string; type: string; payload: Json; at: number }
+export interface TransitionRecord { seq: number; runId: string; key: string; context: RuntimeContext; attempt: number; at: number; decision: RoutingDecision }
 export interface WaitRecord {
   id: string; runId: string; key: string; reason: string; input: Json; responseSchema: Record<string, unknown>;
   status: "open" | "resolved"; createdAt: number; resolvedAt: number | null; resolvedBy: string | null; response?: Json;
@@ -105,6 +107,12 @@ export class RunStore {
         UNIQUE(run_id, activation_key),
         FOREIGN KEY(run_id, activation_key) REFERENCES workflow_activations(run_id, activation_key)
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS workflow_transitions (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, activation_key TEXT NOT NULL,
+        attempt INTEGER NOT NULL, at INTEGER NOT NULL, decision TEXT NOT NULL,
+        UNIQUE(run_id,activation_key), FOREIGN KEY(run_id,activation_key) REFERENCES workflow_activations(run_id,activation_key)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS workflow_transitions_cursor ON workflow_transitions(run_id,seq);
     `);
   }
   close(): void { this.database.close(); }
@@ -357,6 +365,52 @@ export class RunStore {
   completed(id: string, key: string): { output: Json } | undefined {
     const record = this.getActivation(id, key);
     return record?.status === "succeeded" ? { output: record.output! } : undefined;
+  }
+  transition(id: string, key: string): TransitionRecord | undefined {
+    const row = this.database.prepare("SELECT t.*,a.context FROM workflow_transitions t JOIN workflow_activations a ON a.run_id=t.run_id AND a.activation_key=t.activation_key WHERE t.run_id=? AND t.activation_key=?").get(id, key);
+    return row ? { seq: Number(row.seq), runId: id, key, context: JSON.parse(String(row.context)) as RuntimeContext,
+      attempt: Number(row.attempt), at: Number(row.at), decision: JSON.parse(String(row.decision)) as RoutingDecision } : undefined;
+  }
+  recordTransition(id: string, token: string, key: string, decision: RoutingDecision): TransitionRecord {
+    assertJson(decision);
+    return this.transaction(() => {
+      const run = this.owned(id, token), activation = this.getActivation(id, key);
+      if (!activation || activation.status !== "succeeded") throw new Error("Routing requires a completed source activation");
+      const existing = this.transition(id, key);
+      if (existing) {
+        if (!isDeepStrictEqual(existing.decision, decision)) throw new Error("Conflicting persisted routing decision");
+        return existing;
+      }
+      const graph = run.plan.workflow.graphs[activation.context.graphId];
+      if (!graph || decision.from !== activation.context.nodeId || !graph.nodes.some(n => n.id === decision.from && !["end", "finish"].includes(n.kind))) throw new Error("Routing source is absent or terminal");
+      if (decision.edgeIndex !== null) {
+        const edge = graph.edges[decision.edgeIndex];
+        if (!edge || edge.from !== decision.from || edge.to !== decision.to) throw new Error("Routing edge is absent from frozen graph");
+      } else if (decision.to !== null || !decision.error) throw new Error("Routing requires a selected edge or failure");
+      this.database.prepare("INSERT INTO workflow_transitions(run_id,activation_key,attempt,at,decision) VALUES(?,?,?,?,?)")
+        .run(id, key, activation.attempt, Date.now(), JSON.stringify(decision));
+      const record = this.transition(id, key)!;
+      this.event(id, "route.decided", JSON.parse(JSON.stringify(record)) as Json);
+      return record;
+    });
+  }
+  transitions(id: string, after = 0, limit = 100): { records: TransitionRecord[]; nextAfter: number; hasMore: boolean } {
+    this.get(id);
+    if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error("Invalid transition cursor/limit");
+    const rows = this.database.prepare("SELECT activation_key FROM workflow_transitions WHERE run_id=? AND seq>? ORDER BY seq LIMIT ?").all(id, after, limit + 1);
+    const records = rows.slice(0, limit).map(row => this.transition(id, String(row.activation_key))!);
+    return { records, nextAfter: records.at(-1)?.seq ?? after, hasMore: rows.length > limit };
+  }
+  transitionSummary(id: string) {
+    const run = this.get(id);
+    const rows = this.database.prepare(`SELECT json_extract(a.context,'$.graphId') AS graph_id,
+      json_extract(a.context,'$.scope') AS scope,json_extract(t.decision,'$.edgeIndex') AS edge_index,
+      COUNT(*) AS count,MAX(t.seq) AS last_seq FROM workflow_transitions t JOIN workflow_activations a
+      ON a.run_id=t.run_id AND a.activation_key=t.activation_key WHERE t.run_id=? GROUP BY graph_id,scope,edge_index`).all(id);
+    return { supported: run.plan.compilerVersion === "dynamicwf-effect-v3", count: rows.reduce((n, r) => n + Number(r.count), 0),
+      failed: rows.filter(r => r.edge_index === null).reduce((n, r) => n + Number(r.count), 0),
+      lastSeq: rows.reduce((n, r) => Math.max(n, Number(r.last_seq)), 0),
+      edges: rows.filter(r => r.edge_index !== null).map(r => ({ graphId: String(r.graph_id), scope: String(r.scope), edgeIndex: Number(r.edge_index), count: Number(r.count) })) };
   }
   listActivations(id: string): ActivationRecord[] {
     return this.database.prepare("SELECT activation_key FROM workflow_activations WHERE run_id=? ORDER BY started_at, activation_key").all(id)

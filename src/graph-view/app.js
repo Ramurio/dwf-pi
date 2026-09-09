@@ -1,7 +1,9 @@
 import { layoutGraph } from "./layout.js";
-import { UsagePages } from "./usage-pages.js";
+import { UsagePages, TracePages } from "./usage-pages.js";
 
 const usagePages = new UsagePages();
+const tracePages = new TracePages();
+const routingLabels = { true: "Условие выполнено", false: "Условие не выполнено", "not-evaluated": "Не проверялось", fallback: "Выбран запасной переход", error: "Ошибка проверки" };
 const waitDrafts = new Map();
 
 const $ = (id) => document.getElementById(id);
@@ -53,6 +55,7 @@ const state = {
   graph: null,
   scope: "",
   node: null,
+  transition: null,
   signature: "",
   listSignature: "",
   filter: "all",
@@ -326,6 +329,7 @@ function renderPanel() {
   if (state.tab === "graph") renderGraph();
   else if (state.tab === "now") renderNow();
   else if (state.tab === "history") renderHistory();
+  else if (state.tab === "trace") renderTrace();
   else renderTokens();
   renderInspector();
   if (editingWait) {
@@ -334,6 +338,7 @@ function renderPanel() {
   }
 }
 function selectNode(graphId, id) {
+  state.transition = null;
   state.graph = graphId;
   state.node = id;
   renderPanel();
@@ -402,6 +407,9 @@ function renderInspector() {
       );
   }
   const outgoing = selectedGraph().edges.filter((e) => e.from === node.id);
+  if (state.transition?.context.graphId === state.graph && state.transition.decision.from === node.id) {
+    aside.append(el("h3", "", "ВЫБРАННЫЙ ПЕРЕХОД"), transitionDetails(state.transition));
+  }
   if (outgoing.length) {
     aside.append(el("h3", "", "ДАЛЬШЕ ПО ГРАФУ"));
     for (const edge of outgoing) {
@@ -564,10 +572,11 @@ function renderGraph() {
   }
   svg.append(defs);
   for (const edge of layout.edges) {
+    const traversalCount = (edge.traversals ?? []).filter(t => !state.scope || t.scope === state.scope).reduce((n, t) => n + t.count, 0);
     // A small background stroke makes a crossing distinguishable from a junction.
     svg.append(svgEl("path", { class: "edge-underlay", d: edge.path }));
     const path = svgEl("path", {
-      class: `edge${edge.loop ? " loop" : ""}`,
+      class: `edge${edge.loop ? " loop" : ""}${traversalCount ? " traversed" : ""}${state.transition?.context.graphId === state.graph && JSON.stringify(state.transition.context.scope) === state.scope && state.transition.decision.edgeIndex === edge.index ? " trace-selected" : ""}`,
       d: edge.path,
       "data-edge-index": edge.index,
       "marker-end": `url(#${edge.loop ? "loop-arrow" : "arrow"})`,
@@ -576,7 +585,7 @@ function renderGraph() {
       svgEl(
         "title",
         {},
-        `${edge.from} → ${edge.to} · переход ${edge.order}${edge.conditional ? ` · ${JSON.stringify(edge.condition)}` : " · без условия"}`,
+        `${edge.from} → ${edge.to} · ребро #${edge.index + 1} · исходящий переход ${edge.order} · записанных выборов: ${traversalCount}${edge.conditional ? ` · ${JSON.stringify(edge.condition)}` : " · без условия"}`,
       ),
     );
     svg.append(path);
@@ -809,6 +818,53 @@ function renderHistory() {
   for (const a of records) panel.append(taskRow(a));
   if (!records.length)
     panel.append(el("p", "muted", "Таких результатов пока нет."));
+}
+function transitionDetails(record) {
+  const block = el("div", "transition-details"), decision = record.decision;
+  block.append(el("p", "", decision.error ?? (decision.reason === "condition" ? "Выбрано первое выполненное условие." : "Условия не выбрали путь; использован запасной переход.")));
+  for (const evaluation of decision.evaluations) {
+    const details = el("details");
+    details.append(el("summary", "", `Ребро #${evaluation.edgeIndex + 1} → ${evaluation.to}: ${routingLabels[evaluation.result]}`));
+    const edge = state.run.graphs.find(g => g.id === record.context.graphId)?.edges[evaluation.edgeIndex];
+    details.append(el("pre", "", edge?.condition ? JSON.stringify(edge.condition, null, 2) : "Безусловный запасной переход"));
+    block.append(details);
+  }
+  return block;
+}
+function renderTrace() {
+  const panel = $("content-panel"), id = state.id, summary = state.run.trace, page = tracePages.get(id);
+  panel.replaceChildren(sectionHeading("Фактические переходы"));
+  if (!summary.supported) {
+    panel.append(el("p", "muted", "Этот план создан до записи трассы. Исторические переходы неизвестны; цвет узлов их не доказывает.")); return;
+  }
+  panel.append(el("p", "muted", `Записано решений: ${summary.count} · ошибок маршрутизации: ${summary.failed}. Выбор ребра не означает, что следующий узел уже запущен.`));
+  const load = async () => {
+    const request = tracePages.load(id, async (runId, cursor) => {
+      const data = await api(`trace?id=${encodeURIComponent(runId)}&after=${cursor}`);
+      return { ...data, reports: data.records };
+    });
+    if (state.id === id && state.tab === "trace") renderTrace();
+    await request;
+    if (state.id === id && state.tab === "trace") renderTrace();
+  };
+  if (!page.loading && !page.error && (!page.opened || !page.hasMore && summary.lastSeq > page.cursor)) { void load(); return; }
+  if (page.loading) panel.append(el("p", "muted", "Загружаем переходы…"));
+  if (page.error) panel.append(el("p", "notice", page.error));
+  for (const record of page.reports) {
+    const card = el("section", `trace-card${record.decision.error ? " routing-error" : ""}`);
+    card.append(el("h3", "", `${record.decision.from} → ${record.decision.to ?? "ошибка маршрутизации"}`),
+      el("p", "muted", `${record.context.graphId} · проход ${record.context.visit + 1} · попытка ${record.attempt} · ${date(record.at)}`),
+      el("div", "path", JSON.stringify(record.context.scope)), transitionDetails(record),
+      button("Показать источник на графе", () => {
+        state.graph = record.context.graphId; state.scope = JSON.stringify(record.context.scope); state.node = record.decision.from; state.transition = record;
+        setTab("graph");
+        const pos = layout.positions.get(record.decision.from);
+        if (pos && camera) { camera.x = pos.x + pos.width / 2 - camera.width / 2; camera.y = pos.y + pos.height / 2 - camera.height / 2; applyCamera(); }
+      }, "child-button"));
+    panel.append(card);
+  }
+  if (page.hasMore || page.error) panel.append(button(page.error ? "Повторить загрузку" : "Загрузить следующие переходы", () => void load(), "child-button"));
+  if (page.opened && !page.reports.length) panel.append(el("p", "muted", "Решений о переходе пока нет."));
 }
 function renderTokens() {
   const panel = $("content-panel"),

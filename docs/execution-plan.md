@@ -65,11 +65,13 @@ or extended arrays before schema validation can coerce or inspect them.
 
 ## Loading a persisted plan
 
-New plans use `dynamicwf-effect-v2` / `dynamicwf-runtime-v2`. This runtime also
-verifies and executes paired v1 plans by regenerating byte-identical v1 source.
+New plans use `dynamicwf-effect-v3` / `dynamicwf-runtime-v3` with durable routing.
+This runtime also verifies and executes paired v1/v2 plans by regenerating their
+byte-identical source. The v2 golden fixture predates routing (`034b270`).
 The golden fixture `tests/fixtures/legacy-v1-plan.json` was produced by the compiler
 at commit `4b4ae53`; it guards source/hash compatibility. V1 rejects new finish/await
-nodes. This is explicit compatibility for these two versions, not arbitrary rollback.
+nodes. V1/v2 plans do not gain fabricated historical routing records. This is
+explicit compatibility for these versions, not arbitrary rollback.
 
 `verifyExecutionPlan(value)` checks JSON structure, exact field sets, graph validity,
 agent coverage/configuration, output schemas, safe skill resource paths and hashes,

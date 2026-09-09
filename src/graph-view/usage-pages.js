@@ -1,10 +1,11 @@
 // @ts-check
 /** @typedef {import('../run-store.js').UsageRecord} UsageRecord */
-/** @typedef {{ reports: UsageRecord[], cursor: number, opened: boolean, loading: boolean, hasMore: boolean, error: string | null }} PageState */
+/** @template T @typedef {{ reports: T[], cursor: number, opened: boolean, loading: boolean, hasMore: boolean, error: string | null }} PageState */
 
 /** Browsing state survives snapshot redraws and requests finishing after a run switch. */
-export class UsagePages {
-  /** @type {Map<string, PageState>} */
+/** @template T */
+export class CursorPages {
+  /** @type {Map<string, PageState<T>>} */
   runs = new Map();
   /** @param {string} id */
   get(id) {
@@ -17,7 +18,7 @@ export class UsagePages {
   }
   /**
    * @param {string} id
-   * @param {(id: string, cursor: number) => Promise<{reports: UsageRecord[], nextAfter: number, hasMore: boolean}>} fetchPage
+   * @param {(id: string, cursor: number) => Promise<{reports: T[], nextAfter: number, hasMore: boolean}>} fetchPage
    */
   async load(id, fetchPage) {
     const page = this.get(id);
@@ -35,3 +36,7 @@ export class UsagePages {
     } finally { page.loading = false; }
   }
 }
+/** @extends {CursorPages<UsageRecord>} */
+export class UsagePages extends CursorPages {}
+/** @extends {CursorPages<import('../run-store.js').TransitionRecord>} */
+export class TracePages extends CursorPages {}

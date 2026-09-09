@@ -10,6 +10,8 @@ import { activationKey, RunStore, type RunRecord } from "./run-store.js";
 import { GitWorkspaces, parseWorkspaceSources, type GitOperationOptions, type WorkspaceRecord } from "./workspaces.js";
 import type { RuntimeContext, WorkflowRuntime } from "./runtime-contract.js";
 import { explicitOutcome } from "./task-outcome.js";
+import { explainEdge, ExpressionError, type ExpressionScope } from "./expressions.js";
+import type { Edge } from "./graph.js";
 
 const errorOf = (error: unknown) => error instanceof Error ? error : new Error(String(error));
 const slotKey = (context: RuntimeContext) => JSON.stringify([context.scope, context.graphId, context.nodeId]);
@@ -60,6 +62,16 @@ export class JournalRuntime implements WorkflowRuntime {
       const outcome = explicitOutcome(node.decision, reason, evidence);
       this.store.setActivationMetadata(this.run.id, this.token, activationKey(context), { taskOutcome: JSON.parse(JSON.stringify(outcome)) as Json });
       return value;
+    }, catch: errorOf });
+  }
+  route(context: RuntimeContext, edges: readonly Edge[], scope: ExpressionScope): Effect.Effect<string, Error> {
+    return Effect.try({ try: () => {
+      this.current();
+      const key = activationKey(context);
+      const decision = this.store.transition(this.run.id, key)?.decision ??
+        this.store.recordTransition(this.run.id, this.token, key, explainEdge(context.nodeId, edges, scope)).decision;
+      if (decision.error) throw new ExpressionError(decision.error);
+      return decision.to!;
     }, catch: errorOf });
   }
   wait(context: RuntimeContext, node: Extract<Node, { kind: "await" }>, reason: Json, input: Json): Effect.Effect<Json, Error> {

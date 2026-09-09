@@ -19,6 +19,10 @@ run(runtime: WorkflowRuntime, input: Json): Effect.Effect<Json, Error>
 - `end`: возвращает вычисленное value как результат graph invocation, без следующей стрелки.
 - `finish`: вычисляет reason/evidence/value, сохраняет решение через `runtime.finish` и завершает invocation.
 - `await`: вычисляет reason/input, вызывает `runtime.wait`; после сохраняемого ответа выбирает обычный edge.
+
+Начиная с compiler v3 каждый нетерминальный блок выбирает следующий edge через
+`runtime.route`: решение сохраняется до допуска следующего узла. Подробности —
+[routing-trace.md](routing-trace.md). V1/v2 source сохраняет прежний chooseEdge.
 - `subworkflow`: вызывает конкретную сгенерированную child graph function с её input.
 - `map`: требует массив items и вызывает child function через `Effect.forEach`. Результат — массив в порядке входных items, независимо от порядка завершения.
 - `parallel`: генерирует функции отдельных ветвей и `Effect.forEach`. Результат — объект, ключи которого равны child IDs; порядок включения соответствует порядку children.

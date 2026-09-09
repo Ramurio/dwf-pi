@@ -94,3 +94,33 @@ export function chooseEdge(nodeId: string, edges: readonly Edge[], scope: Expres
   if (fallback) return fallback.to;
   throw new ExpressionError(`No matching outgoing edge from ${nodeId}`);
 }
+
+export interface EdgeEvaluation { edgeIndex: number; to: string; result: "true" | "false" | "not-evaluated" | "fallback" | "error" }
+export interface RoutingDecision {
+  version: 1; from: string; edgeIndex: number | null; to: string | null;
+  reason: "condition" | "fallback" | "no-match" | "error"; evaluations: EdgeEvaluation[]; error: string | null;
+}
+/** Records evaluation order and short-circuiting without persisting raw input values. */
+export function explainEdge(nodeId: string, edges: readonly Edge[], scope: ExpressionScope): RoutingDecision {
+  const outgoing = edges.map((edge, edgeIndex) => ({ edge, edgeIndex })).filter(({ edge }) => edge.from === nodeId);
+  const trace: RoutingDecision = { version: 1, from: nodeId, edgeIndex: null, to: null, reason: "no-match", error: null,
+    evaluations: outgoing.map(({ edge, edgeIndex }) => ({ edgeIndex, to: edge.to, result: "not-evaluated" })) };
+  const fallbacks = outgoing.filter(({ edge }) => edge.when === undefined);
+  if (fallbacks.length > 1) { trace.reason = "error"; trace.error = `Multiple fallback edges from ${nodeId}`; return trace; }
+  for (const [i, { edge, edgeIndex }] of outgoing.entries()) {
+    if (edge.when === undefined) continue;
+    try {
+      const matched = boolean(evaluate(edge.when, scope));
+      trace.evaluations[i]!.result = matched ? "true" : "false";
+      if (matched) { trace.edgeIndex = edgeIndex; trace.to = edge.to; trace.reason = "condition"; return trace; }
+    } catch (error) {
+      trace.evaluations[i]!.result = "error"; trace.reason = "error";
+      trace.error = error instanceof Error ? error.message : "Condition evaluation failed"; return trace;
+    }
+  }
+  if (fallbacks[0]) {
+    const { edge, edgeIndex } = fallbacks[0]; trace.edgeIndex = edgeIndex; trace.to = edge.to; trace.reason = "fallback";
+    trace.evaluations.find(e => e.edgeIndex === edgeIndex)!.result = "fallback";
+  } else trace.error = `No matching outgoing edge from ${nodeId}`;
+  return trace;
+}

@@ -846,3 +846,10 @@ dialog .controls {
 .graph-node.attention .node-state {
   fill: #956916;
 }
+
+.edge.traversed { stroke: #267966; stroke-width: 3; }
+.edge.trace-selected { stroke: #2156ad; stroke-width: 4; }
+.trace-card { border: 1px solid #dce3e8; border-radius: 10px; padding: 16px; margin: 12px 0; background: #fff; }
+.trace-card.routing-error { border-color: #bc7368; }
+.transition-details details { margin: 8px 0; }
+.transition-details pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 280px; overflow: auto; }

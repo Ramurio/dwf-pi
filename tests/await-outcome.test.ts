@@ -15,7 +15,7 @@ import { startGraphServer } from "../src/graph-view/server.js";
 import { graphSnapshot } from "../src/graph-view/model.js";
 import { renderDashboard } from "../src/monitor.js";
 
-test("a v1 plan generated before this change retains its bytes/hash and executes on the v2 runtime", { timeout: 20_000 }, async () => {
+test("a v1 plan generated before this change retains its bytes/hash and executes on the current runtime", { timeout: 20_000 }, async () => {
   await fixture(async (c, directory) => {
     const saved = JSON.parse(await readFile(new URL("./fixtures/legacy-v1-plan.json", import.meta.url), "utf8"));
     const verified = verifyExecutionPlan(saved);

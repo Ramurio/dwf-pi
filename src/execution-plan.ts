@@ -70,6 +70,7 @@ export function verifyExecutionPlan(value: unknown): ExecutionPlan {
   const plan = object(value, "execution plan");
   keys(plan, ["version", "runtimeVersion", "compilerVersion", "workflow", "source", "sourceHash", "agents", "hash"], "execution plan");
   const compatible = plan.runtimeVersion === runtimeVersion && plan.compilerVersion === compilerVersion ||
+    plan.runtimeVersion === "dynamicwf-runtime-v2" && plan.compilerVersion === "dynamicwf-effect-v2" ||
     plan.runtimeVersion === "dynamicwf-runtime-v1" && plan.compilerVersion === "dynamicwf-effect-v1";
   if (plan.version !== 1 || !compatible) throw new Error("Unsupported execution plan/compiler/runtime version");
   const compiled = compileWorkflow(plan.workflow, plan.compilerVersion as CompilerVersion);

@@ -20,7 +20,7 @@ export const serviceToolNames = [
   "catalog.list", "catalog.describe", "catalog.models", "system.doctor", "workflow.schema", "workflow.create", "workflow.list", "workflow.inspect",
   "workflow.patch", "workflow.validate", "workflow.compile", "workflow.prepare", "run.start", "run.status",
   "run.list", "run.inspect", "run.events", "run.usage", "run.pause", "run.resume", "run.cancel",
-  "preset.save", "preset.list", "preset.inspect", "preset.run", "run.waits", "run.resolve",
+  "preset.save", "preset.list", "preset.inspect", "preset.run", "run.waits", "run.resolve", "run.trace",
 ] as const;
 export type ServiceToolName = typeof serviceToolNames[number];
 export type WorkflowServiceOptions = Omit<PrepareExecutionOptions, "cwd"> & { cwd?: string };
@@ -142,6 +142,12 @@ export class WorkflowService {
         const after = input.after === undefined ? 0 : cursor(input.after);
         const limit = input.limit === undefined ? 100 : cursor(input.limit);
         return { summary: summarizeUsage(controller.store.listActivations(id)), ...controller.store.usageReports(id, after, limit) };
+      }
+      case "run.trace": {
+        const input = object(request, ["id", "after", "limit"]), id = identifier(input.id);
+        const store = this.getController().store;
+        return { planHash: store.get(id).plan.hash, summary: store.transitionSummary(id),
+          ...store.transitions(id, input.after === undefined ? 0 : cursor(input.after), input.limit === undefined ? 100 : cursor(input.limit)) };
       }
       case "run.pause": case "run.resume": case "run.cancel": {
         const input = object(request, ["id"]);

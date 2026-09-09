@@ -32,6 +32,7 @@ pause/resume/cancel, durable journal, CLI/MCP, переносимый skill, т�
 - [Execution plan](docs/execution-plan.md), [журнал](docs/run-journal.md), [pi worker](docs/pi-worker.md)
 - [Явные результаты и сохраняемое ожидание](docs/outcomes-and-waits.md): `finish`, `await`, ответ из CLI/MCP/браузера и восстановление.
 - [Общая проекция состояния](docs/observation.md): одинаковые outcome, waiting и liveness в CLI/MCP/watch/browser.
+- [Фактические переходы](docs/routing-trace.md): причины выбора ветки, страницы трассы и связь с графом.
 - [Git worktree и интеграция](docs/workspaces.md), [live coding-проверка](docs/workspaces-live.md), [live MCP council](docs/council-live.md)
 
 ## Проверить локально

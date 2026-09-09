@@ -18,7 +18,7 @@
 | Authoring | Рецепты в обычный граф, агрегация коллекций, schemas и dataflow diagnostics | Не начато |
 | Симуляция | Публичный запуск сценариев с заданными outputs, отрицательные пути до inference | Не начато |
 | Старт | Адресуемый prepared plan, запуск именно его, idempotency повторной доставки | Не начато |
-| Browser | Обзор результата, трасса/причины, timeline/checkpoint, council, artifacts/diff, usage | Не начато |
+| Browser | Обзор результата, трасса/причины, timeline/checkpoint, council, artifacts/diff, usage | Outcome/await/usage и durable routing trace реализованы; timeline, council, artifacts/diff и общий обзор остаются |
 | Presets | Формы запуска, явное сохранение, версии/diff, копирование в draft | Не начато |
 | Browser navigation | Deep links, reload state, terminal handoff, project search, opt-in notifications | Не начато |
 | Graph readability | Раздельные порты/рёбра, обход узлов, подписи, стабильный обзор с раскрытием scopes | Маршруты/порты/подписи реализованы, 10 browser API/layout tests и in-app QA; обзор с раскрытием групп ещё не начат |
@@ -58,7 +58,7 @@ supervisor в worktree; повтор start; patch после prepare; конфл
   за 95,7 секунды; `/tmp/dynamicwf-usage-routes-full-20260910.log`.
   Нестабильность обычного параллельного прогона этим не считается исправленной.
 
-Следующий блок: трасса переходов и причины маршрутизации. Остальные строки
+Следующий блок: адресуемый prepared plan и идемпотентный запуск. Остальные строки
 сохраняют полный обязательный объём; завершённые изменения не означают завершение
 общего goal.
 
@@ -103,3 +103,20 @@ lock/rollback прошли. После всех изменений обычны�
 `/tmp/dynamicwf-observation-sqlite-parallel-20260910.log`.
 Прежний incomplete-stdin timeout в этом прогоне не повторился; его отдельная
 причина не локализована и не объявлена исправленной одним успешным прогоном.
+
+### Трасса маршрутизации
+
+Compiler/runtime v3 сохраняет фактически выбранное ребро, причину и результаты
+проверок (`true`/`false`/not-evaluated/fallback/error) по activation/scope/visit.
+Повторное восстановление использует существующее решение; gap между завершением
+действия и записью перехода не повторяет действие. V1/v2 source/hash сохранены,
+старые запуски явно сообщают отсутствие трассировки. CLI/MCP run.trace имеет cursor,
+summary и страницы; браузер связывает запись с конкретным source/scope и ребром.
+
+Проверены циклы, fan-out, ошибки маршрутизации, checkpoint gap, SIGKILL, dedup,
+атомарность с событием, пагинация, API/графовые счётчики и v2 golden plan.
+Native QA: empty trace→ответ→false/fallback→rejected, источник и условие на графе.
+Полный обычный параллельный `npm test`: **243/243**, 61,7 секунды, без cancelled;
+typecheck, browser JS syntax и skill validation прошли.
+`/tmp/dynamicwf-trace-full-20260910.log`. Контракт: routing-trace.md.
+Это основа будущих timeline/comparison, а не объявление их готовности.

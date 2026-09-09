@@ -67,6 +67,7 @@ persistent store path. Catalog/schema calls do not create a database.
 | `run.resume` | run `id` | Public state after resume request |
 | `run.cancel` | run `id` | Public state after cancellation request |
 | `run.waits` | run `id` | Observed public state and durable wait records |
+| `run.trace` | run `id`, optional `after`, `limit` | Durable routing records, summary, plan hash and exclusive cursor |
 | `run.resolve` | run `id`, `waitId`, `response`, optional `resolvedBy` | Persisted answer and observed state; same-answer retry is idempotent |
 
 Completed summaries include `taskOutcome` independently of technical status/output.

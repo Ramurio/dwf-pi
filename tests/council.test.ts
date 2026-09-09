@@ -9,6 +9,7 @@ import { prepareExecutionPlan } from "../src/execution-plan.js";
 import { loadGeneratedModule } from "../src/generated-module.js";
 import type { Json, WorkflowDefinition } from "../src/graph.js";
 import type { WorkflowRuntime } from "../src/runtime-contract.js";
+import { chooseEdge } from "../src/expressions.js";
 
 const perspectives = ["correctness", "verification", "maintainability", "requirements"] as const;
 type Perspective = typeof perspectives[number];
@@ -43,6 +44,7 @@ function votes(decisions: Decision[]): Record<Perspective, Vote> {
 function runtime(results: Record<Perspective, Vote>, onCall?: (perspective: Perspective, task: string, input: Record<string, Json>) => void): WorkflowRuntime {
   return {
     finish: (_context, _node, _reason, _evidence, value) => Effect.succeed(value),
+    route: (context, edges, scope) => Effect.try(() => chooseEdge(context.nodeId, edges, scope)),
     wait: () => Effect.fail(new Error("Unexpected await node")),
     step(_context, work) { return Effect.suspend(work); },
     agent(_context, _node, task, input) {
