@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dynamicwf · Workflows</title>
+    <link rel="stylesheet" href="style.css" />
+    <script type="module" src="app.js"></script>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-icon">⌘</span>
+        <div>dynamicwf<small>Рабочие процессы</small></div>
+      </div>
+      <div class="sidebar-heading">ЗАПУСКИ <span id="run-count">0</span></div>
+      <label class="search"
+        ><span>⌕</span
+        ><input
+          id="search"
+          placeholder="Найти запуск"
+          aria-label="Найти запуск"
+      /></label>
+      <nav id="runs" aria-label="Запуски"><p class="muted">Загрузка…</p></nav>
+      <div class="local"><i></i> Локально на этом компьютере</div>
+    </aside>
+    <main>
+      <header class="topbar">
+        <span>WORKFLOW MONITOR</span
+        ><span id="connection" role="status">Подключение…</span>
+      </header>
+      <div id="notice" class="notice" role="alert" hidden></div>
+      <section id="empty" class="empty" hidden>
+        <h1>Здесь появятся ваши запуски</h1>
+        <p>
+          Запусти workflow через агента со skill dynamic-workflows. Интерфейс
+          увидит его автоматически.
+        </p>
+      </section>
+      <section id="workspace" hidden>
+        <div class="run-heading">
+          <div>
+            <div class="eyebrow" id="run-id"></div>
+            <h1 id="run-name"></h1>
+            <div class="run-subtitle">
+              <span id="run-status" class="badge"></span
+              ><span id="result"></span><span id="cwd"></span>
+            </div>
+          </div>
+          <div class="controls">
+            <button id="pause">Ⅱ Пауза</button
+            ><button id="resume">▷ Продолжить</button
+            ><button id="cancel" class="danger">Отменить</button>
+          </div>
+        </div>
+        <div class="metrics" id="metrics"></div>
+        <nav class="tabs" aria-label="Разделы запуска">
+          <button data-tab="graph" aria-pressed="true">Граф</button
+          ><button data-tab="now">Сейчас <span id="active-count"></span></button
+          ><button data-tab="history">История</button
+          ><button data-tab="tokens">Токены</button>
+        </nav>
+        <div class="work-area">
+          <section class="surface">
+            <div id="graph-panel">
+              <div class="graph-toolbar">
+                <label
+                  >Граф
+                  <select
+                    id="graph-select"
+                    aria-label="Выбрать граф"
+                  ></select></label
+                ><select
+                  id="scope-select"
+                  aria-label="Ветка или вызов графа"
+                  hidden
+                ></select>
+                <div>
+                  <button id="zoom-out" aria-label="Уменьшить масштаб">−</button
+                  ><button id="zoom-in" aria-label="Увеличить масштаб">+</button
+                  ><button id="fit">Вместить</button>
+                </div>
+              </div>
+              <div class="canvas">
+                <svg
+                  id="graph"
+                  aria-label="Граф workflow"
+                  aria-description="Стрелки показывают возможные переходы, цвет блоков — состояние по журналу. Для масштаба используйте колесо, для перемещения перетаскивайте фон."
+                ></svg>
+              </div>
+              <div class="graph-legend">
+                <span><i class="running"></i>В работе</span
+                ><span><i class="succeeded"></i>Готово</span
+                ><span><i class="failed"></i>Ошибка</span
+                ><span><i class="unvisited"></i>Не запускался</span
+                ><span class="legend-note"
+                  >Колесо — масштаб · тяни, чтобы переместить</span
+                >
+              </div>
+            </div>
+            <div id="content-panel" hidden></div>
+          </section>
+          <aside
+            id="inspector"
+            class="inspector"
+            aria-label="Детали узла"
+          ></aside>
+        </div>
+      </section>
+    </main>
+    <dialog id="cancel-dialog">
+      <h2>Отменить запуск?</h2>
+      <p id="cancel-target"></p>
+      <p>
+        Активные workers будут остановлены. Продолжить этот запуск после отмены
+        нельзя.
+      </p>
+      <div class="controls">
+        <button id="cancel-back">Вернуться</button
+        ><button id="cancel-confirm" class="danger">Отменить workflow</button>
+      </div>
+    </dialog>
+  </body>
+</html>

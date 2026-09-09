@@ -9,7 +9,8 @@
 Работают графовый authoring, девять ролей, машинная генерация TS + Effect и отдельный
 supervisor с pi workers. Есть условия, циклы, динамический fan-out, вложенные графы,
 pause/resume/cancel, durable journal, CLI/MCP, переносимый skill, терминальный watch
-и проектные/глобальные пресеты. Граф и настройки фиксируются до запуска; закрытие
+и проектные/глобальные пресеты. `dynamicwf ui` запускает локальный браузерный
+монитор с графом, историей, токенами и управлением запусками. Граф и настройки фиксируются до запуска; закрытие
 клиента не останавливает выполнение.
 
 Настоящий Codex прошёл review→repair→review с паузой и возобновлением из другого
@@ -26,7 +27,7 @@ pause/resume/cancel, durable journal, CLI/MCP, переносимый skill, т�
 - [Контракт графа](docs/graph-contract.md), [операции authoring](docs/authoring.md), [компилятор](docs/compiler.md)
 - [CLI/service](docs/service.md), [MCP](docs/mcp.md), [установка и skill](docs/setup.md)
 - [Диагностика и модели](docs/doctor.md), [Grok provider](docs/grok-provider.md)
-- [Пресеты](docs/presets.md), [терминальный watch](docs/watch.md), [council из четырёх reviewers](docs/examples.md)
+- [Браузерный интерфейс](docs/browser-ui.md), [Пресеты](docs/presets.md), [терминальный watch](docs/watch.md), [council из четырёх reviewers](docs/examples.md)
 - [Execution plan](docs/execution-plan.md), [журнал](docs/run-journal.md), [pi worker](docs/pi-worker.md)
 - [Git worktree и интеграция](docs/workspaces.md), [live coding-проверка](docs/workspaces-live.md), [live MCP council](docs/council-live.md)
 
@@ -41,6 +42,7 @@ npm test
 npm run setup
 dynamicwf system.doctor
 dynamicwf catalog.models
+dynamicwf ui
 ```
 
 Установка создаёт ссылки на команду в `~/.local/bin` и skill в `~/.agents/skills`.
