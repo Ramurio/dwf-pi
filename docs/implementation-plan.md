@@ -12,7 +12,7 @@
 | Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Реализовано и проверено: await, run.waits/resolve, JSON-форма, idempotency, pause/resume, SIGKILL и worktree reattach; см. outcomes-and-waits.md |
 | Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Реализовано: controller.snapshot + projectRun, включая browser list и watch; проверка процессов отдельно от heartbeat, см. observation.md |
 | Usage | Учёт каждого ответа, cache/reasoning, попытки, dedup, отмена/ошибки, раскрытие сумм | Backend/API/UI реализованы; 65 targeted tests и браузерный fixture, см. usage.md. Общая приёмка с будущим recovery остаётся обязательной |
-| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, output repair, collect, safe retry, HTTP observations и provider retry policy реализованы; для reconciliation добавлена запись операций, протокол решений остаётся в работе. См. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md, retry-policy.md, provider-responses.md и reconciliation.md |
+| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, output repair, collect, safe retry, HTTP observations и provider retry policy реализованы; для reconciliation добавлены запись операций и резервирование workers, протокол решений остаётся в работе. См. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md, retry-policy.md, provider-responses.md и reconciliation.md |
 | Артефакты | Snapshot/digest, версии критериев, применимость checks/reviews, diff | Не начато |
 | Интеграция | Отдельный integration workspace, проверки объединения, контроль target head | Не начато |
 | Authoring | Рецепты в обычный граф, агрегация коллекций, schemas и dataflow diagnostics | Не начато |
@@ -394,3 +394,29 @@ Native browser QA: реальный detached supervisor, scripted IPC 429→paus
 должен учитывать запуск процесса до записи PID, оставшиеся process groups,
 проверку актуальности Git/checkpoint и неизменяемую историю решений. Этот этап
 не завершает reconciliation или общий goal.
+
+### Резервирование worker и допуск запроса после записи PID
+
+Каждый managed worker сохраняет случайный идентификатор до spawn. Callback записи
+PID должен завершиться до передачи execution request; отказ callback или отмена
+не передаёт задачу. Каждый Git wrapper получает новый идентификатор. Metadata
+workerLaunch различает reserved/started/settled; новая попытка архивирует и очищает
+старое наблюдение. Эти этапы описывают wrapper, а не доказанное завершение всех effects.
+
+Controller находит живые reservations без PID по script/token в списке процессов.
+Они удерживают owner, блокируют повторный supervisor и доступны для явной отмены.
+Один снимок списка используется для нескольких reservations в одном observe;
+исторический PID чтение не выдумывает. Сопоставление token проверяет границы маркера.
+
+Проверки используют реальные check/pi процессы без inference: блокировка родителя
+в PID callback, отказ reservation/PID checkpoint, SIGKILL родителя до отправки
+задания, поиск worker без PID, resume без дубликата и отмена по identity. Git
+integration проверяет отдельные reservations каждой команды; attempts сохраняют
+старую provenance. Оставшиеся process groups после смерти wrapper и полный протокол
+accept/retry остаются обязательными, как и остальные строки общего плана.
+
+Итоговый полный параллельный набор: **323/323**, 72,0 секунды,
+`/tmp/dynamicwf-reservation-full-final-20260910.log`. Typecheck, diff check и skill
+validator прошли. Отдельная проверка process admission/parent death: **12/12**,
+4,9 секунды, `/tmp/dynamicwf-reservation-parent-gap.log`. Browser markup не менялся
+этим этапом; общая liveness-проекция проверена на настоящих reserved workers.

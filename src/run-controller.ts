@@ -8,7 +8,7 @@ import { preparedExecutionId, type ExecutionPlan } from "./execution-types.js";
 import { executionWorkspace } from "./prepared-plans.js";
 import type { Json } from "./graph.js";
 import { assertJson } from "./output-schema.js";
-import { RunStore, type RunRecord, type PreparedStart } from "./run-store.js";
+import { RunStore, type RunRecord, type PreparedStart, type ActivationRecord } from "./run-store.js";
 import { projectRun } from "./observation.js";
 
 const supervisorPath = fileURLToPath(new URL("./supervisor.ts", import.meta.url));
@@ -23,7 +23,39 @@ function commandLine(pid: number): string | undefined {
 export function matchesProcess(pid: number | null, marker: string, script: string): boolean {
   if (pid === null) return false;
   const line = commandLine(pid);
-  return Boolean(line?.includes(script) && line.includes(marker));
+  return line !== undefined && matchesCommand(line, marker, script);
+}
+
+function matchesCommand(line: string, marker: string, script: string): boolean {
+  if (!line.includes(script)) return false;
+  for (let index = line.indexOf(marker); index !== -1; index = line.indexOf(marker, index + 1)) {
+    if ((index === 0 || /\s/.test(line[index - 1]!)) &&
+      (index + marker.length === line.length || /\s/.test(line[index + marker.length]!))) return true;
+  }
+  return false;
+}
+
+function processInventory(): string[] {
+  return execFileSync("ps", ["-ax", "-o", "pid=,args="], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).split("\n");
+}
+function matchingPids(lines: readonly string[], marker: string, script: string): number[] {
+  return lines.filter(line => matchesCommand(line, marker, script))
+    .map(line => Number(line.trim().split(/\s+/, 1)[0])).filter(pid => Number.isSafeInteger(pid) && pid > 0);
+}
+/** Reservations let observation find a spawned wrapper before its PID checkpoint. */
+function liveWorkerPids(activations: readonly ActivationRecord[], inventory: () => readonly string[]): number[] {
+  const pids = new Set<number>();
+  for (const { metadata } of activations) {
+    if (typeof metadata.workerToken !== "string") continue;
+    const marker = `--worker-token ${metadata.workerToken}`;
+    const script = metadata.workerKind === "check" ? "check-worker-process.ts" : "pi-worker-process.ts";
+    if (typeof metadata.workerPid === "number") {
+      if (matchesProcess(metadata.workerPid, marker, script)) pids.add(metadata.workerPid);
+    } else if (metadata.workerLaunch === "reserved" || metadata.workerLaunch === "started") {
+      for (const pid of matchingPids(inventory(), marker, script)) pids.add(pid);
+    }
+  }
+  return [...pids];
 }
 
 /** Owns control commands, not execution lifetime. Closing this object cannot stop a run. */
@@ -102,16 +134,14 @@ export class RunController {
   }
   observe(id: string): { run: RunRecord; supervisorAlive: boolean; workersAlive: number } {
     let run = this.store.get(id);
+    let processes: string[] | undefined;
+    const inventory = () => processes ??= processInventory();
     let supervisorAlive = run.ownerToken !== null && matchesProcess(run.supervisorPid, `--owner ${run.ownerToken}`, supervisorPath);
-    const workers = this.store.listActivations(id).filter(item => typeof item.metadata.workerPid === "number" && typeof item.metadata.workerToken === "string");
-    const workersAlive = workers.filter(item => matchesProcess(item.metadata.workerPid as number,
-      `--worker-token ${item.metadata.workerToken}`, item.metadata.workerKind === "check" ? "check-worker-process.ts" : "pi-worker-process.ts")).length;
+    const workersAlive = liveWorkerPids(this.store.listActivations(id), inventory).length;
     if (!supervisorAlive && run.ownerToken && run.supervisorPid === null) {
       // Cover the small reserve/spawn/attach window without treating a fresh
       // reservation as proof of either a live process or a failed launch.
-      const processes = execFileSync("ps", ["-ax", "-o", "pid=,args="], { encoding: "utf8" });
-      const match = processes.split("\n").find(line => line.includes(supervisorPath) && line.includes(`--owner ${run.ownerToken}`));
-      const pid = match ? Number(match.trim().split(/\s+/, 1)[0]) : undefined;
+      const pid = matchingPids(inventory(), `--owner ${run.ownerToken}`, supervisorPath)[0];
       if (pid) {
         try { this.store.attachPid(id, run.ownerToken, pid); }
         catch (error) { if (this.store.get(id).ownerToken === run.ownerToken) throw error; return this.observe(id); }
@@ -131,12 +161,9 @@ export class RunController {
     const observed = this.observe(id);
     let run = this.store.requestControl(id, command);
     if (command === "cancel" && !observed.supervisorAlive) {
-      for (const item of this.store.listActivations(id)) {
-        const pid = item.metadata.workerPid;
-        if (typeof pid === "number" && typeof item.metadata.workerToken === "string" && matchesProcess(pid,
-          `--worker-token ${item.metadata.workerToken}`, item.metadata.workerKind === "check" ? "check-worker-process.ts" : "pi-worker-process.ts")) {
-          try { process.kill(-pid, "SIGTERM"); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; }
-        }
+      let processes: string[] | undefined;
+      for (const pid of liveWorkerPids(this.store.listActivations(id), () => processes ??= processInventory())) {
+        try { process.kill(-pid, "SIGTERM"); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error; }
       }
     }
     if (command === "resume" && ["queued", "interrupted"].includes(run.status) && run.ownerToken === null && run.desired === "running") {

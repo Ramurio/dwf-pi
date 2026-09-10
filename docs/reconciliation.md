@@ -1,7 +1,7 @@
 # Reconciliation of interrupted effects
 
 This work implements the recovery scenario in the project audit. Operation capture
-is implemented below. The public inspection/resolution protocol and Git-specific
+and worker launch reservations are implemented below. The public inspection/resolution protocol and Git-specific
 resolution paths are still being implemented; their proposed contracts are not
 available service commands yet.
 
@@ -40,6 +40,35 @@ by these additional observations.
 Use existing explicit `run.inspect`, `run.attempts`, or expanded browser attempt
 data to inspect these fields. Ordinary graph snapshots do not include evaluated
 agent tasks, operation inputs or session/resource paths.
+
+## Worker launch admission
+
+Every managed agent/check process, including each individual Git command wrapper,
+reserves its random worker identity in activation metadata before spawn. A rejected
+reservation prevents launch. The process client waits for the synchronous PID
+checkpoint callback to finish before sending the execution request over stdin;
+callback failure or cancellation does not send the request. Death of the parent
+in that gap disconnects IPC, so the wrapper stops without receiving its task.
+
+`workerLaunch` records `reserved`, `started`, or `settled`. Started means the wrapper
+PID was observed, not that its task began. Settled means the client finished waiting
+for the wrapper and its output pipes, not certification of every descendant or
+external effect. Each subsequent Git command reserves a fresh identity; beginning
+a new activation attempt archives and clears the old launch observation.
+
+Controller observation finds reserved workers lacking a PID by script and exact
+worker-token marker in the OS process list. They count toward orphaned-worker
+liveness, prevent owner release/relaunch, and can receive explicit cancellation.
+Reading does not manufacture a historical PID checkpoint. Reservations with no
+matching process are not themselves evidence of a live worker. Legacy journals do
+not gain missing identities. The inventory is shared within one observation when
+several missing-PID reservations or a supervisor reservation need it.
+
+This closes the launch-before-PID tracking gap for new managed workers. It does
+**not** yet resolve orphan process groups after a wrapper is killed, escaped
+descendants, or external filesystem changes. Those remain required before exposing
+the full resolution protocol. Normal recorded-process observation must not be
+presented as proof that all outside effects have settled.
 
 ## Resolution contract being implemented
 

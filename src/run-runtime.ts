@@ -207,7 +207,8 @@ export class JournalRuntime implements WorkflowRuntime {
       try {
         const result = await runPiProcess(request, {
           signal, identity: workerToken,
-          onStarted: workerPid => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid, workerToken, workerKind: "pi", cwd: request.cwd, model: { ...config.model }, thinking: config.thinking }),
+          onStarting: workerToken => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid: null, workerToken, workerKind: "pi", workerLaunch: "reserved", cwd: request.cwd, model: { ...config.model }, thinking: config.thinking }),
+          onStarted: workerPid => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid, workerLaunch: "started" }),
           onEvent: event => {
             if (event.type === "usage.report") {
               if (typeof event.reportId !== "string" || typeof event.stopReason !== "string") throw new Error("Invalid worker usage identity");
@@ -246,7 +247,8 @@ export class JournalRuntime implements WorkflowRuntime {
       try {
         return await runCheckProcess(node.command, node.args, cwd, {
           signal, identity: workerToken,
-          onStarted: workerPid => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid, workerToken, workerKind: "check", cwd }),
+          onStarting: workerToken => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid: null, workerToken, workerKind: "check", workerLaunch: "reserved", cwd }),
+          onStarted: workerPid => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid, workerLaunch: "started" }),
         });
       } finally { this.clearPid(key); }
     });
@@ -261,10 +263,10 @@ export class JournalRuntime implements WorkflowRuntime {
   }
   private gitOptions(context: RuntimeContext, signal: AbortSignal): GitOperationOptions {
     const key = activationKey(context);
-    const identity = randomUUID();
     return {
-      signal, identity,
-      onStarted: workerPid => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid, workerToken: identity, workerKind: "check" }),
+      signal,
+      onStarting: workerToken => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid: null, workerToken, workerKind: "check", workerLaunch: "reserved" }),
+      onStarted: workerPid => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid, workerLaunch: "started" }),
       onFinished: () => this.clearPid(key),
     };
   }
@@ -308,7 +310,7 @@ export class JournalRuntime implements WorkflowRuntime {
   }
   private clearPid(key: string): void {
     if (this.store.get(this.run.id).ownerToken === this.token && this.store.getActivation(this.run.id, key)?.status === "running") {
-      this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid: null });
+      this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid: null, workerLaunch: "settled" });
     }
   }
   private checkReviewInput(node: Node, config: FrozenAgent, input: Json): void {

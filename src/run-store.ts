@@ -367,7 +367,7 @@ export class RunStore {
       if (old) this.database.prepare("INSERT INTO workflow_activation_history(run_id,activation_key,attempt,record) VALUES(?,?,?,?)")
         .run(id, key, old.attempt, JSON.stringify(allowed ? {...old,metadata:{...old.metadata,retry:retryProgress(decision!,"admitted")}} : old));
       const { failure: _previousFailure, failureCauses: _previousCauses, outputRepair: _previousRepair, retry: _previousRetry,
-        operation: _operation, sessionFile: _session, workerPid: _pid, workerToken: _worker, workerKind: _workerKind,
+        operation: _operation, sessionFile: _session, workerPid: _pid, workerToken: _worker, workerKind: _workerKind, workerLaunch: _workerLaunch,
         cwd: _cwd, model: _model, thinking: _thinking, ...metadata } = old?.metadata ?? {};
       const now = Date.now();
       if (run.status === "waiting") {

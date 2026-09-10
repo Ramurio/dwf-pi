@@ -157,6 +157,10 @@ test("real parallel child graphs edit separate worktrees and explicit integratio
     assert.equal(operation?.kind,"integrate");if(operation?.kind==="integrate"){assert.equal(operation.target,f.repo);assert.equal(operation.progress?.originalHead,f.base);assert.equal(operation.progress?.phase,"complete");assert.equal(operation.progress?.head,(finished.output as any).workspace.head);assert.deepEqual(operation.progress?.merged,(finished.output as any).merged);}
     const progress=controller.store.events(id).filter(e=>e.type==="activation.metadata"&&(e.payload as any).key===integrated.key).map(e=>(e.payload as any).metadata.operation?.progress).filter(Boolean);
     assert.deepEqual(progress.map(p=>p.phase),["ready","merging","between","merging","between","complete"]);
+    const launches=controller.store.events(id).filter(e=>e.type==="activation.metadata").map(e=>(e.payload as any).metadata).filter(m=>m.workerLaunch==="reserved");
+    assert.ok(launches.length>10,"each Git wrapper must reserve its own identity");
+    assert.equal(new Set(launches.map(m=>m.workerToken)).size,launches.length);
+    assert.ok(launches.every(m=>m.workerPid===null && m.workerKind==="check"));
     assert.equal((finished.output as any).merged.length, 2);
     assert.equal(controller.store.listActivations(id).find(item => item.kind === "integrate")!.sideEffect, true);
   } finally { await cleanup(controller, id); await rm(f.directory, { recursive: true, force: true }); }

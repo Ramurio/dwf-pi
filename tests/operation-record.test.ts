@@ -44,6 +44,20 @@ test('check intent is committed before the child runs; rejected intent prevents 
   });
 });
 
+test('a rejected reservation or PID checkpoint prevents the check command from receiving its request',{timeout:15000},async()=>{
+  for(const phase of ['reserved','started'])await fixture(()=>({id:'work',kind:'check',command:process.execPath,args:['-e',"require('node:fs').writeFileSync('marker','must not run')"]}),async({store,runtime,directory,filename,node})=>{
+    if(node.kind!=='check')throw Error('Expected check');
+    const db=new DatabaseSync(filename);
+    try{db.exec(`CREATE TRIGGER deny_launch BEFORE UPDATE OF metadata ON workflow_activations WHEN json_extract(NEW.metadata,'$.workerLaunch')='${phase}' BEGIN SELECT RAISE(ABORT,'reject worker checkpoint'); END`);
+      assert.ok(Exit.isFailure(await Effect.runPromiseExit(runtime.step(context,()=>runtime.check(context,node)))));
+      await assert.rejects(readFile(join(directory,'marker')),/ENOENT/);
+      const activation=store.listActivations('run-operation')[0]!;
+      assert.equal(activation.metadata.workerPid,null);assert.equal(activation.metadata.workerLaunch,'settled');
+      assert.equal(typeof activation.metadata.workerToken,phase==='started'?'string':'undefined');
+    }finally{db.close();}
+  });
+});
+
 test('agent intent binds the actual IPC request before worker admission without loading a model',{timeout:15000},async()=>fixture(()=>({id:'work',kind:'agent',role:'general',task:{op:'literal',value:'Review exact evidence'},config:{permission:'read-only',tools:[]}}),async({store,runtime,directory,filename,node})=>{
   if(node.kind!=='agent')throw Error('Expected agent');
   const preload=join(directory,'observe.cjs'),previous=process.env.NODE_OPTIONS;
@@ -56,9 +70,9 @@ test('agent intent binds the actual IPC request before worker admission without 
 
 test('a new attempt archives operation/session provenance and starts without stale worker identity',async()=>fixture(()=>({id:'work',kind:'agent',role:'general',task:{op:'literal',value:'Task'},retryPolicy:{codes:['provider'],delayMs:0,maxAttempts:2},config:{permission:'read-only',tools:[]}}),async({store,token,directory})=>{
   const record=store.beginActivation('run-operation',token,context,{kind:'agent',sideEffect:true}),operation={kind:'agent',cwd:directory,task:'Old task',input:null,sessionDirectory:join(directory,'sessions'),resourceDirectory:join(directory,'resources')};
-  store.setActivationMetadata('run-operation',token,record.key,{operation,sessionFile:'old-session',workerToken:'old-token',workerKind:'pi',workerPid:null,cwd:directory,model:{provider:'offline',id:'fixture'},thinking:'off'});
+  store.setActivationMetadata('run-operation',token,record.key,{operation,sessionFile:'old-session',workerToken:'old-token',workerKind:'pi',workerPid:null,workerLaunch:'settled',cwd:directory,model:{provider:'offline',id:'fixture'},thinking:'off'});
   store.failActivation('run-operation',token,record.key,'Failed',executionFailure('provider','execution','read-only','Failed').failure,{retryEligible:true});
   const current=store.beginActivation('run-operation',token,context,{kind:'agent',sideEffect:true}),archived=store.attempts('run-operation',record.key).records[0]!;
   assert.deepEqual(archived.metadata.operation,operation);assert.equal(archived.metadata.sessionFile,'old-session');
-  for(const field of ['operation','sessionFile','workerToken','workerKind','workerPid','cwd','model','thinking'])assert.equal(current.metadata[field],undefined);
+  for(const field of ['operation','sessionFile','workerToken','workerKind','workerPid','workerLaunch','cwd','model','thinking'])assert.equal(current.metadata[field],undefined);
 }));

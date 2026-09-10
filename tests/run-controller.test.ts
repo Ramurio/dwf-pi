@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { RunController } from "../src/run-controller.js";
+import { prepareExecutionPlan } from "../src/execution-plan.js";
+import { randomUUID } from "node:crypto";
 import type { RunRecord } from "../src/run-store.js";
 import type { Node, WorkflowDefinition } from "../src/graph.js";
 
@@ -44,6 +46,42 @@ function waitingCheck(id: string): Node {
 function secondCheck(): Node {
   return check("second", "const fs=require('node:fs');fs.appendFileSync('second.count','1\\n');process.stdout.write('second finished');");
 }
+
+test("a reserved worker without a PID prevents dead-owner recovery and can be cancelled by identity", { skip: !posix, timeout: 20_000 }, async () => {
+  const workspace = await mkdtemp(join(tmpdir(), "dynamicwf-reserved-worker-"));
+  const controller = new RunController(join(workspace, "state.sqlite"));
+  try {
+    for (const kind of ["check", "pi"] as const) {
+      const node: Node = kind === "check" ? check("work", "process.exit(0)")
+        : { id: "work", kind: "agent", role: "general", task: { op: "literal", value: "Offline observation" } };
+      const plan = await prepareExecutionPlan(flow([node, { id: "done", kind: "end", value: { op: "literal", value: null } }]),
+        { cwd: workspace, availableModels: [{ provider: "offline", id: "fixture", thinkingLevels: ["off"] }] });
+      const id = `run-reserved-${kind}`;
+      controller.store.create({ id, plan, input: null, cwd: workspace });
+      const { token } = controller.store.reserveLaunch(id);
+      // A live PID with the wrong script/owner is not a live supervisor. This
+      // fixture owns worker cleanup explicitly; it never signals this fake PID.
+      controller.store.attachPid(id, token, process.pid);
+      const activation = controller.store.beginActivation(id, token, { graphId: "main", nodeId: "work", scope: ["graph", "main"], visit: 0 }, { kind: node.kind, sideEffect: true });
+      const identity = randomUUID();
+      controller.store.setActivationMetadata(id, token, activation.key, { workerToken: identity, workerKind: kind, workerPid: null, workerLaunch: "reserved" });
+      const worker = spawn(process.execPath, ["--import", import.meta.resolve("tsx"), resolve(`src/${kind === "check" ? "check" : "pi"}-worker-process.ts`), "--worker-token", identity],
+        { cwd: workspace, detached: true, stdio: ["pipe", "ignore", "ignore", "ipc"] });
+      let exited = false; worker.once("exit", () => { exited = true; });
+      try {
+        await new Promise<void>((resolve, reject) => { worker.once("spawn", resolve); worker.once("error", reject); });
+        const observed = controller.snapshot(id);
+        assert.equal(observed.supervisorAlive, false); assert.equal(observed.workersAlive, 1);
+        assert.equal(observed.presentation.liveness.state, "orphaned-workers");
+        assert.equal(observed.run.ownerToken, token); assert.notEqual(observed.run.status, "interrupted");
+        assert.equal(controller.store.getActivation(id, activation.key)!.metadata.workerPid, null, "read does not manufacture a PID checkpoint");
+        await controller.control(id, "resume"); assert.equal(controller.store.get(id).ownerToken, token);
+        await controller.control(id, "cancel"); await until(() => exited);
+        const finished = controller.observe(id); assert.equal(finished.workersAlive, 0); assert.equal(finished.run.status, "cancelled");
+      } finally { if (worker.pid && !exited) { kill(worker.pid, true); await until(() => exited); } }
+    }
+  } finally { controller.close(); await rm(workspace, { recursive: true, force: true }); }
+});
 function sequence(): WorkflowDefinition {
   return flow([waitingCheck("first"), secondCheck(), { id: "done", kind: "end", value: { op: "ref", path: ["nodes", "second"] } }]);
 }

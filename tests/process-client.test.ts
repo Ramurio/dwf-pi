@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -78,6 +79,44 @@ test("pre-aborted checks never admit a process", async () => {
   assert.equal(admitted, false);
 });
 
+test("worker reservation precedes spawn and PID persistence precedes sending either execution request", { skip: !posix, timeout: 20_000 }, async () => {
+  await temp(async directory => {
+    const preload = join(directory, "admission.cjs"), ready = join(directory, "ready"), received = join(directory, "received");
+    // Keep the wrapper event loop alive while its parent is deliberately blocked
+    // inside the synchronous checkpoint callback. No provider is loaded or called.
+    await writeFile(preload, `const fs=require('node:fs');process.stdin.on('data',()=>fs.writeFileSync(${JSON.stringify(received)},'payload'));setTimeout(()=>fs.writeFileSync(${JSON.stringify(ready)},'ready'),100);`);
+    const previous = process.env.NODE_OPTIONS;
+    try {
+      process.env.NODE_OPTIONS = `--require=${preload}`;
+      for (const kind of ["check", "pi"] as const) {
+        const run = (options: Parameters<typeof runCheckProcess>[3]): Promise<unknown> => kind === "check"
+          ? runCheckProcess(process.execPath, ["-e", "process.exit(0)"], directory, options)
+          : runPiProcess({ version: 999, cwd: directory } as unknown as PiWorkerRequest, options);
+        let spawned = false;
+        await assert.rejects(run({ onStarting: () => { throw new Error("reservation rejected"); }, onStarted: () => { spawned = true; } }), /reservation rejected/);
+        assert.equal(spawned, false); assert.equal(existsSync(ready), false);
+        let reserved: string | undefined, wrapper: number | undefined;
+        try {
+          await assert.rejects(bounded(run({
+            onStarting: identity => { reserved = identity; },
+            onStarted: pid => {
+              wrapper = pid; assert.ok(reserved);
+              assert.ok(execFileSync("ps", ["-p", String(pid), "-o", "args="], { encoding: "utf8" }).includes(`--worker-token ${reserved}`));
+              const deadline = Date.now() + 5_000;
+              while (!existsSync(ready) && Date.now() < deadline) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+              assert.ok(existsSync(ready), "wrapper must initialize during the blocked checkpoint");
+              assert.equal(existsSync(received), false, "no execution payload before the PID checkpoint");
+              throw new Error("PID checkpoint rejected");
+            },
+          })), /PID checkpoint rejected/);
+          assert.ok(wrapper); await until(() => !executing(wrapper!));
+          assert.equal(existsSync(received), false);
+        } finally { if (wrapper) kill(wrapper, true); await rm(ready, { force: true }); await rm(received, { force: true }); }
+      }
+    } finally { if (previous === undefined) delete process.env.NODE_OPTIONS; else process.env.NODE_OPTIONS = previous; }
+  });
+});
+
 test("cancellation immediately after wrapper admission settles and reaps its process group", { skip: !posix, timeout: 15_000 }, async () => {
   const controller = new AbortController();
   let wrapper: number | undefined;
@@ -89,6 +128,30 @@ test("cancellation immediately after wrapper admission settles and reaps its pro
     assert.ok(wrapper);
     await until(() => !executing(wrapper!));
   } finally { if (wrapper) kill(wrapper, true); }
+});
+
+test("supervisor death during the PID checkpoint closes either worker without sending its task", { skip: !posix, timeout: 20_000 }, async () => {
+  for (const kind of ["check", "pi"] as const) await temp(async directory => {
+    const ready = join(directory, "wrapper.pid"), received = join(directory, "received"), reserved = join(directory, "reserved"), parentFile = join(directory, "parent.mjs");
+    const preload = join(directory, "waiting.cjs");
+    await writeFile(preload, `if(process.argv[1]?.endsWith('-worker-process.ts')){const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));process.stdin.on('data',()=>fs.writeFileSync(${JSON.stringify(received)},'payload'));}`);
+    await writeFile(parentFile, `import {writeFileSync} from 'node:fs';import {runCheckProcess,runPiProcess} from ${JSON.stringify(pathToFileURL(resolve("src/process-client.ts")).href)};
+      const options={onStarting:identity=>writeFileSync(${JSON.stringify(reserved)},identity),onStarted:()=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)};
+      await ${kind === "check" ? `runCheckProcess(process.execPath,['-e','process.exit(0)'],${JSON.stringify(directory)},options)` : `runPiProcess({version:999,cwd:${JSON.stringify(directory)}},options)`};`);
+    const parent = spawn(process.execPath, ["--import", import.meta.resolve("tsx"), parentFile], { cwd: directory, env: { ...process.env, NODE_OPTIONS: `--require=${preload}` }, stdio: "ignore" });
+    let exited = false, wrapper: number | undefined; parent.once("exit", () => { exited = true; });
+    try {
+      wrapper = await marker(ready);
+      const identity = await readFile(reserved, "utf8");
+      assert.ok(execFileSync("ps", ["-p", String(wrapper), "-o", "args="], { encoding: "utf8" }).includes(`--worker-token ${identity}`));
+      assert.equal(existsSync(received), false);
+      parent.kill("SIGKILL"); await until(() => exited); await until(() => !executing(wrapper!));
+      assert.equal(existsSync(received), false);
+    } finally {
+      if (parent.pid && !exited) { parent.kill("SIGKILL"); await until(() => exited); }
+      if (wrapper) kill(wrapper, true);
+    }
+  });
 });
 
 test("post-admission cancellation kills command and ordinary descendants", { skip: !posix, timeout: 20_000 }, async () => {

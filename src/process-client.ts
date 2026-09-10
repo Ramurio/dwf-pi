@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import type { PiWorkerMessage, PiWorkerRequest, PiWorkerResult } from "./execution-types.js";
 import type { Json } from "./graph.js";
@@ -9,6 +10,9 @@ export class ProcessCancelled extends ExecutionFailure {
 }
 export interface ProcessOptions {
   signal?: AbortSignal;
+  /** Synchronous durable reservation before spawn. Throwing prevents launch. */
+  onStarting?: (identity: string) => void;
+  /** Must finish before the worker receives its execution request. */
   onStarted?: (pid: number) => void;
   identity?: string;
 }
@@ -66,9 +70,12 @@ export function runPiProcess(request: PiWorkerRequest, options: ProcessOptions &
 } = {}): Promise<PiWorkerResult> {
   if (options.signal?.aborted) return Promise.reject(new ProcessCancelled("not-started"));
   return new Promise((resolve, reject) => {
+    const identity = options.identity ?? randomUUID();
+    options.onStarting?.(identity);
+    if (options.signal?.aborted) throw new ProcessCancelled("not-started");
     const child = spawn(process.execPath, ["--import", import.meta.resolve("tsx"),
       fileURLToPath(new URL("./pi-worker-process.ts", import.meta.url)),
-      "--worker-token", options.identity ?? "untracked"], {
+      "--worker-token", identity], {
       cwd: request.cwd, detached: true, stdio: ["pipe", "pipe", "pipe", "ipc"],
     });
     const control = cancellation(child, options.signal);
@@ -80,7 +87,11 @@ export function runPiProcess(request: PiWorkerRequest, options: ProcessOptions &
       control.cancel();
     };
     child.once("spawn", () => {
-      try { options.onStarted?.(child.pid!); }
+      try {
+        if (control.cancelled) return;
+        options.onStarted?.(child.pid!);
+        if (!control.cancelled) child.stdin!.end(JSON.stringify(request));
+      }
       catch (error) { fail(error); }
     });
     child.once("error", error => fail(executionFailure("process",child.pid ? "execution" : "setup",child.pid ? "unknown" : "not-started",`Pi worker could not start (${(error as NodeJS.ErrnoException).code ?? "unknown cause"})`)));
@@ -122,16 +133,18 @@ export function runPiProcess(request: PiWorkerRequest, options: ProcessOptions &
       else if (pending.trim() || !output) reject(executionFailure("protocol","execution","unknown","Pi worker closed without one complete result"));
       else resolve(output);
     });
-    child.stdin!.end(JSON.stringify(request));
   });
 }
 
 export function runCheckProcess(command: string, args: string[], cwd: string, options: ProcessOptions = {}): Promise<Json> {
   if (options.signal?.aborted) return Promise.reject(new ProcessCancelled("not-started"));
   return new Promise((resolve, reject) => {
+    const identity = options.identity ?? randomUUID();
+    options.onStarting?.(identity);
+    if (options.signal?.aborted) throw new ProcessCancelled("not-started");
     const child = spawn(process.execPath, ["--import", import.meta.resolve("tsx"),
       fileURLToPath(new URL("./check-worker-process.ts", import.meta.url)),
-      "--worker-token", options.identity ?? "untracked"], {
+      "--worker-token", identity], {
       cwd, detached: true, shell: false, stdio: ["pipe", "pipe", "pipe", "ipc"],
     });
     const control = cancellation(child, options.signal);
@@ -139,7 +152,11 @@ export function runCheckProcess(command: string, args: string[], cwd: string, op
     let stderr = "";
     let failure: Error | undefined;
     child.once("spawn", () => {
-      try { options.onStarted?.(child.pid!); }
+      try {
+        if (control.cancelled) return;
+        options.onStarted?.(child.pid!);
+        if (!control.cancelled) child.stdin!.end(JSON.stringify({ command, args, cwd }));
+      }
       catch (error) { failure = error instanceof Error ? error : new Error(String(error)); control.cancel(); }
     });
     child.once("error", error => { failure = executionFailure("process",child.pid ? "execution" : "setup",child.pid ? "unknown" : "not-started",`Check worker could not start (${(error as NodeJS.ErrnoException).code ?? "unknown cause"})`); });
@@ -161,6 +178,5 @@ export function runCheckProcess(command: string, args: string[], cwd: string, op
         catch { reject(executionFailure("protocol","output","unknown","Check worker returned invalid JSON")); }
       }
     });
-    child.stdin!.end(JSON.stringify({ command, args, cwd }));
   });
 }
