@@ -12,7 +12,7 @@
 | Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Реализовано и проверено: await, run.waits/resolve, JSON-форма, idempotency, pause/resume, SIGKILL и worktree reattach; см. outcomes-and-waits.md |
 | Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Реализовано: controller.snapshot + projectRun, включая browser list и watch; проверка процессов отдельно от heartbeat, см. observation.md |
 | Usage | Учёт каждого ответа, cache/reasoning, попытки, dedup, отмена/ошибки, раскрытие сумм | Backend/API/UI реализованы; 65 targeted tests и браузерный fixture, см. usage.md. Общая приёмка с будущим recovery остаётся обязательной |
-| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, submit-only output repair, durable collect и explicit safe retry реализованы; provider status и reconciliation остаются, см. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md и retry-policy.md |
+| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, output repair, collect, safe retry и HTTP observations реализованы; фильтр HTTP-статусов/применение Retry-After в политике и reconciliation остаются, см. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md, retry-policy.md и provider-responses.md |
 | Артефакты | Snapshot/digest, версии критериев, применимость checks/reviews, diff | Не начато |
 | Интеграция | Отдельный integration workspace, проверки объединения, контроль target head | Не начато |
 | Authoring | Рецепты в обычный граф, агрегация коллекций, schemas и dataflow diagnostics | Не начато |
@@ -28,7 +28,7 @@
 | Worker capabilities | Явные web/MCP tools, схемы/права/версии, фактический каталог | Не начато |
 | Context | Frozen project instructions, project/global roles/prompts, политика длинных сессий | Не начато |
 | Installation | Собранный versioned runtime, compatibility/migrations, doctor/upgrade/rollback | Не начато |
-| Provider integration | Проверяемый Grok adapter fingerprint/compatibility без выдуманных model IDs | Не начато |
+| Provider integration | Проверяемый Grok adapter fingerprint/compatibility без выдуманных model IDs | HTTP facts и отключение скрытых transport retries проверены на pinned Codex/OpenAI SDK и установленном Grok bridge; fingerprint и расширенная compatibility-проверка остаются |
 | Maintainability | Общие типизированные contracts/projections, browser typecheck, meaningful CI | Не начато |
 | Acceptance | Негативные сценарии, свежий skill forward test, проверка качества council на известных дефектах | Не начато |
 
@@ -58,7 +58,7 @@ supervisor в worktree; повтор start; patch после prepare; конфл
   за 95,7 секунды; `/tmp/dynamicwf-usage-routes-full-20260910.log`.
   Нестабильность обычного параллельного прогона этим не считается исправленной.
 
-Следующие части восстановления: точные provider statuses и reconciliation. Остальные строки
+Следующие части восстановления: HTTP-фильтры/Retry-After в retry policy и reconciliation. Остальные строки
 сохраняют полный обязательный объём; завершённые изменения не означают завершение
 общего goal.
 
@@ -300,3 +300,36 @@ Native browser QA: настоящий paused run после ENOENT, истори
 Финальная проверка общей проекции и browser API/layout: **14/14**, 1,9 секунды,
 `/tmp/dynamicwf-retry-projection-final.log`; typecheck прошёл. Ожидающий повтор
 одного экземпляра узла остаётся видимым, даже если другой экземпляр завершился позже.
+
+### Наблюдаемые HTTP-ответы провайдера
+
+Provider failure сохраняет доступные providerResponse.status и retryAfterMs,
+полученные на границе запроса, без разбора текста ошибок. У каждого assistant
+request отдельное наблюдение; предыдущий HTTP-ответ не переносится на последующую
+сетевую ошибку. Headers/body/URL/auth в публичный record не копируются. IPC parser
+проверяет закрытые числовые поля, старые записи без них сохраняют совместимость.
+
+Обнаружен и исправлен пробел: session retry=false не отключал default HTTP retries
+SDK. Теперь maxRetries=0 передаётся для каждого запроса; Codex использует SSE,
+поскольку WebSocket continuation/fallback в pinned SDK повторяет запрос независимо
+от этого параметра. В reviewed OpenAI/Codex/Grok API HTTP наблюдается также до SDK
+callback, который в некоторых клиентах вызывается только после успеха. Остальные
+API сохраняют только реально доступные callback facts. Глобальный fetch observer
+не подменяет; существующая сериализация legacy Grok guard сохранена.
+
+Native Codex/OpenAI transports проверены с 200/401/403/429/503 и одной HTTP-попыткой;
+реальный установленный Grok 1.5.2 bridge сохраняет 429/Retry-After до sanitization.
+Есть проверки HTTP-date/секунд, malformed headers, request-local scope,
+runtime→checkpoint→service→browser/terminal и отдельного worker IPC процесса.
+Browser показывает статус и задержку в run/node/attempt, с частичным usage;
+native QA и консоль прошли, временный стенд и вкладка очищены.
+
+Полный параллельный набор: **307/307**, 69,4 секунды,
+`/tmp/dynamicwf-provider-full-20260910.log`. После добавления случая HTTP 200 и
+усиления IPC проверки: **12/12**, 4,0 секунды,
+`/tmp/dynamicwf-provider-protocol-final.log`. Typecheck, browser syntax и skill
+validator прошли. Контракт и точные границы: provider-responses.md.
+
+Текущая policy ещё выбирает семейство provider целиком: новый HTTP record сам
+не разрешает повтор и не меняет frozen delay. Настраиваемый HTTP-фильтр, применение
+Retry-After, reconciliation и остальные строки общего плана остаются обязательными.

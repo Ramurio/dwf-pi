@@ -1,4 +1,5 @@
 import { parseExecutionFailure } from "./execution-failure.js";
+import { providerResponseSummary } from "./provider-response.js";
 import { parseOutputRepairProgress } from "./output-repair.js";
 import { parseRetryProgress, retryRemaining } from "./retry-policy.js";
 import type { ActivationRecord, RunEvent, RunRecord } from "./run-store.js";
@@ -60,7 +61,7 @@ function evidence(a: ActivationRecord): string {
     if (typeof output.accepted === "boolean") return output.accepted ? "результат принят" : "результат НЕ принят";
   }
   const failure = parseExecutionFailure(a.metadata.failure);
-  if (failure) return terminalText(`${failure.code}/${failure.phase} (${failure.effects}): ${failure.message}`,180);
+  if (failure) return terminalText(`${failure.code}/${failure.phase} (${failure.effects})${providerResponseSummary(failure.providerResponse)}: ${failure.message}`,180);
   if (a.error) return terminalText(a.error, 180);
   if (a.metadata.collectionSummary) return collectionEvidence(a);
   return a.status === "succeeded" ? "готово" : statusNames[a.status] ?? a.status;
@@ -136,7 +137,7 @@ export function monitorBody(run: RunRecord, records: readonly ActivationRecord[]
   lines.push("", "Проход 2+ = повтор узла. Ветки / элементы = параллельные задачи.");
   return lines;
 }
-const runError = (run: RunRecord) => run.failure ? `${run.failure.code}/${run.failure.phase}: ${run.failure.message}` : run.error ?? "";
+const runError = (run: RunRecord) => run.failure ? `${run.failure.code}/${run.failure.phase}${providerResponseSummary(run.failure.providerResponse)}: ${run.failure.message}` : run.error ?? "";
 export function renderDashboard(run: RunRecord, records: readonly ActivationRecord[], options: MonitorOptions = {}): string {
   const width = Math.max(1, options.width ?? 100), height = Math.max(4, options.height ?? 24), now = options.now ?? Date.now();
   const elapsed = duration((terminal.has(run.status) ? run.updatedAt : now) - run.createdAt);

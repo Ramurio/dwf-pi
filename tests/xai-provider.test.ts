@@ -9,6 +9,7 @@ import { createWorkflowModelRuntime, discoverWorkflowModels } from "../src/model
 import { createXaiSubscriptionProvider } from "../src/xai-provider.js";
 import { executePiWorker } from "../src/pi-worker.js";
 import type { PiWorkerRequest } from "../src/execution-types.js";
+import { ExecutionFailure } from "../src/execution-failure.js";
 const packageRoot = join(homedir(), ".pi/agent/npm/node_modules/pi-xai-oauth");
 const installed = existsSync(join(packageRoot, "package.json"));
 async function fixture(t: TestContext, id = "grok-test-entitled") {
@@ -104,6 +105,17 @@ test("transport restores fetch and scrubs arbitrary credential-bearing failures"
   assert.equal(message.stopReason, "error");
   assert.doesNotMatch(message.errorMessage ?? "", /TEST_ACCESS|TEST_REFRESH/);
   assert.equal(globalThis.fetch, before);
+});
+
+test("actual Grok worker preserves HTTP failure facts before adapter header sanitization", {skip:!installed,timeout:15000},async t=>{
+  const f=await fixture(t),runtime=await createWorkflowModelRuntime(f.options),before=globalThis.fetch;
+  const request:PiWorkerRequest={version:1,cwd:f.directory,resourceDirectory:join(f.directory,'resources'),sessionDirectory:join(f.directory,'sessions'),task:'Return answer',input:null,config:{model:{provider:'xai-auth',id:f.id},thinking:'high',tools:[],systemPrompt:'Use submit_result',skills:[],session:'fresh',permission:'read-only',outputSchema:{type:'object',properties:{answer:{type:'integer'}},required:['answer']}}};
+  let calls=0;const events:unknown[]=[];
+  await assert.rejects(executePiWorker(request,{modelRuntime:runtime,onEvent:event=>events.push(event),providerFetch:async()=>{calls++;return new Response(JSON.stringify({error:{message:'PRIVATE_HTTP_BODY'}}),{status:429,headers:{'retry-after':'13','set-cookie':'PRIVATE_HTTP_COOKIE'}});}}),(error:unknown)=>{
+    assert.ok(error instanceof ExecutionFailure);assert.equal(error.failure.code,'provider');assert.deepEqual(error.failure.providerResponse,{status:429,retryAfterMs:13000});
+    assert.doesNotMatch(JSON.stringify({error:error.failure,events}),/PRIVATE_HTTP|TEST_ACCESS|TEST_REFRESH/);return true;
+  });
+  assert.equal(calls,1);assert.equal(globalThis.fetch,before);
 });
 
 test("provider instances keep account catalogs separate and refuse uncatalogued models", { skip: !installed }, async t => {

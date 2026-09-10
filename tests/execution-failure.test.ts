@@ -35,6 +35,23 @@ test("malformed worker stdout is a protocol failure without raw diagnostic leaka
     assert.ok(error instanceof ExecutionFailure);assert.equal(error.failure.code,"protocol");assert.equal(error.failure.effects,"unknown");assert.doesNotMatch(error.message,new RegExp(secret));return true;
   });}finally{if(previous===undefined)delete process.env.NODE_OPTIONS;else process.env.NODE_OPTIONS=previous;await rm(directory,{recursive:true,force:true});}
 });
+
+test("worker IPC accepts observed HTTP facts but rejects arbitrary response headers",async()=>{
+  const directory=await mkdtemp(join(tmpdir(),"dynamicwf-http-ipc-")),preload=join(directory,"preload.cjs"),previous=process.env.NODE_OPTIONS;
+  try {
+    for(const invalid of [false,true]) {
+      const failure={version:1,code:"provider",phase:"execution",effects:"read-only",message:"Provider failed",providerResponse:{status:429,retryAfterMs:7000,...(invalid?{headers:{authorization:"PRIVATE_HTTP_IPC"}}:{})}};
+      const message=JSON.stringify({type:"error",error:failure.message,failure})+"\n";
+      await writeFile(preload,`process.stdin.resume();process.stdin.once('end',()=>{process.stdout.write(${JSON.stringify(message)},()=>process.exit(0));});`);
+      process.env.NODE_OPTIONS=`--require=${preload}`;
+      await assert.rejects(runPiProcess({version:999,cwd:directory} as unknown as PiWorkerRequest),(error:unknown)=>{
+        assert.ok(error instanceof ExecutionFailure);assert.equal(error.failure.code,invalid?"protocol":"provider");
+        if(!invalid)assert.deepEqual(error.failure.providerResponse,{status:429,retryAfterMs:7000});
+        assert.doesNotMatch(JSON.stringify(error.failure),/PRIVATE_HTTP_IPC/);return true;
+      });
+    }
+  } finally {if(previous===undefined)delete process.env.NODE_OPTIONS;else process.env.NODE_OPTIONS=previous;await rm(directory,{recursive:true,force:true});}
+});
 test("a command process error after admission cannot be reported as not-started",async()=>{
   const directory=await mkdtemp(join(tmpdir(),"dynamicwf-postspawn-failure-")),preload=join(directory,"preload.cjs"),previous=process.env.NODE_OPTIONS;
   await writeFile(preload,`if(process.argv[1]?.endsWith('check-worker-process.ts')) {

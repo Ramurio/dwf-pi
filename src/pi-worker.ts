@@ -15,12 +15,15 @@ import { createOutputValidator } from "./output-schema.js";
 import { createWorkflowModelRuntime } from "./model-runtime.js";
 import { ExecutionFailure, executionFailure, type ExecutionFailureRecord } from "./execution-failure.js";
 import { parseUsage, sumTokenUsage } from "./usage.js";
+import { observeProviderResponse, type ProviderResponseRecord } from "./provider-response.js";
 
 export interface PiWorkerOptions {
   signal?: AbortSignal;
   onEvent?: (event: Extract<PiWorkerMessage, { type: "event" }>["event"]) => void;
   /** Dependency injection for offline transport tests; never serialized into worker requests. */
   modelRuntime?: ModelRuntime;
+  /** Offline HTTP boundary for reviewed OpenAI/Grok transports; never sent over IPC. */
+  providerFetch?: typeof fetch;
   /** Test instrumentation of the actual SDK session. */
   onSession?: (session: AgentSession) => void | Promise<void>;
 }
@@ -118,7 +121,7 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
     checkAdmission();
     const model = runtime.getAvailableSnapshot().find(candidate => candidate.provider === config.model.provider && candidate.id === config.model.id);
     if (!model) throw executionFailure("configuration","setup","not-started",`Configured model is not available: ${config.model.provider}/${config.model.id}`);
-    const settings = SettingsManager.inMemory({ retry: { enabled: false }, compaction: { enabled: false }, enableInstallTelemetry: false, enableAnalytics: false });
+    const settings = SettingsManager.inMemory({ retry: { enabled: false, provider: { maxRetries: 0 } }, compaction: { enabled: false }, enableInstallTelemetry: false, enableAnalytics: false });
     const resourceLoader = new DefaultResourceLoader({
       cwd: request.cwd, agentDir: request.resourceDirectory, settingsManager: settings,
       noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
@@ -162,6 +165,33 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
     const actualTools = session.getActiveToolNames();
     if (actualTools.length !== config.tools.length + 1 || actualTools.some(tool => tool !== "submit_result" && !config.tools.includes(tool as typeof config.tools[number]))) throw executionFailure("configuration","setup","not-started","Pi tool allowlist differs from frozen configuration");
     const initialMessages = session.messages.length;
+    let currentResponse: { value: ProviderResponseRecord | undefined } = {value:undefined};
+    let failedResponse: ProviderResponseRecord | undefined;
+    const stream = session.agent.streamFunction;
+    session.agent.streamFunction = (requestModel, context, streamOptions) => {
+      // One response scope per assistant request, including output repair turns.
+      const response: { value: ProviderResponseRecord | undefined } = {value:undefined};
+      currentResponse = response;
+      let observedHttp = false;
+      const upstreamFetch = options.providerFetch ?? streamOptions?.fetch ?? globalThis.fetch;
+      const canObserveFetch = ["openai-codex-responses","openai-responses","openai-completions","xai-responses"].includes(requestModel.api);
+      return stream(requestModel, context, { ...streamOptions, maxRetries: 0,
+        // The SDK's Codex WebSocket continuation/fallback loop ignores maxRetries.
+        ...(requestModel.api === "openai-codex-responses" ? { transport: "sse" as const } : {}),
+        ...(canObserveFetch ? { fetch: (async (input, init) => {
+          const result = await upstreamFetch(input,init);
+          observedHttp = true;
+          response.value = observeProviderResponse(result.status,result.headers.get("retry-after"));
+          return result;
+        }) as typeof fetch } : {}),
+        onResponse: async (result, model) => {
+          // Some SDKs report only successful responses; direct HTTP observes failures too.
+          // Preserve Retry-After if an adapter sanitizes headers before this callback.
+          if (!observedHttp) response.value = observeProviderResponse(result.status,Object.entries(result.headers).find(([key])=>key.toLowerCase()==="retry-after")?.[1]);
+          await streamOptions?.onResponse?.(result,model);
+        },
+      });
+    };
     const previousStop = session.agent.shouldStopAfterTurn;
     session.agent.shouldStopAfterTurn = async (context, signal) => !admission || repairing || submissions > 0 || (await previousStop?.(context, signal) ?? false);
     let reportIndex = 0;
@@ -171,6 +201,7 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
       const curated = curatedEvent(event);
       if (curated) options.onEvent?.(curated);
       if (event.type === "message_end" && event.message.role === "assistant") {
+        if (["error","aborted"].includes(event.message.stopReason)) failedResponse = currentResponse.value;
         const usage = parseUsage({ ...event.message.usage, cost: event.message.usage.cost?.total });
         const reportId = String(++reportIndex);
         if (usage) {
@@ -187,7 +218,7 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
     const invalidOutput = (): OutputFailureCause | undefined => outputFailure ?? (submissions !== 1 || output === undefined ? "missing" : undefined);
     const checkProvider = () => {
       if (session!.messages.slice(initialMessages).some(message => message.role === "assistant" && ["error", "aborted"].includes(message.stopReason))) {
-        throw executionFailure("provider",phase,effects,"Pi assistant turn failed or was aborted");
+        throw new ExecutionFailure({version:1,code:"provider",phase,effects,message:"Pi assistant turn failed or was aborted",...(failedResponse?{providerResponse:failedResponse}:{})});
       }
     };
     try {

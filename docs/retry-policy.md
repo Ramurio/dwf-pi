@@ -26,8 +26,9 @@ the result in the same settled session. It does not repeat the writing task.
 Read-only describes granted tools, not an OS sandbox; model calls still spend tokens.
 
 Selecting `provider` means selecting that whole currently reported failure family.
-It does not claim a transient failure, rate limit, or HTTP status. Precise provider
-status capture remains separate work. An unbounded policy can continue on a
+It does not claim a transient failure or select an HTTP status. Available HTTP facts
+are recorded separately in [providerResponse](provider-responses.md); this policy
+does not yet filter them or automatically adopt Retry-After. An unbounded policy can continue on a
 persistent selected error until paused or cancelled.
 
 ## Durable decisions

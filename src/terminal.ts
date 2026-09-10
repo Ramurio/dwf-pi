@@ -2,6 +2,7 @@ import { summarizeUsage, tokenNumber, tokenSummary } from "./usage.js";
 import type { Node } from "./graph.js";
 import type { ActivationRecord, RunRecord } from "./run-store.js";
 import { activationState, projectRun } from "./observation.js";
+import { providerResponseSummary } from "./provider-response.js";
 
 /** No workflow-provided byte can become a terminal escape, new row or bidi directive. */
 export function terminalText(value: string, limit = 180): string {
@@ -46,6 +47,7 @@ export function renderRun(run: RunRecord, activations: readonly ActivationRecord
   ];
   if (presentation.taskOutcome) lines.push(`Task: ${presentation.taskOutcome.decision} · ${terminalText(presentation.taskOutcome.reason, 500)}`);
   if (presentation.liveness.state !== "unknown") lines.push(presentation.liveness.label);
+  if (run.failure) lines.push(terminalText(`${run.failure.code}/${run.failure.phase}${providerResponseSummary(run.failure.providerResponse)}: ${run.failure.message}`,500));
   for (const record of activations.filter(a => activationState(a) === "waiting")) lines.push(`Wait ${terminalText(String(record.metadata.waitId))}: ${terminalText(String(record.metadata.waitReason), 500)}`);
   for (const [graphId, graph] of Object.entries(run.plan.workflow.graphs)) {
     lines.push("", `┌ Graph ${terminalText(graphId)} · entry ${terminalText(graph.entry)}`);

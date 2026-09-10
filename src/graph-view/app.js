@@ -502,6 +502,7 @@ function failureView(failure, runScope = false) {
   const effects = { "not-started":"Исполнение задачи не началось.","read-only":"Операция выполнялась только с доступом на чтение.",unknown:"Результат внешних действий не подтверждён. Перед повтором нужна сверка." };
   const panel=el("div","failure-detail");
   panel.append(el("strong","",`${labels[failure.code] ?? labels.unknown} · ${phases[failure.phase] ?? "этап неизвестен"}`),el("p","",failure.message),el("p","muted",runScope ? "Это причина остановки. Состояние действий показано в деталях отдельных узлов." : effects[failure.effects] ?? effects.unknown));
+  if (failure.providerResponse) panel.append(el("p","",`HTTP-ответ: ${failure.providerResponse.status}${failure.providerResponse.retryAfterMs===undefined?"":` · Retry-After: ${number(failure.providerResponse.retryAfterMs)} мс`}`));
   return panel;
 }
 function retryView(progress) {

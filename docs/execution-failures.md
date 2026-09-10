@@ -41,11 +41,11 @@ submission/schema failures are `output`; configured model/tool/thinking/session
 mismatches are `configuration`; unsafe/missing frozen resources are `resource`.
 Cleanup that cannot confirm settlement is `process/cleanup/unknown`.
 
-SDK assistant failure is currently the `provider` family. Pi's message often exposes
-only a stop reason and arbitrary error text. We **do not infer** HTTP status,
-authentication rejection, transience, rate limits or retryability from those strings.
-Provider-specific structured status capture remains required work alongside the
-adapter integration. Unknown SDK exceptions stay `unknown`.
+SDK assistant failure is the `provider` family. Optional `providerResponse` now
+preserves observed HTTP status and valid Retry-After from the request boundary;
+see [provider-responses.md](provider-responses.md) for coverage and limits.
+We **do not infer** HTTP status, authentication rejection, transience, rate limits
+or retryability from arbitrary error strings. Unknown SDK exceptions stay `unknown`.
 
 A check that normally exits 1 or 7 still returns `{exitCode,stdout,stderr}` as graph
 data. A negative reviewer verdict is likewise data. Neither becomes a transport or
