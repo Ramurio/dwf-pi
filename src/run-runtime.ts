@@ -17,6 +17,8 @@ import type { RuntimeContext, WorkflowRuntime } from "./runtime-contract.js";
 import { explicitOutcome } from "./task-outcome.js";
 import { explainEdge, ExpressionError, type ExpressionScope } from "./expressions.js";
 import type { Edge } from "./graph.js";
+import { observeRecoveryFiles, recoveryGitDirectories } from "./recovery-files.js";
+import { recoveryRoots } from "./recovery-inspection.js";
 
 const errorOf = (error: unknown) => error instanceof Error ? error : new Error(String(error));
 const slotKey = (context: RuntimeContext) => JSON.stringify([context.scope, context.graphId, context.nodeId]);
@@ -87,9 +89,17 @@ export class JournalRuntime implements WorkflowRuntime {
       await sleep(100, undefined, signal ? { signal } : {});
     }
   }
-  private async retryGate(context: RuntimeContext, signal: AbortSignal): Promise<void> {
+  private async retryGate(context: RuntimeContext, signal: AbortSignal): Promise<string | undefined> {
     for (;;) {
       await this.gate(signal);
+      const manual = this.store.pendingReconciliation(this.run.id, activationKey(context));
+      if (manual) {
+        const selected = this.store.getActivation(this.run.id, activationKey(context))!;
+        const roots = recoveryRoots(this.current(), selected), gitDirectories = (await Promise.all(roots.map(recoveryGitDirectories))).flat();
+        const workspace = await observeRecoveryFiles([...roots, ...gitDirectories], manual.workspace.excluded);
+        if (workspace.digest !== manual.request.workspaceDigest) throw executionFailure("uncertain-effect", "recovery", "unknown", "Workspace changed after retry authorization; inspect and supersede the decision");
+        return manual.request.decisionId;
+      }
       const decision = this.store.scheduledRetry(this.run.id,activationKey(context));
       if (!decision) return;
       const remaining = retryRemaining(retryProgress(decision,"scheduled"));
@@ -145,13 +155,14 @@ export class JournalRuntime implements WorkflowRuntime {
   step(context: RuntimeContext, work: () => Effect.Effect<Json, Error>): Effect.Effect<Json, Error> {
     const runtime = this;
     return Effect.suspend(() => Effect.gen(function* () {
-      yield* Effect.tryPromise({ try: signal => runtime.retryGate(context,signal), catch: errorOf });
+      const reconciliation = yield* Effect.tryPromise({ try: signal => runtime.retryGate(context,signal), catch: errorOf });
       const node = runtime.plan.workflow.graphs[context.graphId]?.nodes.find(item => item.id === context.nodeId);
       if (!node) return yield* Effect.fail(new Error("Activation is absent from frozen graph"));
       let executedAttempt: number | undefined;
       return yield* Effect.acquireUseRelease(
         Effect.try({ try: () => runtime.store.beginActivation(runtime.run.id, runtime.token, context, {
           kind: node.kind, sideEffect: ["agent", "check", "worktree", "integrate"].includes(node.kind),
+          ...(reconciliation ? { reconciliation } : {}),
         }), catch: errorOf }),
         record => record.status === "succeeded" ? Effect.succeed(structuredClone(record.output!)) : Effect.suspend(() => { executedAttempt=record.attempt;return work(); }).pipe(
           Effect.tap(output => Effect.try({ try: () => {

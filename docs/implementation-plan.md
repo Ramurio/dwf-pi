@@ -12,7 +12,7 @@
 | Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Реализовано и проверено: await, run.waits/resolve, JSON-форма, idempotency, pause/resume, SIGKILL и worktree reattach; см. outcomes-and-waits.md |
 | Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Реализовано: controller.snapshot + projectRun, включая browser list и watch; проверка процессов отдельно от heartbeat, см. observation.md |
 | Usage | Учёт каждого ответа, cache/reasoning, попытки, dedup, отмена/ошибки, раскрытие сумм | Backend/API/UI реализованы; 65 targeted tests и браузерный fixture, см. usage.md. Общая приёмка с будущим recovery остаётся обязательной |
-| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, output repair, collect, safe retry, HTTP observations и provider retry policy реализованы; для reconciliation добавлены запись операций, workers/groups и публичная инспекция checkpoint/файлов. Протокол решений остаётся в работе. См. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md, retry-policy.md, provider-responses.md и reconciliation.md |
+| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, output repair, collect, safe retry, HTTP observations и provider retry policy реализованы; для reconciliation добавлены запись операций, workers/groups и публичная инспекция checkpoint/файлов. Добавлены immutable accept/retry, одноразовый допуск, Git-проверки и browser receipts; неполные Git allocation/registration repairs и browser форма решений остаются. См. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md, retry-policy.md, provider-responses.md и reconciliation.md |
 | Артефакты | Snapshot/digest, версии критериев, применимость checks/reviews, diff | Не начато |
 | Интеграция | Отдельный integration workspace, проверки объединения, контроль target head | Не начато |
 | Authoring | Рецепты в обычный граф, агрегация коллекций, schemas и dataflow diagnostics | Не начато |
@@ -498,3 +498,49 @@ recovery/MCP/browser tests и **8/8** итоговых inspection cases, вкл�
 pause, await event без изменения run timestamp, symlink exclusions и Git pointers.
 Typecheck, browser syntax, diff check и skill validator прошли. Контракт описывает
 границы content digest и необходимость повторной проверки перед будущим применением.
+
+### Применение решений о восстановлении
+
+Добавлены CLI/MCP `run.reconcile` и `run.reconciliations`: immutable decision с
+actor/reason/evidence, точным checkpoint/attempt/workspaceDigest и отдельным фактом
+применения. Повторная доставка возвращает тот же decision с актуальным receipt;
+конфликт identity отвергается. Старый pending retry заменяется только явно через
+supersedes; история решения не переписывается.
+
+Accept архивирует исходную ошибку и создаёт succeeded checkpoint следующей попытки
+без вызова worker и без выдуманного SDK ledger. Проверяются frozen output schema,
+reviewer artifact/criteria bindings и текущие Git facts. Сохранённый расход остаётся
+в исходной попытке и общей сумме. Retry потребляется атомарно с beginActivation;
+runtime повторно вычисляет operation roots/Git directories и content digest перед
+допуском. Изменение файлов блокирует новый вызов и оставляет решение pending.
+
+Failed run можно подготовить к продолжению того же run; решение не запускает
+supervisor и не снимает pause. Старая ошибка остаётся в events/attempt history.
+Completed parent/collection и cancel сохраняют границы. Worktree acceptance сверяет
+сохранённый child result и чистый owned HEAD; integration acceptance проверяет
+original HEAD, ветку и ancestry каждого неизменённого owned source. Git status
+использует --no-optional-locks, чтобы inspection не обновляла index.
+
+В браузере по явному запросу доступны автор, причина, исходная/новая попытки,
+supersession и evidence. Принятый checkpoint подписан отдельно от вызова модели.
+Native QA: настоящий failed check и явно синтетический accepted output; показаны
+обе попытки, решение и основания, затем тот же run завершён через «Продолжить»
+без нового check. Browser console без ошибок. QA server, вкладка и каталог удалены.
+
+Targeted protocol/setup/reconciliation: **16/16**, включая **7/7** сценариев
+применения. Проверены сохранение токенов/паузы, повторная доставка после завершения,
+output и reviewer bindings, stale workspace/checkpoint, transactional rollback,
+одноразовый допуск, supersession, worktree и integration ancestry, CLI/browser reads.
+Первый полный прогон выявил strictRequired в новой MCP oneOf schema; исправлено
+объявлением output внутри соответствующей ветки, MCP negotiation проверен повторно.
+
+Обязательные остатки reconciliation: восстановление missing partially allocated
+worktree с сохранённой branch/registration, полная fault-injection матрица Git gaps
+и browser форма применения решений. Сейчас эти missing paths/unsettled Git state
+отвергаются до явного repair и новой инспекции. Полный объём остальных строк плана
+сохраняется; этот этап не завершает общий goal.
+
+Итоговый полный параллельный набор: **342/342**, 80,2 секунды,
+`/tmp/dynamicwf-reconciliation-full-verified-20260910.log`. Typecheck, browser syntax,
+skill validator и diff check прошли. Протокольный targeted log:
+`/tmp/dynamicwf-reconciliation-protocol-20260910.log`.

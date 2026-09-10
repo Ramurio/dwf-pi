@@ -21,7 +21,7 @@ export const serviceToolNames = [
   "catalog.list", "catalog.describe", "catalog.models", "system.doctor", "workflow.schema", "workflow.create", "workflow.list", "workflow.inspect",
   "workflow.patch", "workflow.validate", "workflow.compile", "workflow.prepare", "run.start", "run.status",
   "run.list", "run.inspect", "run.events", "run.usage", "run.pause", "run.resume", "run.cancel",
-  "preset.save", "preset.list", "preset.inspect", "preset.run", "run.waits", "run.resolve", "run.trace", "workflow.prepared", "run.attempts", "run.collections", "run.retries", "run.recovery",
+  "preset.save", "preset.list", "preset.inspect", "preset.run", "run.waits", "run.resolve", "run.trace", "workflow.prepared", "run.attempts", "run.collections", "run.retries", "run.recovery", "run.reconcile", "run.reconciliations",
 ] as const;
 export type ServiceToolName = typeof serviceToolNames[number];
 export type WorkflowServiceOptions = Omit<PrepareExecutionOptions, "cwd"> & { cwd?: string };
@@ -159,6 +159,11 @@ export class WorkflowService {
       case "run.recovery": {
         const input = object(request, ["id", "key"]);
         return this.getController().recovery(identifier(input.id), nonemptyString(input.key, "key"));
+      }
+      case "run.reconcile": return this.getController().reconcile(request);
+      case "run.reconciliations": {
+        const input = object(request, ["id", "key"]);
+        return this.getController().store.reconciliations(identifier(input.id), input.key === undefined ? undefined : nonemptyString(input.key, "key"));
       }
       case "run.events": {
         const input = object(request, ["id", "after"]);

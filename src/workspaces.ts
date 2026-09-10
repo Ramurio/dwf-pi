@@ -114,6 +114,30 @@ export class GitWorkspaces {
       return { workspace: { path: cwd, branch, base: originalHead, head }, merged };
     });
   }
+  /** Read-only evidence for recovery; committing or merging remains an ordinary admitted attempt. */
+  async inspectWorktree(source: string, key: string, value: Json, requireClean: boolean): Promise<WorkspaceRecord> {
+    const allocation = await this.reattach(source, key, value);
+    if (requireClean) await this.clean(allocation.path, {});
+    return { ...allocation, head: await this.head(allocation.path, "HEAD", {}) };
+  }
+  async inspectIntegration(target: string, sources: Json, owned: readonly WorkspaceRecord[], progress: IntegrationProgress | undefined, accepted: boolean): Promise<Json> {
+    const cwd = await realpath(target), records = parseWorkspaceSources(sources);
+    if (!records.length || new Set(records.map(source => source.branch)).size !== records.length) throw new Error("Invalid integration sources");
+    await this.requireRepositoryRoot(cwd, {}); await this.clean(cwd, {});
+    const branch = await this.branch(cwd, {}), head = await this.head(cwd, "HEAD", {}), common = await this.commonDirectory(cwd, {});
+    if (accepted && !progress) throw new Error("Integration original checkpoint was not recorded");
+    if (progress) {
+      if (branch !== progress.branch) throw new Error("Integration target branch changed");
+      await this.git(cwd, ["merge-base", "--is-ancestor", progress.originalHead, head], {});
+    }
+    for (const source of records) {
+      if (!owned.some(record => sameWorkspace(record, source))) throw new Error("Integration source is not a completed workspace from this run");
+      await this.assertAllocation(source, {}); await this.clean(source.path, {});
+      if (await this.commonDirectory(source.path, {}) !== common || await this.head(source.path, "HEAD", {}) !== source.head) throw new Error("Integration source repository or head changed");
+      if (accepted) await this.git(cwd, ["merge-base", "--is-ancestor", source.head, head], {});
+    }
+    return { workspace: { path: cwd, branch, base: progress?.originalHead ?? head, head }, merged: records.map(record => record.head) };
+  }
   private async assertAllocation(allocation: WorkspaceAllocation, options: GitOperationOptions): Promise<void> {
     const suffix = allocation.branch.slice(`dynamicwf/${this.runId}/`.length);
     if (!allocation.branch.startsWith(`dynamicwf/${this.runId}/`) || !/^[a-f0-9]{64}$/.test(suffix) || allocation.path !== join(await realpath(join(this.directory, "worktrees")), suffix) || !hashPattern.test(allocation.base)) throw new Error("Workspace allocation does not belong to this run");
@@ -176,7 +200,7 @@ export class GitWorkspaces {
     const override = Object.keys(process.env).find(name => unsafeGitEnvironment.test(name));
     if (override) throw new Error(`Git environment override is unsupported for managed workspaces: ${override}. Unset it before launching the workflow.`);
     try {
-      const result = await runCheckProcess("git", [...gitConfiguration, ...args], cwd, options) as { exitCode: number; stdout: string; stderr: string };
+      const result = await runCheckProcess("git", ["--no-optional-locks", ...gitConfiguration, ...args], cwd, options) as { exitCode: number; stdout: string; stderr: string };
       if (!expected.includes(result.exitCode)) throw new Error(`git ${args[0]} failed (${result.exitCode}): ${result.stderr.trim() || result.stdout.trim()}`);
       return result;
     } finally { options.onFinished?.(); }

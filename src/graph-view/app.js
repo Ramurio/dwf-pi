@@ -7,6 +7,7 @@ const attemptPages = new AttemptPages();
 const collectionPages = new CollectionPages();
 const retryPages = new RetryPages();
 const recoveryInspections = new Map();
+const reconciliationRecords = new Map();
 const routingLabels = { true: "Условие выполнено", false: "Условие не выполнено", "not-evaluated": "Не проверялось", fallback: "Выбран запасной переход", error: "Ошибка проверки" };
 const waitDrafts = new Map();
 
@@ -599,6 +600,7 @@ function outputRepairView(progress, status) {
   return panel;
 }
 function renderAttempts(container, activation) {
+  renderReconciliations(container, activation);
   const id=state.id, identity=JSON.stringify([id,activation.key]), page=attemptPages.get(identity);
   const load=button(page.loading ? "Загружаем попытки…" : !page.opened ? `Попытки: ${activation.attempt}` : page.hasMore ? "Ещё попытки" : "Обновить попытки", async()=>{
     const work=attemptPages.loadAttempts(identity,(_identity,cursor)=>api(`attempts?id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}&after=${cursor}`));
@@ -614,7 +616,8 @@ function renderAttempts(container, activation) {
     const card=el("section","attempt-card");
     card.append(el("strong","",`Попытка ${record.attempt}${record.attempt===snapshot.current.attempt ? " · последняя" : ""}`),badge(record.status));
     card.append(el("p","muted",`${date(record.startedAt)} · ${record.finishedAt===null ? "не завершена на момент запроса" : duration(record.finishedAt-record.startedAt)}`));
-    if(record.kind==="agent")card.append(el("p","",record.accounting.usage ? `${number(record.accounting.usage.totalTokens)} ток. · ответов ${record.accounting.responses}${record.accounting.complete ? "" : " · частично"}` : "Расход этой попытки неизвестен: нет отчётов SDK."));
+    if(record.metadata.reconciliation?.action === "accept") card.append(el("p","notice","Результат принят при восстановлении. Нового вызова модели или команды не было; прежний расход сохранён в исходной попытке."));
+    else if(record.kind==="agent")card.append(el("p","",record.accounting.usage ? `${number(record.accounting.usage.totalTokens)} ток. · ответов ${record.accounting.responses}${record.accounting.complete ? "" : " · частично"}` : "Расход этой попытки неизвестен: нет отчётов SDK."));
     if(record.metadata.outputRepair)card.append(outputRepairView(record.metadata.outputRepair,record.status));
     if(record.metadata.retry)card.append(retryView(record.metadata.retry));
     if(record.metadata.failureCauses)for(const cause of record.metadata.failureCauses)card.append(failureView(cause));
@@ -624,6 +627,27 @@ function renderAttempts(container, activation) {
     if(record.metadata.operation)card.append(operationView(record.metadata.operation));
     if(Object.keys(record.metadata).length){const details=el("details");details.append(el("summary","","Данные попытки"),el("pre","",JSON.stringify(record.metadata,null,2)));card.append(details);}
     container.append(card);
+  }
+}
+function renderReconciliations(container, activation) {
+  const id = state.id, identity = JSON.stringify([id, activation.key]), cached = reconciliationRecords.get(identity) ?? {};
+  const load = button(cached.loading ? "Загружаем решения…" : cached.value ? "Обновить решения о восстановлении" : "Решения о восстановлении", async () => {
+    reconciliationRecords.set(identity, { ...cached, loading: true, error: null }); renderInspector();
+    try { reconciliationRecords.set(identity, { value: await api(`reconciliations?id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}`), at: Date.now() }); }
+    catch (error) { reconciliationRecords.set(identity, { ...cached, error: error.message }); }
+    if (state.id === id) renderInspector();
+  }, "child-button");
+  load.disabled = !!cached.loading; container.append(load);
+  if (cached.error) container.append(el("p", "notice", cached.error));
+  if (!cached.value) return;
+  container.append(el("p", "muted", `Решения на ${date(cached.at)}. ${cached.value.length ? "" : "Сохранённых решений нет."}`));
+  for (const record of cached.value) {
+    const r = record.request, panel = el("details"), status = record.supersededBy ? "заменено" : record.application ? `применено к попытке ${record.application.attempt}` : "ожидает допуска";
+    panel.append(el("summary", "", `${r.action === "accept" ? "Приём результата" : "Разрешение повтора"} · ${status}`),
+      el("p", "", `${r.actor} · ${date(record.createdAt)} · исходная попытка ${r.attempt}`), el("p", "", r.reason),
+      el("p", "muted", "Основания заявил автор решения. Они не являются автоматическим подтверждением всех внешних действий."),
+      el("pre", "", JSON.stringify(record, null, 2)));
+    container.append(panel);
   }
 }
 function operationView(operation) {

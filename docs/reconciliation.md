@@ -2,8 +2,9 @@
 
 This work implements the recovery scenario in the project audit. Operation capture,
 worker/group observations and public `run.recovery` inspection are implemented below.
-The mutation protocol for accepting a result or authorizing a retry, including
-Git-specific resolution paths, is still being implemented and is not available yet.
+`run.reconcile` now accepts checked results and authorizes one-use retries through
+CLI/MCP. Browser inspection shows decision provenance and application receipts.
+Some Git repair paths and the browser decision form remain under implementation.
 
 ## Persisted operation observations
 
@@ -148,15 +149,15 @@ or a diff between inspections. There is no automatic preset or disk snapshot sav
 
 After scanning, controller observation and the journal checkpoint are checked again.
 A changed checkpoint or newly live process invalidates the inspection. Filesystem
-reads are not an atomic transaction with SQLite or other editors: the future decision
-and execution admission must recheck these facts. Unknown external effects and link
+reads are not an atomic transaction with SQLite or other editors: decision application
+and execution admission recheck these facts. Unknown external effects and link
 targets still need explicit evidence. Repeated inspection does not rerun work, rewrite
 attempts, or alter usage. Read `run.attempts` for per-attempt accounting.
 
 This command supplies evidence only. Empty blockers and a valid output schema do not
 authorize accepting an output, retrying writes or overriding artifact/criteria bindings.
 
-## Resolution contract being implemented
+## Resolution contract
 
 The complete feature must support accepting a checked result, authorizing another
 execution after inspection, and ending the run. It must preserve the following:
@@ -204,4 +205,77 @@ live owner/worker and process-launch gaps; pause/cancel during resolution; faile
 run recovery; allocation/commit and partially integrated Git gaps; completed parent
 or collected result protection; API/MCP and browser explanation of decisions.
 
-These acceptance scenarios remain open until the full resolution protocol exists.
+Implemented cases and remaining gaps are distinguished below; the full feature is
+not complete merely because the decision API is available.
+
+## Applying a decision
+
+CLI and MCP expose `run.reconcile`. Supply the exact `id`, activation `key`,
+`attempt`, `checkpoint` and `workspaceDigest` from a fresh `run.recovery`, plus:
+
+```json
+{
+  "decisionId": "actor-generated-stable-identity",
+  "action": "accept",
+  "actor": "authorized-agent",
+  "reason": "Checked the already produced result and settled the operation",
+  "evidence": [{ "description": "Specific observed files/checks and external effects" }],
+  "output": { "exitCode": 0, "stdout": "example only", "stderr": "" }
+}
+```
+
+This fragment illustrates a check result, not evidence for any real run. Retry uses
+`action:"retry"` and omits `output`. Choose the decision ID before delivery. Exact
+redelivery returns the persisted decision with its current application/supersession
+receipt, even after the run finishes; different content with the same ID fails.
+Reading `run.reconciliations` optionally filters by activation `key`.
+
+New decisions require a fresh stopped/unconsumed checkpoint and filesystem digest.
+The controller validates liveness and Git observations, then the store atomically
+checks the complete journal checkpoint and appends the immutable decision. Actor
+evidence remains an attestation. The SQLite transaction does not lock editors or
+external services; filesystem observation has the limits documented above.
+
+Accept validates the frozen output schema and recorded reviewer bindings. It
+archives failed attempt N intact and creates succeeded checkpoint N+1, visibly
+marked `metadata.reconciliation` without a worker/session/model invocation. Existing
+response rows and cumulative spend remain intact; no new SDK response or ledger
+entry is fabricated. History differentiates accepted checkpoints from model calls.
+
+Retry remains pending until the runtime re-observes operation roots and Git
+administration. The journal consumes the decision atomically with attempt N+1,
+its original history and admission event. An admitted attempt that crashes needs
+its own new resolution. Files changed while pending block execution before a new
+attempt; use a fresh inspection and explicit `supersedes` to replace that decision.
+The old decision stays immutable. Applied or unrelated decisions cannot be replaced.
+Broad shared roots can conservatively invalidate another branch's pending decision.
+
+Recording either action prepares the same run as interrupted or paused and clears
+its current run-level failure projection; original failure events and attempt data
+remain. It does not launch a supervisor or lift an existing pause. Resolve all
+necessary operations, then call `run.resume`. Ordinary resume of a failed run does
+not authorize uncertain writes. Cancellation and completed/collected results remain
+sealed. Browser **Решения о восстановлении** fetches receipts explicitly and shows
+the actor, reason, source/application attempts, supersession and raw evidence.
+
+Managed Git acceptance verifies current ownership, repository, branch and HEAD.
+Worktrees must be clean and match a saved completed child result (or exact child
+root finish/end checkpoint). Integration requires a recorded original HEAD, clean
+named target branch descending from it, unchanged completed owned source worktrees,
+and every source HEAD included in the target ancestry. Git inspection disables
+optional locks so status does not refresh the index between content observations.
+It never commits or merges as part of an acceptance decision.
+
+A verified existing worktree can retry allocation/commit gaps by reattaching and
+replaying completed children before ordinary commit admission. Integration retry
+checks a clean settled target and unchanged owned sources; earlier committed merges
+remain and normal Git admission handles the remaining work. No rollback is implied.
+Worktree failures before any allocation was recorded can retry normal allocation.
+
+Still required: safe recovery of a missing partially allocated worktree with a
+retained branch/registration, full fault-injection coverage of allocation/commit
+and multi-source integration gaps, and the browser decision form. Such missing
+paths or unresolved Git operations currently fail verification and require explicit
+repair followed by fresh inspection. No implicit `prune`, reset, or deletion is
+performed. Isolated integration workspaces and versioned artifact proofs remain
+separate requirements of the overall implementation plan.

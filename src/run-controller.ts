@@ -14,6 +14,10 @@ import { projectRun } from "./observation.js";
 import { groupMembers, processGroups, type GroupProcess } from "./process-groups.js";
 import { observeRecoveryFiles, recoveryGitDirectories } from "./recovery-files.js";
 import { recoveryBlockers, recoveryCheckpoint, recoveryOutputContract, recoveryRoots } from "./recovery-inspection.js";
+import { isDeepStrictEqual } from "node:util";
+import { parseOperation } from "./operation-record.js";
+import { GitWorkspaces, parseWorkspaceSources } from "./workspaces.js";
+import { parseReconciliationRequest, sameReconciliation, validateReconciledOutput } from "./reconciliation.js";
 
 export interface UnresolvedWorkerGroup { key: string; attempt: number; groupPid: number; ownership: "unverified"; processes: GroupProcess[] }
 
@@ -218,5 +222,41 @@ export class RunController {
     const run = this.store.get(id);
     if (run.ownerToken === null && run.desired === "running" && ["queued", "interrupted"].includes(run.status)) await this.launch(id);
     return wait;
+  }
+  async reconcile(value: unknown) {
+    const request = parseReconciliationRequest(value);
+    const existing = this.store.reconciliation(request.id, request.decisionId);
+    if (existing) return sameReconciliation(existing, request);
+    const inspect = async () => {
+      const result = await this.recovery(request.id, request.key);
+      if (result.blockers.length) throw new Error(`Recovery is blocked: ${result.blockers.map(b => b.code).join(", ")}`);
+      if (result.attempt !== request.attempt || result.checkpoint !== request.checkpoint || result.workspace?.digest !== request.workspaceDigest) throw new Error("Recovery checkpoint or workspace changed; inspect again");
+      return result;
+    };
+    let inspection = await inspect();
+    const state = this.store.recoveryState(request.id), selected = state.activations.find(a => a.key === request.key)!;
+    if (request.action === "accept") validateReconciledOutput(state.run, selected, request.output!);
+    const operation = parseOperation(selected.metadata.operation)!;
+    const git = new GitWorkspaces(request.id, this.directory(request.id));
+    if (operation.kind === "worktree") {
+      if (selected.metadata.workspace === undefined) {
+        if (request.action === "accept" || selected.metadata.workspacePhase !== "allocating") throw new Error("No owned workspace allocation was recorded");
+      } else {
+        const workspace = await git.inspectWorktree(operation.source, selected.key, selected.metadata.workspace, request.action === "accept");
+        if (request.action === "accept") {
+          const completed = state.activations.find(a => ["end", "finish"].includes(a.kind) && a.status === "succeeded" && isDeepStrictEqual(a.context.scope, operation.childScope));
+          const result = Object.hasOwn(operation, "childResult") ? operation.childResult! : completed?.output;
+          if (result === undefined || !isDeepStrictEqual(request.output, { result, workspace })) throw new Error("Accepted worktree output does not match its completed child checkpoint and current Git head");
+        }
+      }
+      inspection = await inspect();
+    }
+    if (operation.kind === "integrate") {
+      const owned = state.activations.filter(a => a.kind === "worktree" && a.status === "succeeded" && a.output !== undefined).flatMap(a => parseWorkspaceSources([a.output!]));
+      const actual = await git.inspectIntegration(operation.target, operation.sources, owned, operation.progress, request.action === "accept");
+      if (request.action === "accept" && !isDeepStrictEqual(request.output, actual)) throw new Error("Accepted integration output does not match current Git ancestry and source checkpoints");
+      inspection = await inspect();
+    }
+    return this.store.recordReconciliation(request, inspection.workspace!);
   }
 }

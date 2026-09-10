@@ -181,6 +181,12 @@ export async function startGraphServer(
         json(await controller.recovery(id, key));
         return;
       }
+      if (name === "reconciliations") {
+        const id = url.searchParams.get("id") ?? runId;
+        if (!id) throw new Error("Select a run");
+        json(store.reconciliations(id, url.searchParams.get("key") ?? undefined));
+        return;
+      }
       if (name === "attempts") {
         const id = url.searchParams.get("id") ?? runId, key = url.searchParams.get("key");
         if (!id || !key) throw new Error("Select a run and activation key");

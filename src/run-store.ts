@@ -13,6 +13,9 @@ import type { RoutingDecision } from "./expressions.js";
 import { validateCollectedResult, type CollectedResult, type CollectionRecord } from "./collection.js";
 import { parseRetryProgress, permitsRetry, retryDelay, retryProgress, retryRemaining, RetryNotReady, type RetryRecord } from "./retry-policy.js";
 import { parseOperation } from "./operation-record.js";
+import { recoveryBlockers, recoveryCheckpoint } from "./recovery-inspection.js";
+import type { WorkspaceObservation } from "./recovery-files.js";
+import { parseReconciliationRequest, sameReconciliation, validateReconciledOutput, type ReconciliationRecord, type ReconciliationRequest } from "./reconciliation.js";
 
 export type RunStatus = "queued" | "running" | "waiting" | "pausing" | "paused" | "cancelling" | "cancelled" | "succeeded" | "failed" | "interrupted";
 export type DesiredRunStatus = "running" | "paused" | "cancelled";
@@ -153,6 +156,18 @@ export class RunStore {
         retry_seq INTEGER PRIMARY KEY REFERENCES workflow_retries(seq) ON DELETE CASCADE,
         causes TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS workflow_reconciliations (
+        run_id TEXT NOT NULL REFERENCES workflow_runs(id), decision_id TEXT NOT NULL,
+        activation_key TEXT NOT NULL, source_attempt INTEGER NOT NULL, request TEXT NOT NULL,
+        plan_hash TEXT NOT NULL, workspace TEXT NOT NULL, created_at INTEGER NOT NULL, supersedes TEXT,
+        PRIMARY KEY(run_id,decision_id), UNIQUE(run_id,supersedes),
+        FOREIGN KEY(run_id,supersedes) REFERENCES workflow_reconciliations(run_id,decision_id)
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS workflow_reconciliation_applications (
+        run_id TEXT NOT NULL, decision_id TEXT NOT NULL, attempt INTEGER NOT NULL, at INTEGER NOT NULL,
+        PRIMARY KEY(run_id,decision_id),
+        FOREIGN KEY(run_id,decision_id) REFERENCES workflow_reconciliations(run_id,decision_id)
+      ) STRICT;
     `);
   }
   close(): void { this.database.close(); }
@@ -354,7 +369,7 @@ export class RunStore {
       this.event(id, `run.${outcome.status}`, outcome.status === "succeeded" ? { output: outcome.output, taskOutcome: JSON.parse(JSON.stringify(taskOutcome)) as Json } : outcome.status === "failed" ? { error: outcome.error, failure: JSON.parse(JSON.stringify(failure)) as Json } : {});
     });
   }
-  beginActivation(id: string, token: string, context: RuntimeContext, options: { kind: string; sideEffect: boolean }): ActivationRecord {
+  beginActivation(id: string, token: string, context: RuntimeContext, options: { kind: string; sideEffect: boolean; reconciliation?: string }): ActivationRecord {
     return this.transaction(() => {
       const run = this.owned(id, token);
       if (run.desired !== "running" || !["running", "waiting"].includes(run.status)) throw new Error(`Run is not accepting work: ${run.desired}/${run.status}`);
@@ -364,17 +379,25 @@ export class RunStore {
       if (old?.metadata.workerGroupState === "pending") throw executionFailure("uncertain-effect", "recovery", "unknown", "Prior worker process group has not been verified empty");
       if (old?.status === "succeeded") return old;
       if (old?.status === "running") throw new Error(`Activation is already running: ${key}`);
-      const decision = this.plannedRetry(run,old), allowed = !!decision;
+      const manual = this.pendingReconciliation(id, key);
+      if (manual && (options.reconciliation !== manual.request.decisionId || manual.request.attempt !== old?.attempt || manual.planHash !== run.plan.hash)) throw new Error("Reconciliation requires fresh admission inspection");
+      if (options.reconciliation && !manual) throw new Error("Reconciliation authorization is no longer pending");
+      const decision = manual ? undefined : this.plannedRetry(run,old), allowed = !!decision;
       if (decision && retryRemaining(retryProgress(decision,"scheduled")) > 0) throw new RetryNotReady();
-      if (old?.sideEffect && !allowed && !(old.kind === "worktree" && old.metadata.workspacePhase === "children")) throw executionFailure("uncertain-effect","recovery","unknown",`Uncertain side effect requires explicit retry authorization: ${key}`);
+      if (old?.sideEffect && !allowed && !manual && !(old.kind === "worktree" && old.metadata.workspacePhase === "children")) throw executionFailure("uncertain-effect","recovery","unknown",`Uncertain side effect requires explicit retry authorization: ${key}`);
       // Preserve the complete prior checkpoint atomically before replacing the current attempt.
       if (old) this.database.prepare("INSERT INTO workflow_activation_history(run_id,activation_key,attempt,record) VALUES(?,?,?,?)")
         .run(id, key, old.attempt, JSON.stringify(allowed ? {...old,metadata:{...old.metadata,retry:retryProgress(decision!,"admitted")}} : old));
       const { failure: _previousFailure, failureCauses: _previousCauses, outputRepair: _previousRepair, retry: _previousRetry,
         operation: _operation, sessionFile: _session, workerPid: _pid, workerToken: _worker, workerKind: _workerKind, workerLaunch: _workerLaunch,
         workerGroupPid: _groupPid, workerGroupState: _groupState,
-        cwd: _cwd, model: _model, thinking: _thinking, ...metadata } = old?.metadata ?? {};
+        cwd: _cwd, model: _model, thinking: _thinking, reconciliation: _reconciliation, ...metadata } = old?.metadata ?? {};
       const now = Date.now();
+      if (manual) {
+        this.applyReconciliation(id, manual.request.decisionId, old!.attempt + 1, now);
+        metadata.reconciliation = { decisionId: manual.request.decisionId, sourceAttempt: old!.attempt, action: "retry" };
+        if (old!.kind === "worktree" && metadata.workspace) metadata.workspacePhase = "children";
+      }
       if (run.status === "waiting") {
         this.database.prepare("UPDATE workflow_runs SET status='running',updated_at=? WHERE id=?").run(now, id);
         this.event(id, "run.running", {});
@@ -634,9 +657,69 @@ export class RunStore {
     return row ? this.decodeCollection(row) : undefined;
   }
   recoveryState(id: string) {
-    return this.transaction(() => ({ run: this.get(id), activations: this.listActivations(id),
+    return this.transaction(() => this.readRecoveryState(id), "read");
+  }
+  private readRecoveryState(id: string) {
+    return { run: this.get(id), activations: this.listActivations(id),
       eventSeq: Number(this.database.prepare("SELECT COALESCE(MAX(seq),0) AS seq FROM workflow_run_events WHERE run_id=?").get(id)!.seq),
-      collections: this.database.prepare("SELECT * FROM workflow_collections WHERE run_id=? ORDER BY seq").all(id).map(row => this.decodeCollection(row)) }), "read");
+      collections: this.database.prepare("SELECT * FROM workflow_collections WHERE run_id=? ORDER BY seq").all(id).map(row => this.decodeCollection(row)) };
+  }
+  reconciliations(id: string, key?: string): ReconciliationRecord[] {
+    this.get(id);
+    return this.database.prepare(`SELECT d.*, a.attempt AS applied_attempt, a.at AS applied_at, s.decision_id AS superseded_by
+      FROM workflow_reconciliations d LEFT JOIN workflow_reconciliation_applications a USING(run_id,decision_id)
+      LEFT JOIN workflow_reconciliations s ON s.run_id=d.run_id AND s.supersedes=d.decision_id
+      WHERE d.run_id=? ${key === undefined ? "" : "AND d.activation_key=?"} ORDER BY d.created_at,d.rowid`)
+      .all(...(key === undefined ? [id] : [id, key])).map(row => ({
+        request: JSON.parse(String(row.request)), planHash: String(row.plan_hash), workspace: JSON.parse(String(row.workspace)),
+        createdAt: Number(row.created_at), application: row.applied_attempt === null ? null : { attempt: Number(row.applied_attempt), at: Number(row.applied_at) },
+        supersededBy: row.superseded_by === null ? null : String(row.superseded_by),
+      }));
+  }
+  reconciliation(id: string, decisionId: string): ReconciliationRecord | undefined {
+    return this.reconciliations(id).find(record => record.request.decisionId === decisionId);
+  }
+  pendingReconciliation(id: string, key: string): ReconciliationRecord | undefined {
+    return this.reconciliations(id, key).find(record => record.request.action === "retry" && !record.application && !record.supersededBy);
+  }
+  private applyReconciliation(id: string, decisionId: string, attempt: number, at: number): void {
+    this.database.prepare("INSERT INTO workflow_reconciliation_applications(run_id,decision_id,attempt,at) VALUES(?,?,?,?)").run(id,decisionId,attempt,at);
+    this.event(id, "reconciliation.applied", { decisionId, attempt });
+  }
+  /** Caller verifies OS liveness, files and Git first; checkpoint validation and application are atomic here. */
+  recordReconciliation(value: ReconciliationRequest, workspace: WorkspaceObservation): ReconciliationRecord {
+    const request = parseReconciliationRequest(value), id = request.id;
+    return this.transaction(() => {
+      const existing = this.reconciliation(id, request.decisionId);
+      if (existing) return sameReconciliation(existing, request);
+      const state = this.readRecoveryState(id), selected = state.activations.find(a => a.key === request.key);
+      if (!selected || selected.attempt !== request.attempt || recoveryCheckpoint(state.run, state.activations, state.collections, state.eventSeq) !== request.checkpoint) throw new Error("Recovery checkpoint changed; inspect again");
+      const blockers = recoveryBlockers(state.run, selected, state.activations, state.collections);
+      if (blockers.length || state.activations.some(a => a.metadata.workerGroupState === "pending")) throw new Error(`Recovery is blocked: ${blockers.map(b => b.code).join(", ") || "unresolved-groups"}`);
+      if (workspace.digest !== request.workspaceDigest) throw new Error("Recovery workspace changed; inspect again");
+      const pending = this.pendingReconciliation(id, request.key);
+      if (pending ? request.supersedes !== pending.request.decisionId : request.supersedes !== undefined) throw new Error("A pending reconciliation requires explicit supersedes; applied decisions cannot be superseded");
+      const output = request.action === "accept" ? validateReconciledOutput(state.run, selected, request.output!) : undefined;
+      const now = Date.now();
+      this.database.prepare(`INSERT INTO workflow_reconciliations(run_id,decision_id,activation_key,source_attempt,request,plan_hash,workspace,created_at,supersedes) VALUES(?,?,?,?,?,?,?,?,?)`)
+        .run(id,request.decisionId,request.key,request.attempt,JSON.stringify(request),state.run.plan.hash,JSON.stringify(workspace),now,request.supersedes ?? null);
+      this.event(id, "reconciliation.recorded", { key: request.key, decisionId: request.decisionId, action: request.action, sourceAttempt: request.attempt, actor: request.actor, reason: request.reason, supersedes: request.supersedes ?? null });
+      if (request.action === "accept") {
+        this.database.prepare("INSERT INTO workflow_activation_history(run_id,activation_key,attempt,record) VALUES(?,?,?,?)").run(id,request.key,selected.attempt,JSON.stringify(selected));
+        // Preserve cumulative spend, but no worker/model invocation is invented for an accepted checkpoint.
+        const metadata = { ...(selected.metadata.usage === undefined ? {} : { usage: selected.metadata.usage }),
+          reconciliation: { decisionId: request.decisionId, sourceAttempt: selected.attempt, action: "accept" } };
+        this.database.prepare(`UPDATE workflow_activations SET status='succeeded',attempt=?,owner_token='',started_at=?,finished_at=?,output=?,error=NULL,metadata=? WHERE run_id=? AND activation_key=?`)
+          .run(selected.attempt+1,now,now,JSON.stringify(output),JSON.stringify(metadata),id,request.key);
+        this.applyReconciliation(id,request.decisionId,selected.attempt+1,now);
+        this.event(id,"activation.reconciled",{key:request.key,attempt:selected.attempt+1,decisionId:request.decisionId});
+      }
+      this.database.prepare("UPDATE workflow_runs SET status=?,output=NULL,error=NULL,updated_at=? WHERE id=?")
+        .run(state.run.desired === "paused" ? "paused" : "interrupted",now,id);
+      this.database.prepare("DELETE FROM workflow_run_failures WHERE run_id=?").run(id);
+      this.event(id,"run.recovery_ready",{decisionId:request.decisionId,desired:state.run.desired});
+      return this.reconciliation(id,request.decisionId)!;
+    });
   }
   private decodeCollection(row: Record<string, unknown>): CollectionRecord {
     return { seq:Number(row.seq),runId:String(row.run_id),key:String(row.activation_key),itemId:String(row.item_id),attempt:Number(row.attempt),at:Number(row.at),result:validateCollectedResult(JSON.parse(String(row.result))) };
