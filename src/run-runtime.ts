@@ -4,6 +4,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { Cause, Effect, Exit, Option } from "effect";
 import { executionFailure, failureRecord } from "./execution-failure.js";
 import { parseOutputRepairProgress } from "./output-repair.js";
+import { retryProgress, retryRemaining, RetryNotReady, permitsRetry } from "./retry-policy.js";
 import type { ExecutionPlan, FrozenAgent, PiWorkerRequest } from "./execution-types.js";
 import type { Json, Node } from "./graph.js";
 import { assertJson, createOutputValidator } from "./output-schema.js";
@@ -84,6 +85,17 @@ export class JournalRuntime implements WorkflowRuntime {
       await sleep(100, undefined, signal ? { signal } : {});
     }
   }
+  private async retryGate(context: RuntimeContext, signal: AbortSignal): Promise<void> {
+    for (;;) {
+      await this.gate(signal);
+      const decision = this.store.scheduledRetry(this.run.id,activationKey(context));
+      if (!decision) return;
+      const remaining = retryRemaining(retryProgress(decision,"scheduled"));
+      if (!remaining) return;
+      // Small cancellable waits also let pause/resume recheck admission. No total time cap.
+      await sleep(Math.min(100,remaining),undefined,{signal});
+    }
+  }
   updatePause(): void {
     const current = this.current();
     if (current.desired === "running") { this.store.updateWaiting(this.run.id, this.token); return; }
@@ -131,14 +143,15 @@ export class JournalRuntime implements WorkflowRuntime {
   step(context: RuntimeContext, work: () => Effect.Effect<Json, Error>): Effect.Effect<Json, Error> {
     const runtime = this;
     return Effect.suspend(() => Effect.gen(function* () {
-      yield* Effect.tryPromise({ try: signal => runtime.gate(signal), catch: errorOf });
+      yield* Effect.tryPromise({ try: signal => runtime.retryGate(context,signal), catch: errorOf });
       const node = runtime.plan.workflow.graphs[context.graphId]?.nodes.find(item => item.id === context.nodeId);
       if (!node) return yield* Effect.fail(new Error("Activation is absent from frozen graph"));
+      let executedAttempt: number | undefined;
       return yield* Effect.acquireUseRelease(
         Effect.try({ try: () => runtime.store.beginActivation(runtime.run.id, runtime.token, context, {
           kind: node.kind, sideEffect: ["agent", "check", "worktree", "integrate"].includes(node.kind),
         }), catch: errorOf }),
-        record => record.status === "succeeded" ? Effect.succeed(structuredClone(record.output!)) : Effect.suspend(work).pipe(
+        record => record.status === "succeeded" ? Effect.succeed(structuredClone(record.output!)) : Effect.suspend(() => { executedAttempt=record.attempt;return work(); }).pipe(
           Effect.tap(output => Effect.try({ try: () => {
             assertJson(output);
             runtime.store.completeActivation(runtime.run.id, runtime.token, record.key, output);
@@ -151,13 +164,19 @@ export class JournalRuntime implements WorkflowRuntime {
             const failure = Exit.isFailure(exit) ? describeFailureCause(exit.cause) : executionFailure("unknown","execution","unknown","Activation finished without a checkpoint").failure;
             runtime.store.failActivation(runtime.run.id, runtime.token, record.key,
               Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "Activation finished without a checkpoint",
-              ["map","parallel","subworkflow","worktree","integrate"].includes(node.kind) ? {...failure,effects:"unknown"} : failure);
+              ["map","parallel","subworkflow","worktree","integrate"].includes(node.kind) ? {...failure,effects:"unknown"} : failure,
+              {retryEligible:Exit.isFailure(exit) && !Cause.isInterrupted(exit.cause) && !Cause.isDie(exit.cause) &&
+                Array.from(Cause.failures(exit.cause)).length>0 && Array.from(Cause.failures(exit.cause)).every(error=>permitsRetry(
+                  node.kind === "agent" || node.kind === "check" ? node.retryPolicy : undefined, record.attempt, describeFailureCause(Cause.fail(error))))});
           }
         }),
       ).pipe(Effect.catchAll(error => {
         const current = runtime.store.get(runtime.run.id);
         // A pause can race the outer gate; the journal atomically denies admission.
         if (current.ownerToken === runtime.token && current.desired === "paused" && /not accepting work/.test(error.message)) return runtime.step(context, work);
+        if (error instanceof RetryNotReady) return runtime.step(context,work);
+        const decision = runtime.store.scheduledRetry(runtime.run.id,activationKey(context));
+        if (current.ownerToken === runtime.token && decision && decision.attempt === executedAttempt) return runtime.step(context,work);
         return Effect.fail(error);
       }));
     }));

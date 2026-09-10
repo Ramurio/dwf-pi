@@ -12,7 +12,7 @@
 | Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Реализовано и проверено: await, run.waits/resolve, JSON-форма, idempotency, pause/resume, SIGKILL и worktree reattach; см. outcomes-and-waits.md |
 | Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Реализовано: controller.snapshot + projectRun, включая browser list и watch; проверка процессов отдельно от heartbeat, см. observation.md |
 | Usage | Учёт каждого ответа, cache/reasoning, попытки, dedup, отмена/ошибки, раскрытие сумм | Backend/API/UI реализованы; 65 targeted tests и браузерный fixture, см. usage.md. Общая приёмка с будущим recovery остаётся обязательной |
-| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, submit-only output repair и durable collect реализованы; provider status, retry и reconciliation остаются, см. attempt-history.md, execution-failures.md, output-repair.md и collection-policy.md |
+| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, submit-only output repair, durable collect и explicit safe retry реализованы; provider status и reconciliation остаются, см. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md и retry-policy.md |
 | Артефакты | Snapshot/digest, версии критериев, применимость checks/reviews, diff | Не начато |
 | Интеграция | Отдельный integration workspace, проверки объединения, контроль target head | Не начато |
 | Authoring | Рецепты в обычный граф, агрегация коллекций, schemas и dataflow diagnostics | Не начато |
@@ -58,7 +58,7 @@ supervisor в worktree; повтор start; patch после prepare; конфл
   за 95,7 секунды; `/tmp/dynamicwf-usage-routes-full-20260910.log`.
   Нестабильность обычного параллельного прогона этим не считается исправленной.
 
-Следующие части восстановления: точные provider statuses, policies retry и reconciliation. Остальные строки
+Следующие части восстановления: точные provider statuses и reconciliation. Остальные строки
 сохраняют полный обязательный объём; завершённые изменения не означают завершение
 общего goal.
 
@@ -260,3 +260,43 @@ Native UI запускал настоящий detached runtime с failed/returne
 Дополнительно проверен именно сгенерированный TS для вложенных collect map/parallel:
 **7/7** compiler tests, 3,6 секунды; TypeScript diagnostics пусты и исполнение
 возвращает ожидаемые вложенные envelopes. `/tmp/dynamicwf-collect-compiler-final.log`.
+
+### Явная политика безопасного повтора
+
+Node-level retryPolicy на agent/check выбирает коды ошибок, задержку и необязательное
+общее число попыток. По умолчанию повтор выключен; отсутствие maxAttempts означает
+неограниченные попытки. Все причины должны соответствовать выбранной политике и
+подтверждённым not-started/read-only эффектам. Unknown writes, interrupt, cancellation,
+cleanup и defects не повторяются. Форматный ремонт остаётся внутри отдельной попытки.
+
+Решение сохраняется атомарно с ошибкой, допускает одну следующую попытку и не может
+повторно примениться после её прерывания. Пауза блокирует допуск; смерть supervisor
+во время задержки сохраняет исходный срок. Terminal outcome помечает ожидающие
+повторы abandoned. Collect получает только окончательный результат после повторов,
+соседний await сохраняет независимость. Известный расход не теряется между попытками.
+
+CLI/MCP/browser run.retries отдаёт неизменяемые решения отдельно от live progress;
+Now, graph, inspector и watch показывают запланированный повтор без ложного счётчика
+активных workers. Watch сохраняет его видимость при подключении к длинной истории
+и не дублирует сообщения при clock-only polling. Технический стек убран из краткой
+строки задачи при наличии структурированной причины.
+
+Новые планы v6; golden v5 с collect, произведённый на 6dcafc3, проверяет точные
+source/hash и реальное detached исполнение на новом runtime. Полный параллельный
+набор: **301/301**, 68,8 секунды, `/tmp/dynamicwf-retry-full-20260910.log`.
+После расширения golden и MCP assertions: **28/28**, 16,3 секунды,
+`/tmp/dynamicwf-retry-final-targeted.log`. Typecheck, strict paging checkJs, browser
+syntax и skill validator прошли. Отдельно проверены rollback, stale ownership,
+SIGKILL, pause/cancel, огромная задержка без overflow, составные причины и SDK usage
+шести реальных offline invocations; worker с состоявшейся записью не повторён.
+
+Native browser QA: настоящий paused run после ENOENT, история решения, resume,
+успешная попытка 2 и архив ошибки попытки 1; marker записан ровно один раз.
+Повторная проверка свежего сервера подтвердила краткую причину без стека; консоль
+без ошибок. Оба стенда и вкладки очищены. Контракт: retry-policy.md.
+Точные provider statuses, reconciliation и остальные строки остаются обязательными;
+этот этап не завершает общий goal.
+
+Финальная проверка общей проекции и browser API/layout: **14/14**, 1,9 секунды,
+`/tmp/dynamicwf-retry-projection-final.log`; typecheck прошёл. Ожидающий повтор
+одного экземпляра узла остаётся видимым, даже если другой экземпляр завершился позже.

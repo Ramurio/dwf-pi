@@ -1,10 +1,11 @@
 import { layoutGraph } from "./layout.js";
-import { UsagePages, TracePages, AttemptPages, CollectionPages } from "./usage-pages.js";
+import { UsagePages, TracePages, AttemptPages, CollectionPages, RetryPages } from "./usage-pages.js";
 
 const usagePages = new UsagePages();
 const tracePages = new TracePages();
 const attemptPages = new AttemptPages();
 const collectionPages = new CollectionPages();
+const retryPages = new RetryPages();
 const routingLabels = { true: "Условие выполнено", false: "Условие не выполнено", "not-evaluated": "Не проверялось", fallback: "Выбран запасной переход", error: "Ошибка проверки" };
 const waitDrafts = new Map();
 
@@ -13,6 +14,7 @@ const names = {
   queued: "Ожидание",
   running: "В работе",
   waiting: "Ждёт ответа",
+  retrying: "Повтор запланирован",
   pausing: "Приостановка",
   paused: "Пауза",
   cancelling: "Отмена…",
@@ -321,11 +323,15 @@ function renderHeader() {
     if (r.taskOutcome.source === "legacy") outcome.append(el("small", "muted", "Результат прочитан из прежнего формата end."));
   }
   const waits = (r.waits ?? []).filter(w => w.status === "open");
+  const retries = r.retryingKeys?.length ?? 0;
   const summary = $("wait-summary");
-  summary.hidden = !waits.length || finished.has(r.status);
+  summary.hidden = (!waits.length && !retries) || finished.has(r.status);
   summary.replaceChildren();
-  if (!summary.hidden) summary.append(el("strong", "", `Ожидают ответа: ${waits.length}`), el("p", "", waits.map(w => w.reason).join(" · ")),
-    button("Открыть ожидания", () => setTab("now"), "child-button"));
+  if (!summary.hidden) {
+    if (waits.length) summary.append(el("strong", "", `Ожидают ответа: ${waits.length}`), el("p", "", waits.map(w => w.reason).join(" · ")));
+    if (retries) summary.append(el("p", "", `Запланировано повторов: ${retries}. Пауза и остановка supervisor задерживают их допуск.`));
+    summary.append(button("Открыть ожидания", () => setTab("now"), "child-button"));
+  }
   renderMetrics();
 }
 function setTab(tab) {
@@ -422,6 +428,7 @@ function renderInspector() {
       );
   }
   const outgoing = selectedGraph().edges.filter((e) => e.from === node.id);
+  if (node.retryPolicy) aside.append(el("p", "notice", `Повторы по политике: ${node.retryPolicy.codes.join(", ")} · задержка ${number(node.retryPolicy.delayMs)} мс · ${node.retryPolicy.maxAttempts === undefined ? "без лимита попыток" : `всего попыток до ${node.retryPolicy.maxAttempts}`}. Допускаются только подтверждённые not-started / read-only ошибки.`));
   if (state.transition?.context.graphId === state.graph && state.transition.decision.from === node.id) {
     aside.append(el("h3", "", "ВЫБРАННЫЙ ПЕРЕХОД"), transitionDetails(state.transition));
   }
@@ -471,6 +478,8 @@ function renderInspector() {
         ),
       );
     if (a.result) row.append(el("p", "", a.result));
+    if (a.retry) row.append(retryView(a.retry));
+    if (node.retryPolicy) renderRetries(row,a);
     if (node.failurePolicy === "collect") renderCollection(row, a);
     if (a.outputRepair) row.append(outputRepairView(a.outputRepair, a.status));
     if (a.failure) row.append(failureView(a.failure));
@@ -494,6 +503,24 @@ function failureView(failure, runScope = false) {
   const panel=el("div","failure-detail");
   panel.append(el("strong","",`${labels[failure.code] ?? labels.unknown} · ${phases[failure.phase] ?? "этап неизвестен"}`),el("p","",failure.message),el("p","muted",runScope ? "Это причина остановки. Состояние действий показано в деталях отдельных узлов." : effects[failure.effects] ?? effects.unknown));
   return panel;
+}
+function retryView(progress) {
+  const labels = {scheduled:"запланирована",admitted:"допущена",abandoned:"снята при завершении запуска"};
+  const panel = el("div","notice"), when = progress.dueAt !== null && Number.isFinite(new Date(progress.dueAt).getTime()) ? date(progress.dueAt) : `задержка ${number(progress.delayMs)} мс`;
+  panel.append(el("strong","",`Попытка ${progress.nextAttempt}: ${labels[progress.status] ?? progress.status}`),el("p","muted",`После ошибки попытки ${progress.attempt} · не раньше ${when}`));
+  if (progress.status === "scheduled") panel.append(el("p","muted","Новая попытка ещё не началась. Для допуска запуск должен работать и срок задержки должен истечь."));
+  return panel;
+}
+function renderRetries(container,activation) {
+  const id=state.id,identity=JSON.stringify([id,activation.key]),page=retryPages.get(identity);
+  const load=button(page.loading?"Загружаем решения…":!page.opened?"Решения о повторах":page.hasMore?"Ещё решения о повторах":"Обновить решения о повторах",async()=>{
+    const pending=retryPages.load(identity,async(_key,cursor)=>{
+      const response=await api(`retries?id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}&after=${cursor}`);
+      return {reports:response.records,nextAfter:response.nextAfter,hasMore:response.hasMore};
+    });renderInspector();await pending;if(state.id===id)renderInspector();
+  },"child-button");load.disabled=page.loading;container.append(load);
+  if(page.error)container.append(el("p","notice",page.error));
+  for(const record of page.reports){const details=el("details");details.append(el("summary","",`Решение: попытка ${record.attempt} → ${record.nextAttempt} · ${date(record.at)}`),failureView(record.failure),el("p","muted",`Задержка ${number(record.delayMs)} мс. Фактический допуск и состояние — в истории попыток.`));container.append(details);}
 }
 function renderCollection(container, activation) {
   if (activation.collectionSummary) container.append(el("p", "notice", `Собрано результатов: ${activation.collectionSummary.total} · успешно ${activation.collectionSummary.succeeded} · ошибок ${activation.collectionSummary.failed}`));
@@ -540,6 +567,7 @@ function renderAttempts(container, activation) {
     card.append(el("p","muted",`${date(record.startedAt)} · ${record.finishedAt===null ? "не завершена на момент запроса" : duration(record.finishedAt-record.startedAt)}`));
     if(record.kind==="agent")card.append(el("p","",record.accounting.usage ? `${number(record.accounting.usage.totalTokens)} ток. · ответов ${record.accounting.responses}${record.accounting.complete ? "" : " · частично"}` : "Расход этой попытки неизвестен: нет отчётов SDK."));
     if(record.metadata.outputRepair)card.append(outputRepairView(record.metadata.outputRepair,record.status));
+    if(record.metadata.retry)card.append(retryView(record.metadata.retry));
     if(record.metadata.failure)card.append(failureView(record.metadata.failure));
     else if(record.error)card.append(el("pre","",record.error));
     if(Object.hasOwn(record,"output"))card.append(el("pre","",JSON.stringify(record.output,null,2)));
@@ -770,7 +798,8 @@ function taskRow(a) {
   );
   if (a.result) body.append(el("div", "muted result-preview", a.result));
   if (a.outputRepair?.status === "running" && a.status === "running") body.append(el("div", "notice", `Исправление формата · раунд ${a.outputRepair.round} · только submit_result`));
-  if (a.error) body.append(el("div", "muted", a.error));
+  if (a.failure) body.append(el("div", "muted", a.failure.message));
+  else if (a.error) body.append(el("div", "muted", a.error));
   const right = el(
     "div",
     "task-number",
@@ -819,6 +848,9 @@ function renderNow() {
   const active = allActivations().filter((a) =>
     state.run.activeKeys.includes(a.key),
   );
+  for (const a of allActivations().filter(a=>(state.run.retryingKeys??[]).includes(a.key))) {
+    const row=taskRow(a);if(a.retry)row.append(retryView(a.retry));panel.append(row);
+  }
   if (!active.length)
     panel.append(
       el(

@@ -3,6 +3,7 @@ import { Check, Errors } from "typebox/value";
 import { AgentConfigSchema, roleNames, resolveAgentConfig, type AgentConfig, type RoleName } from "./catalog.js";
 import { createOutputValidator } from "./output-schema.js";
 import type { TaskDecision } from "./task-outcome.js";
+import { RetryPolicySchema, type RetryPolicy } from "./retry-policy.js";
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Expr =
@@ -15,7 +16,7 @@ export type Expr =
   | { op: "eq" | "ne" | "gt" | "gte" | "lt" | "lte"; left: Expr; right: Expr }
   | { op: "not" | "exists"; value: Expr };
 export type Node = { id: string } & (
-  | { kind: "agent"; role: RoleName; task: Expr; input?: Expr; config?: AgentConfig }
+  | { kind: "agent"; role: RoleName; task: Expr; input?: Expr; config?: AgentConfig; retryPolicy?: RetryPolicy }
   | { kind: "transform" | "end"; value: Expr }
   | { kind: "finish"; decision: TaskDecision; reason: Expr; evidence: Expr; value: Expr }
   | { kind: "await"; reason: Expr; input: Expr; responseSchema: Record<string, unknown> }
@@ -25,7 +26,7 @@ export type Node = { id: string } & (
   | { kind: "integrate"; sources: Expr }
   | { kind: "map"; graphId: string; items: Expr; concurrency?: number; failurePolicy?: "fail-fast" | "collect" }
   | { kind: "parallel"; children: { id: string; graphId: string; input: Expr }[]; concurrency?: number; failurePolicy?: "fail-fast" | "collect" }
-  | { kind: "check"; command: string; args: string[]; cwd?: string }
+  | { kind: "check"; command: string; args: string[]; cwd?: string; retryPolicy?: RetryPolicy }
 );
 export interface Edge { from: string; to: string; when?: Expr }
 export interface Graph { entry: string; nodes: Node[]; edges: Edge[] }
@@ -51,7 +52,7 @@ const definitions = {
     ...["not", "exists"].map((op) => tagged(op, { value: expr })),
   ]),
   Node: Type.Union([
-    node("agent", { role: Type.Enum(roleNames), task: expr, input: Type.Optional(expr), config: Type.Optional(AgentConfigSchema) }),
+    node("agent", { role: Type.Enum(roleNames), task: expr, input: Type.Optional(expr), config: Type.Optional(AgentConfigSchema), retryPolicy: Type.Optional(RetryPolicySchema) }),
     node("transform", { value: expr }), node("end", { value: expr }),
     node("finish", { decision: Type.Enum(["accepted", "rejected", "inconclusive"]), reason: expr, evidence: expr, value: expr }),
     node("await", { reason: expr, input: expr, responseSchema: Type.Record(Type.String(), Type.Unknown()) }),
@@ -61,7 +62,7 @@ const definitions = {
     node("integrate", { sources: expr }),
     node("map", { graphId: id, items: expr, concurrency: Type.Optional(positiveInt), failurePolicy: Type.Optional(Type.Enum(["fail-fast", "collect"])) }),
     node("parallel", { children: Type.Array(Type.Object({ id, graphId: id, input: expr }, closed), { minItems: 1 }), concurrency: Type.Optional(positiveInt), failurePolicy: Type.Optional(Type.Enum(["fail-fast", "collect"])) }),
-    node("check", { command: Type.String({ minLength: 1, pattern: "^[^\\u0000]+$" }), args: Type.Array(Type.String({ pattern: "^[^\\u0000]*$" })), cwd: Type.Optional(Type.String({ minLength: 1, pattern: "^[^\\u0000]+$" })) }),
+    node("check", { command: Type.String({ minLength: 1, pattern: "^[^\\u0000]+$" }), args: Type.Array(Type.String({ pattern: "^[^\\u0000]*$" })), cwd: Type.Optional(Type.String({ minLength: 1, pattern: "^[^\\u0000]+$" })), retryPolicy: Type.Optional(RetryPolicySchema) }),
   ]),
   Graph: Type.Object({ entry: id, nodes: Type.Array(Type.Ref("Node"), { minItems: 1 }), edges: Type.Array(Type.Object({ from: id, to: id, when: Type.Optional(expr) }, closed)) }, closed),
   Workflow: Type.Object({ schemaVersion: Type.Literal(1), id, name: Type.String({ minLength: 1 }), revision: positiveInt, entryGraph: id, graphs: Type.Record(id, Type.Ref("Graph"), { minProperties: 1, additionalProperties: false }) }, closed),

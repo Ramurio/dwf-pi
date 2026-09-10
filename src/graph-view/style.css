@@ -394,6 +394,8 @@ h1 {
 .outcome pre, .wait-card pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .wait-card textarea { display: block; box-sizing: border-box; width: 100%; margin: 12px 0; padding: 12px; font: inherit; }
 .badge.waiting { background: #fff1d4; color: #805b17; }
+.badge.retrying { background: #efeafa; color: #674990; }
+.graph-node.retrying .node-box { fill: #faf7ff; stroke: #9777bb; }
 .graph-node.waiting .node-box { fill: #fffaf0; stroke: #ba8b35; }
 .edge-underlay {
   fill: none;

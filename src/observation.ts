@@ -1,5 +1,6 @@
 import type { ActivationRecord, RunRecord } from "./run-store.js";
 import { legacyOutcome } from "./task-outcome.js";
+import { parseRetryProgress } from "./retry-policy.js";
 
 const structural = new Set(["parallel", "map", "subworkflow", "worktree"]);
 const terminal = new Set(["succeeded", "failed", "cancelled"]);
@@ -10,9 +11,10 @@ function descendant(parent: ActivationRecord, child: ActivationRecord): boolean 
 export function activeWork(records: readonly ActivationRecord[]): ActivationRecord[] {
   const active = records.filter(a => a.status === "running");
   return active.filter(a => !(a.kind === "await" && a.metadata.waiting === true) &&
-    (!structural.has(a.kind) || !active.some(child => child !== a && descendant(a, child))));
+    (!structural.has(a.kind) || !records.some(child => child !== a && (child.status === "running" || activationState(child) === "retrying") && descendant(a, child))));
 }
 export function activationState(a: ActivationRecord) {
+  if (a.status === "failed" && parseRetryProgress(a.metadata.retry)?.status === "scheduled") return "retrying";
   return a.status === "running" && a.kind === "await" && a.metadata.waiting === true ? "waiting" : a.status;
 }
 export interface ProcessObservation { supervisorAlive: boolean; workersAlive: number; observedAt: number; launchPending: boolean }
@@ -40,6 +42,7 @@ export function projectRun(run: RunRecord, records: readonly ActivationRecord[],
     accepted: taskOutcome?.decision === "accepted" ? true : taskOutcome?.decision === "rejected" ? false : null,
     activeKeys: ["running", "waiting", "pausing", "cancelling"].includes(run.status) ? activeWork(records).map(a => a.key) : [],
     waitingKeys: records.filter(a => activationState(a) === "waiting").map(a => a.key),
+    retryingKeys: !terminal.has(run.status) ? records.filter(a=>activationState(a)==="retrying").map(a=>a.key) : [],
     terminal: terminal.has(run.status),
     liveness: { state: livenessState, label: processLabel, supervisorAlive: processes?.supervisorAlive ?? null,
       workersAlive: processes?.workersAlive ?? null, observedAt: processes?.observedAt ?? null },

@@ -40,6 +40,8 @@ export class CursorPages {
 export class UsagePages extends CursorPages {}
 /** @extends {CursorPages<import('../run-store.js').TransitionRecord>} */
 export class TracePages extends CursorPages {}
+/** @extends {CursorPages<import('../retry-policy.js').RetryRecord>} */
+export class RetryPages extends CursorPages {}
 /** @typedef {ReturnType<import('../run-store.js').RunStore['collections']>} CollectionPage */
 /** @extends {CursorPages<CollectionPage['records'][number]>} */
 export class CollectionPages extends CursorPages {

@@ -45,7 +45,7 @@ SDK assistant failure is currently the `provider` family. Pi's message often exp
 only a stop reason and arbitrary error text. We **do not infer** HTTP status,
 authentication rejection, transience, rate limits or retryability from those strings.
 Provider-specific structured status capture remains required work alongside the
-adapter integration and retry policies. Unknown SDK exceptions stay `unknown`.
+adapter integration. Unknown SDK exceptions stay `unknown`.
 
 A check that normally exits 1 or 7 still returns `{exitCode,stdout,stderr}` as graph
 data. A negative reviewer verdict is likewise data. Neither becomes a transport or
@@ -73,10 +73,11 @@ application actually raised one. Untyped legacy journal errors are not retroacti
 classified by parsing their text.
 
 No graph/source/plan version changes are needed for this additive journal/IPC data.
-Older v1/v2/v3 plans retain their frozen source/hash. Execution admission is unchanged:
-failed/uncertain side-effect nodes are still blocked from implicit repetition, even
-if a new failure observation supplies more information. Explicit retry policies
-and reconciliation remain separate required implementation steps.
+Older v1/v2/v3 plans retain their frozen source/hash. Failed/uncertain side-effect
+nodes remain blocked from implicit repetition. V6 [explicit retry policies](retry-policy.md)
+can authorize a new attempt only for selected failures with confirmed safe task
+effects and a durable decision. Observations alone do not authorize retry;
+reconciliation of uncertain effects remains separate required work.
 [Output repair](output-repair.md) is available as an explicit v4 policy, inside
 the same settled worker session with only the result tool enabled.
 [Collect policy](collection-policy.md) independently preserves child values and

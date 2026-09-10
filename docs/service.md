@@ -67,6 +67,7 @@ persistent store path. Catalog/schema calls do not create a database.
 | `run.inspect` | run `id` | Summary, frozen workflow, run input and activation journal |
 | `run.events` | run `id`, optional `after` | `{events,nextAfter}` for incremental observation |
 | `run.attempts` | run `id`, activation `key`, optional `after`, `limit` | Archived attempts, separate current checkpoint, per-attempt accounting and history gaps |
+| `run.retries` | run `id`, activation `key`, optional `after`, `limit` | Immutable automatic retry decisions; current progress is separate, scheduling does not prove admission |
 | `run.pause` | run `id` | Public state after pause request |
 | `run.resume` | run `id` | Public state after resume request |
 | `run.cancel` | run `id` | Public state after cancellation request |

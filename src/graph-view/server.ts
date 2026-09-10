@@ -180,6 +180,12 @@ export async function startGraphServer(
         json(publicAttempts(store.attempts(id, key, Number(url.searchParams.get("after") ?? 0), 100)));
         return;
       }
+      if (name === "retries") {
+        const id = url.searchParams.get("id") ?? runId, key = url.searchParams.get("key");
+        if (!id || !key) throw new Error("Select a run and activation key");
+        json(store.retries(id,key,Number(url.searchParams.get("after")??0),100));
+        return;
+      }
       if (name === "collections") {
         const id = url.searchParams.get("id") ?? runId, key = url.searchParams.get("key");
         if (!id || !key) throw new Error("Select a run and activation key");

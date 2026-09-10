@@ -1,5 +1,6 @@
 import { parseExecutionFailure } from "../execution-failure.js";
 import { parseOutputRepairProgress } from "../output-repair.js";
+import { parseRetryProgress } from "../retry-policy.js";
 import type { ActivationRecord, RunRecord, WaitRecord, RunStore } from "../run-store.js";
 import { activationUsage, summarizeUsage } from "../usage.js";
 import { activationPath, type WorkerActivity } from "../monitor.js";
@@ -32,6 +33,7 @@ export function graphSnapshot(
     waits,
     accepted: presentation.accepted,
     activeKeys: presentation.activeKeys,
+    retryingKeys: presentation.retryingKeys,
     error: run.error ?? null,
     failure: run.failure ?? null,
     usage: summarizeUsage(records),
@@ -49,7 +51,8 @@ export function graphSnapshot(
         );
         const status = activations.some((a) => a.status === "running" && a.metadata.waiting !== true)
           ? "running" : activations.some(a => a.status === "running" && a.metadata.waiting === true) ? "waiting"
-          : (ordered[0]?.status ?? "unvisited");
+          : activations.some(a => activationState(a) === "retrying") ? "retrying"
+          : (ordered[0] ? activationState(ordered[0]) : "unvisited");
         const config = run.plan.agents[id]?.[node.id];
         return {
           branches: new Set(
@@ -58,6 +61,7 @@ export function graphSnapshot(
           id: node.id,
           kind: node.kind,
           failurePolicy: node.kind === "map" || node.kind === "parallel" ? node.failurePolicy ?? "fail-fast" : null,
+          retryPolicy: node.kind === "agent" || node.kind === "check" ? node.retryPolicy ?? null : null,
           role: node.kind === "agent" ? node.role : null,
           status,
           model: config?.model ?? null,
@@ -89,6 +93,7 @@ export function graphSnapshot(
             failure: parseExecutionFailure(a.metadata.failure) ?? null,
             outputRepair: parseOutputRepairProgress(a.metadata.outputRepair),
             collectionSummary: a.metadata.collectionSummary ?? null,
+            retry: parseRetryProgress(a.metadata.retry),
             result: resultSummary(a),
             findings: findings(a),
           })),

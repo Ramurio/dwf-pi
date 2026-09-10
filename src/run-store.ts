@@ -11,6 +11,7 @@ import { explicitOutcome, legacyOutcome, type TaskOutcome, type TaskDecision } f
 import { isDeepStrictEqual } from "node:util";
 import type { RoutingDecision } from "./expressions.js";
 import { validateCollectedResult, type CollectedResult, type CollectionRecord } from "./collection.js";
+import { parseRetryProgress, permitsRetry, retryProgress, retryRemaining, RetryNotReady, type RetryRecord } from "./retry-policy.js";
 
 export type RunStatus = "queued" | "running" | "waiting" | "pausing" | "paused" | "cancelling" | "cancelled" | "succeeded" | "failed" | "interrupted";
 export type DesiredRunStatus = "running" | "paused" | "cancelled";
@@ -140,6 +141,13 @@ export class RunStore {
         FOREIGN KEY(run_id,activation_key) REFERENCES workflow_activations(run_id,activation_key)
       ) STRICT;
       CREATE INDEX IF NOT EXISTS workflow_collections_cursor ON workflow_collections(run_id,activation_key,seq);
+      CREATE TABLE IF NOT EXISTS workflow_retries (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, activation_key TEXT NOT NULL,
+        attempt INTEGER NOT NULL, at INTEGER NOT NULL, delay_ms INTEGER NOT NULL, due_at INTEGER, failure TEXT NOT NULL,
+        UNIQUE(run_id,activation_key,attempt),
+        FOREIGN KEY(run_id,activation_key) REFERENCES workflow_activations(run_id,activation_key)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS workflow_retries_cursor ON workflow_retries(run_id,activation_key,seq);
     `);
   }
   close(): void { this.database.close(); }
@@ -287,7 +295,8 @@ export class RunStore {
       if (run.desired !== "running" || !["running", "waiting"].includes(run.status)) return;
       const pending = this.database.prepare("SELECT 1 FROM workflow_activations WHERE run_id=? AND status='running' AND kind='await' AND json_extract(metadata,'$.waiting')=1 LIMIT 1").get(id);
       const leaves = this.database.prepare(`SELECT 1 FROM workflow_activations WHERE run_id=? AND status='running' AND (${leafSql}) LIMIT 1`).get(id);
-      const status = pending && !leaves ? "waiting" : "running";
+      const retry = this.database.prepare("SELECT 1 FROM workflow_activations WHERE run_id=? AND status='failed' AND json_extract(metadata,'$.retry.status')='scheduled' LIMIT 1").get(id);
+      const status = pending && !leaves && !retry ? "waiting" : "running";
       if (status === run.status) return;
       this.database.prepare("UPDATE workflow_runs SET status=?,updated_at=? WHERE id=?").run(status, Date.now(), id);
       this.event(id, `run.${status}`, {});
@@ -308,6 +317,13 @@ export class RunStore {
     this.transaction(() => {
       const run = this.owned(id, token);
       if (outcome.status === "succeeded" && run.desired !== "running") throw new Error(`Cannot succeed while ${run.desired} is requested`);
+      for (const row of this.database.prepare("SELECT activation_key,metadata FROM workflow_activations WHERE run_id=? AND json_extract(metadata,'$.retry.status')='scheduled'").all(id)) {
+        const metadata = JSON.parse(String(row.metadata)), progress = parseRetryProgress(metadata.retry);
+        if (!progress) continue;
+        const abandoned = { ...progress, status: "abandoned" };
+        this.database.prepare("UPDATE workflow_activations SET metadata=json_set(metadata,'$.retry',json(?)) WHERE run_id=? AND activation_key=?").run(JSON.stringify(abandoned),id,String(row.activation_key));
+        this.event(id,"retry.abandoned",{key:String(row.activation_key),retry:abandoned,reason:outcome.status});
+      }
       if (outcome.status === "cancelled" && run.desired !== "cancelled") throw new Error("Cancellation was not requested");
       const running = this.database.prepare("SELECT 1 FROM workflow_activations WHERE run_id=? AND status='running' LIMIT 1").get(id);
       if (running) throw new Error("Cannot finish with running activations");
@@ -339,11 +355,13 @@ export class RunStore {
       if (old && (old.kind !== options.kind || old.sideEffect !== options.sideEffect)) throw new Error(`Activation definition changed: ${key}`);
       if (old?.status === "succeeded") return old;
       if (old?.status === "running") throw new Error(`Activation is already running: ${key}`);
-      if (old?.sideEffect && !(old.kind === "worktree" && old.metadata.workspacePhase === "children")) throw executionFailure("uncertain-effect","recovery","unknown",`Uncertain side effect requires explicit retry authorization: ${key}`);
+      const decision = this.plannedRetry(run,old), allowed = !!decision;
+      if (decision && retryRemaining(retryProgress(decision,"scheduled")) > 0) throw new RetryNotReady();
+      if (old?.sideEffect && !allowed && !(old.kind === "worktree" && old.metadata.workspacePhase === "children")) throw executionFailure("uncertain-effect","recovery","unknown",`Uncertain side effect requires explicit retry authorization: ${key}`);
       // Preserve the complete prior checkpoint atomically before replacing the current attempt.
       if (old) this.database.prepare("INSERT INTO workflow_activation_history(run_id,activation_key,attempt,record) VALUES(?,?,?,?)")
-        .run(id, key, old.attempt, JSON.stringify(old));
-      const { failure: _previousFailure, outputRepair: _previousRepair, ...metadata } = old?.metadata ?? {};
+        .run(id, key, old.attempt, JSON.stringify(allowed ? {...old,metadata:{...old.metadata,retry:retryProgress(decision!,"admitted")}} : old));
+      const { failure: _previousFailure, outputRepair: _previousRepair, retry: _previousRetry, ...metadata } = old?.metadata ?? {};
       const now = Date.now();
       if (run.status === "waiting") {
         this.database.prepare("UPDATE workflow_runs SET status='running',updated_at=? WHERE id=?").run(now, id);
@@ -354,6 +372,7 @@ export class RunStore {
         status='running',attempt=excluded.attempt,owner_token=excluded.owner_token,started_at=excluded.started_at,finished_at=NULL,error=NULL,output=NULL,metadata=excluded.metadata`)
         .run(id, key, JSON.stringify(context), options.kind, Number(options.sideEffect), (old?.attempt ?? 0) + 1, token, now, JSON.stringify(metadata));
       this.event(id, "activation.started", { key, kind: options.kind, attempt: (old?.attempt ?? 0) + 1 });
+      if (allowed) this.event(id,"retry.admitted",{key,retry:retryProgress(decision!,"admitted")});
       return this.getActivation(id, key)!;
     });
   }
@@ -487,7 +506,7 @@ export class RunStore {
       json_extract(a.context,'$.scope') AS scope,json_extract(t.decision,'$.edgeIndex') AS edge_index,
       COUNT(*) AS count,MAX(t.seq) AS last_seq FROM workflow_transitions t JOIN workflow_activations a
       ON a.run_id=t.run_id AND a.activation_key=t.activation_key WHERE t.run_id=? GROUP BY graph_id,scope,edge_index`).all(id);
-    return { supported: ["dynamicwf-effect-v3", "dynamicwf-effect-v4", "dynamicwf-effect-v5"].includes(run.plan.compilerVersion), count: rows.reduce((n, r) => n + Number(r.count), 0),
+    return { supported: ["dynamicwf-effect-v3", "dynamicwf-effect-v4", "dynamicwf-effect-v5", "dynamicwf-effect-v6"].includes(run.plan.compilerVersion), count: rows.reduce((n, r) => n + Number(r.count), 0),
       failed: rows.filter(r => r.edge_index === null).reduce((n, r) => n + Number(r.count), 0),
       lastSeq: rows.reduce((n, r) => Math.max(n, Number(r.last_seq)), 0),
       edges: rows.filter(r => r.edge_index !== null).map(r => ({ graphId: String(r.graph_id), scope: String(r.scope), edgeIndex: Number(r.edge_index), count: Number(r.count) })) };
@@ -510,15 +529,55 @@ export class RunStore {
       this.event(id, "activation.succeeded", { key, output });
     });
   }
-  failActivation(id: string, token: string, key: string, error: string, failure?: ExecutionFailureRecord): void {
+  failActivation(id: string, token: string, key: string, error: string, failure?: ExecutionFailureRecord, options: { retryEligible?: boolean } = {}): void {
     this.transaction(() => {
-      this.runningActivation(id, token, key);
+      const activation = this.runningActivation(id, token, key), run = this.get(id);
       const detail = failure ?? executionFailure("unknown","execution","unknown",error).failure;
       if (!parseExecutionFailure(detail)) throw new Error("Invalid structured execution failure");
       this.database.prepare("UPDATE workflow_activations SET status='failed',error=?,finished_at=?,metadata=json_set(metadata,'$.failure',json(?)) WHERE run_id=? AND activation_key=?")
         .run(error, Date.now(), JSON.stringify(detail), id, key);
       this.event(id, "activation.failed", { key, error, failure: JSON.parse(JSON.stringify(detail)) as Json });
+      const node = run.plan.workflow.graphs[activation.context.graphId]?.nodes.find(n=>n.id===activation.context.nodeId);
+      const policy = node?.kind === "agent" || node?.kind === "check" ? node.retryPolicy : undefined;
+      if (options.retryEligible && run.desired !== "cancelled" && permitsRetry(policy,activation.attempt,detail)) {
+        const at = Date.now(), delayMs = policy!.delayMs, target = at + delayMs;
+        this.database.prepare("INSERT INTO workflow_retries(run_id,activation_key,attempt,at,delay_ms,due_at,failure) VALUES(?,?,?,?,?,?,?)")
+          .run(id,key,activation.attempt,at,delayMs,Number.isSafeInteger(target)?target:null,JSON.stringify(detail));
+        const progress = retryProgress(this.retry(id,key,activation.attempt)!,"scheduled");
+        this.database.prepare("UPDATE workflow_activations SET metadata=json_set(metadata,'$.retry',json(?)) WHERE run_id=? AND activation_key=?").run(JSON.stringify(progress),id,key);
+        this.event(id,"retry.scheduled",{key,retry:progress,failure:JSON.parse(JSON.stringify(detail)) as Json});
+      }
     });
+  }
+  retry(id: string, key: string, attempt: number): RetryRecord | undefined {
+    const row = this.database.prepare("SELECT * FROM workflow_retries WHERE run_id=? AND activation_key=? AND attempt=?").get(id,key,attempt);
+    return row ? this.decodeRetry(row) : undefined;
+  }
+  scheduledRetry(id: string, key: string): RetryRecord | undefined {
+    return this.plannedRetry(this.get(id),this.getActivation(id,key));
+  }
+  private plannedRetry(run: RunRecord, activation: ActivationRecord | undefined): RetryRecord | undefined {
+    if (!activation || activation.status !== "failed") return;
+    const decision = this.retry(run.id,activation.key,activation.attempt), progress = parseRetryProgress(activation.metadata.retry);
+    if (!decision || !progress || !isDeepStrictEqual(progress,retryProgress(decision,"scheduled"))) return;
+    const node = run.plan.workflow.graphs[activation.context.graphId]?.nodes.find(n=>n.id===activation.context.nodeId);
+    const policy = node?.kind === "agent" || node?.kind === "check" ? node.retryPolicy : undefined;
+    return isDeepStrictEqual(parseExecutionFailure(activation.metadata.failure),decision.failure) && permitsRetry(policy,activation.attempt,decision.failure) && policy!.delayMs===decision.delayMs ? decision : undefined;
+  }
+  private decodeRetry(row: Record<string, unknown>): RetryRecord {
+    const failure = parseExecutionFailure(JSON.parse(String(row.failure)));
+    if (!failure) throw new Error("Invalid saved retry failure");
+    return {seq:Number(row.seq),runId:String(row.run_id),key:String(row.activation_key),attempt:Number(row.attempt),nextAttempt:Number(row.attempt)+1,
+      at:Number(row.at),delayMs:Number(row.delay_ms),dueAt:row.due_at===null?null:Number(row.due_at),failure};
+  }
+  retries(id: string, key: string, after = 0, limit = 100) {
+    if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error("Invalid retry page cursor or limit (1–1000)");
+    return this.transaction(() => {
+      const activation = this.getActivation(id,key); if (!activation) throw new Error("Unknown retry activation");
+      const rows = this.database.prepare("SELECT * FROM workflow_retries WHERE run_id=? AND activation_key=? AND seq>? ORDER BY seq LIMIT ?").all(id,key,after,limit+1);
+      const records = rows.slice(0,limit).map(row=>this.decodeRetry(row));
+      return {key,records,current:parseRetryProgress(activation.metadata.retry),nextAfter:records.at(-1)?.seq??after,hasMore:rows.length>limit};
+    },"read");
   }
   setActivationMetadata(id: string, token: string, key: string, metadata: ActivationMetadata): void {
     this.transaction(() => {

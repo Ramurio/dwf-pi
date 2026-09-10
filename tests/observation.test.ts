@@ -59,3 +59,28 @@ test("legacy and explicit acceptance produce one decision; read-only observation
   assert.ok(log.update(record, [], view).some(line => line.includes("Task: rejected")));
   assert.deepEqual(log.update(record, [], { ...view, liveness: { ...view.liveness, observedAt: 2 } }), []);
 });
+
+test("pending retry remains visible beside a wait and after recent history has advanced", () => {
+  const record = run(), waiting = wait();
+  const parent: ActivationRecord = { ...waiting, key: "parent", kind: "parallel", context: { ...waiting.context, nodeId: "fan" }, metadata: {} };
+  const retry: ActivationRecord = { ...waiting, key: "retry-key", kind: "check", status: "failed", finishedAt: 1,
+    context: { ...waiting.context, nodeId: "command", scope: ["graph", "main", "node", "fan", "visit", "0", "parallel", "check", "graph", "child"] },
+    metadata: { retry: { decisionSeq: 1, attempt: 1, nextAttempt: 2, scheduledAt: 1, delayMs: 60000, dueAt: 60001, status: "scheduled" } } };
+  const recent: ActivationRecord[] = Array.from({ length: 8 }, (_, i) => ({ ...waiting, key: `done-${i}`, kind: "agent", status: "succeeded", finishedAt: 10 + i, metadata: {}, output: null }));
+  record.plan.workflow.graphs.main!.nodes.push({ id: "command", kind: "check", command: "/unused", args: [] });
+  recent[0] = { ...recent[0]!, kind: "check", context: { ...retry.context, scope: ["another-branch"] } };
+  const records = [parent, waiting, retry, ...recent], view = projectRun(record, records);
+  assert.deepEqual(view.activeKeys, []); assert.deepEqual(view.waitingKeys, [waiting.key]); assert.deepEqual(view.retryingKeys, [retry.key]);
+  assert.equal(activationState(retry), "retrying");
+  assert.deepEqual(graphSnapshot(record, records, new Map(), [], view).presentation, view);
+  assert.equal(graphSnapshot(record, records).graphs[0]!.nodes.find(n => n.id === "command")!.status, "retrying");
+  assert.match(renderDashboard(record, records, { now: 1000, height: 30, width: 180 }), /запланирована попытка 2/);
+  assert.match(renderRun(record, records, view), /1 retrying/);
+  const log = new MonitorLog();
+  assert.match(log.update(record, records, view).join("\n"), /запланирована попытка 2/);
+  assert.deepEqual(log.update({ ...record, heartbeatAt: 5000 }, records), []);
+  const paused = { ...record, status: "paused", desired: "paused" } as RunRecord;
+  assert.deepEqual(projectRun(paused, records).retryingKeys, [retry.key]);
+  assert.match(renderDashboard(paused, records, { now: 70000, height: 30, width: 180 }), /допуск ожидает продолжения запуска/);
+  assert.deepEqual(projectRun({ ...record, status: "cancelled" }, records).retryingKeys, []);
+});

@@ -13,13 +13,14 @@ const counts = (records: readonly ActivationRecord[]) => ({
   succeeded: records.filter(a => a.status === "succeeded").length,
   running: records.filter(a => activationState(a) === "running").length,
   waiting: records.filter(a => activationState(a) === "waiting").length,
-  failed: records.filter(a => a.status === "failed").length,
+  retrying: records.filter(a => activationState(a) === "retrying").length,
+  failed: records.filter(a => activationState(a) === "failed").length,
   interrupted: records.filter(a => a.status === "interrupted").length,
 });
 const identity = (record: ActivationRecord) => `${terminalText(record.context.graphId)}.${terminalText(record.context.nodeId)} scope=${terminalText(JSON.stringify(record.context.scope), 2_000)} visit=${record.context.visit}`;
 const progress = (activations: readonly ActivationRecord[]) => {
   const count = counts(activations);
-  return `${count.succeeded} succeeded · ${count.running} running${count.waiting ? ` · ${count.waiting} waiting` : ""} · ${count.failed} failed · ${count.interrupted} interrupted (${activations.length} recorded activations)`;
+  return `${count.succeeded} succeeded · ${count.running} running${count.waiting ? ` · ${count.waiting} waiting` : ""}${count.retrying ? ` · ${count.retrying} retrying` : ""} · ${count.failed} failed · ${count.interrupted} interrupted (${activations.length} recorded activations)`;
 };
 const stateLabel = (run: RunRecord) => `${run.status}${run.status !== run.desired && !["succeeded", "failed", "cancelled"].includes(run.status) ? `; desired ${run.desired}` : ""}`;
 export function renderRunSummary(run: RunRecord, activations: readonly ActivationRecord[]): string {
@@ -33,7 +34,7 @@ function nodeLabel(node: Node): string {
 function nodeState(records: readonly ActivationRecord[]): string {
   if (!records.length) return "○ not visited";
   const count = counts(records);
-  const state = count.running ? "▶ running" : count.waiting ? "? waiting" : count.interrupted ? "! interrupted" : count.failed ? "× failed" : "✓ succeeded";
+  const state = count.running ? "▶ running" : count.waiting ? "? waiting" : count.retrying ? "↻ retrying" : count.interrupted ? "! interrupted" : count.failed ? "× failed" : "✓ succeeded";
   return records.length === 1 ? state : `${state} · ${count.succeeded}/${records.length} recorded visits succeeded`;
 }
 /** All graph definitions and explicit edges, followed by concrete running activation identities. */
