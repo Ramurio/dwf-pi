@@ -18,6 +18,14 @@ const base = ["graph", "main"];
 const child = [...base, "node", "candidate", "visit", "0", "worktree", "graph", "child"];
 const reviewer = (branch: string, visit = 0) => activation("review", "agent", [...child, "node", "council", "visit", "1", "parallel", branch, "graph", "child"], visit);
 
+test("a collected branch failure remains visible when its container succeeds and progress is not duplicated",()=>{
+  const record=activation('council','parallel',base),current=run(),log=new MonitorLog();
+  record.metadata.collectionSummary={total:1,succeeded:0,failed:1};
+  assert.match(log.update(current,[record]).join('\n'),/собрано: 1.*ошибок: 1/);assert.deepEqual(log.update(current,[record]),[]);
+  record.metadata.collectionSummary={total:2,succeeded:1,failed:1};record.status='succeeded';record.finishedAt=100;
+  assert.match(monitorBody(current,[record],{view:'history'}).join('\n'),/!.*собрано: 2.*ошибок: 1/);
+});
+
 test("repair progress is visible without new activation attempts and clock polling does not duplicate it", () => {
   const record = reviewer("format"), current = run(), log = new MonitorLog();
   record.metadata.outputRepair = { round: 1, status: "running", cause: "schema", afterReport: 2, throughReport: 2 };

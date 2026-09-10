@@ -61,12 +61,18 @@ function evidence(a: ActivationRecord): string {
   const failure = parseExecutionFailure(a.metadata.failure);
   if (failure) return terminalText(`${failure.code}/${failure.phase} (${failure.effects}): ${failure.message}`,180);
   if (a.error) return terminalText(a.error, 180);
+  if (a.metadata.collectionSummary) return collectionEvidence(a);
   return a.status === "succeeded" ? "готово" : statusNames[a.status] ?? a.status;
 }
-const significant = (a: ActivationRecord) => !structural.has(a.kind) && (!["transform", "branch", "end"].includes(a.kind) || a.status === "failed" || evidence(a).includes("принят"));
+function collectionEvidence(a: ActivationRecord): string {
+  const summary = a.metadata.collectionSummary;
+  if (!summary || typeof summary !== "object" || Array.isArray(summary)) return "";
+  return `собрано: ${summary.total} · успешно: ${summary.succeeded} · ошибок: ${summary.failed}`;
+}
+const significant = (a: ActivationRecord) => Boolean(collectionEvidence(a)) || !structural.has(a.kind) && (!["transform", "branch", "end"].includes(a.kind) || a.status === "failed" || evidence(a).includes("принят"));
 function historyLine(a: ActivationRecord): string {
   const result = evidence(a);
-  const rejected = result === "request_changes" || result === "inconclusive" || result.includes("НЕ принят") || /^exit (?!0$)/.test(result);
+  const rejected = result === "request_changes" || result === "inconclusive" || result.includes("НЕ принят") || /^exit (?!0$)/.test(result) || /ошибок: [1-9]/.test(result);
   const icon = a.status === "succeeded" && !rejected ? "✓" : a.status === "running" ? "▶" : "!";
   const usage = activationUsage(a);
   return `${icon}${usage ? ` ${tokenNumber(usage.totalTokens)} ток.` : a.kind === "agent" ? " токены: н/д" : ""} ${activationPath(a)} — ${evidence(a)} · ${duration((a.finishedAt ?? a.startedAt) - a.startedAt)}`;
@@ -166,10 +172,11 @@ export class MonitorLog {
     const initialVisible = new Set([...records.filter(a => presentation.activeKeys.includes(a.key) || presentation.waitingKeys.includes(a.key)), ...records.filter(a => a.status !== "running" && significant(a)).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0)).slice(0, 5)].map(a => a.key));
     for (const a of records) {
       const repair = parseOutputRepairProgress(a.metadata.outputRepair);
-      const value = `${activationState(a)}/${a.attempt}/${repair?.round ?? 0}/${repair?.status ?? ""}`;
+      const collection = collectionEvidence(a);
+      const value = `${activationState(a)}/${a.attempt}/${repair?.round ?? 0}/${repair?.status ?? ""}/${collection}`;
       if (significant(a) && (this.state || initialVisible.has(a.key)) && this.records.get(a.key) !== value) lines.push(activationState(a) === "waiting"
         ? `? ${activationPath(a)} — ${terminalText(String(a.metadata.waitReason), 500)} · ${terminalText(String(a.metadata.waitId))}`
-        : a.status === "running" ? `▶ ${activationPath(a)} — ${repair ? `исправление формата · раунд ${repair.round} · ${repair.status} · только submit_result` : "начат"}` : historyLine(a));
+        : a.status === "running" ? `▶ ${activationPath(a)} — ${repair ? `исправление формата · раунд ${repair.round} · ${repair.status} · только submit_result` : collection || "начат"}` : historyLine(a));
       this.records.set(a.key, value);
     }
     this.state = state;

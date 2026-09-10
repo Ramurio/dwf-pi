@@ -69,18 +69,20 @@ or extended arrays before schema validation can coerce or inspect them.
 
 ## Loading a persisted plan
 
-New plans use `dynamicwf-effect-v4` / `dynamicwf-runtime-v4` with a frozen output
-repair policy and durable routing. This runtime also verifies and executes paired
-v1/v2/v3 plans by regenerating their
+New plans use `dynamicwf-effect-v5` / `dynamicwf-runtime-v5` with an explicit
+fan-out failure policy, frozen output repair and durable routing. This runtime also
+verifies and executes paired v1/v2/v3/v4 plans by regenerating their
 byte-identical source. The v2 golden fixture predates routing (`034b270`).
 The golden fixture `tests/fixtures/legacy-v1-plan.json` was produced by the compiler
 at commit `4b4ae53`; it guards source/hash compatibility. V1 rejects new finish/await
 nodes. V1/v2 plans do not gain fabricated historical routing records. This is
 explicit compatibility for these versions, not arbitrary rollback. The v3 golden
-agent fixture was generated at `a05b3ef`, before output repair. Old plans retain
-their exact eight frozen agent fields and disable repair; new v4 plans require
+agent fixture was generated at `a05b3ef`, before output repair. V1–v3 plans retain
+their exact eight frozen agent fields and disable repair; v4 and newer plans require
 `outputRepair` explicitly, including `{ "mode": "disabled" }` for the default.
 Older compilers reject authored output repair configuration.
+The v4 golden map/parallel fixture was generated with the compiler from `f933bd9`;
+it still returns unwrapped child values. Only v5 supports authored `failurePolicy`.
 
 `verifyExecutionPlan(value)` checks JSON structure, exact field sets, graph validity,
 agent coverage/configuration, output schemas, safe skill resource paths and hashes,

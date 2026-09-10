@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { parseWorkflow, type Graph, type Node, type WorkflowDefinition } from "./graph.js";
 
-export const compilerVersion = "dynamicwf-effect-v4";
-export type CompilerVersion = "dynamicwf-effect-v1" | "dynamicwf-effect-v2" | "dynamicwf-effect-v3" | typeof compilerVersion;
+export const compilerVersion = "dynamicwf-effect-v5";
+export type CompilerVersion = "dynamicwf-effect-v1" | "dynamicwf-effect-v2" | "dynamicwf-effect-v3" | "dynamicwf-effect-v4" | typeof compilerVersion;
 export interface CompiledWorkflow {
   readonly source: string;
   /** SHA-256 of generated UTF-8 source, including compiler version. */
@@ -23,8 +23,9 @@ function quote(value: string): string { return JSON.stringify(value); }
 /** Compile validated graph structure into TypeScript + Effect control flow, without evaluating author text. */
 export function compileWorkflow(value: unknown, version: CompilerVersion = compilerVersion): CompiledWorkflow {
   const workflow = parseWorkflow(value);
-  if (!["dynamicwf-effect-v1", "dynamicwf-effect-v2", "dynamicwf-effect-v3", compilerVersion].includes(version)) throw new Error("Unsupported compiler version");
-  if (version !== compilerVersion && Object.values(workflow.graphs).some(g => g.nodes.some(n => n.kind === "agent" && n.config?.outputRepair !== undefined))) throw new Error("outputRepair requires compiler v4");
+  if (!["dynamicwf-effect-v1", "dynamicwf-effect-v2", "dynamicwf-effect-v3", "dynamicwf-effect-v4", compilerVersion].includes(version)) throw new Error("Unsupported compiler version");
+  if (!["dynamicwf-effect-v4", "dynamicwf-effect-v5"].includes(version) && Object.values(workflow.graphs).some(g => g.nodes.some(n => n.kind === "agent" && n.config?.outputRepair !== undefined))) throw new Error("outputRepair requires compiler v4");
+  if (version !== compilerVersion && Object.values(workflow.graphs).some(g => g.nodes.some(n => (n.kind === "map" || n.kind === "parallel") && n.failurePolicy !== undefined))) throw new Error("failurePolicy requires compiler v5");
   if (version === "dynamicwf-effect-v1" && Object.values(workflow.graphs).some(g => g.nodes.some(n => n.kind === "finish" || n.kind === "await"))) throw new Error("finish/await require compiler v2");
   const graphIds = Object.keys(workflow.graphs).sort();
   const names = new Map(graphIds.map((id, index) => [id, `graph_${index}`]));
@@ -97,13 +98,13 @@ function emitNode(graphId: string, node: Node, fn: (id: string) => string, versi
               if (!Array.isArray(value)) throw new Error("Map items must evaluate to an array");
               return value;
             });
-            return yield* Effect.forEach(items, (item, index) => ${fn(node.graphId)}(runtime, item, [...scope, "node", node.id, "visit", String(visit), "map", String(index), "graph", ${quote(node.graphId)}]), { concurrency: ${node.concurrency ?? '"unbounded"'} });`; break;
+            return yield* Effect.forEach(items, (item, index) => ${node.failurePolicy === "collect" ? 'runtime.collect(context, String(index), () => ' : ''}${fn(node.graphId)}(runtime, item, [...scope, "node", node.id, "visit", String(visit), "map", String(index), "graph", ${quote(node.graphId)}])${node.failurePolicy === "collect" ? ')' : ''}, { concurrency: ${node.concurrency ?? '"unbounded"'} });`; break;
     case "parallel": work = `const results = yield* Effect.forEach([
 ${node.children.map((child, index) => `              () => Effect.gen(function* () {
                 const child = node.children[${index}]!;
-                const childInput = yield* attempt(() => evaluate(child.input, { input, nodes }));
+                ${node.failurePolicy === "collect" ? 'const collected = yield* runtime.collect(context, child.id, () => Effect.gen(function* () {' : ''}const childInput = yield* attempt(() => evaluate(child.input, { input, nodes }));
                 const result = yield* ${fn(child.graphId)}(runtime, childInput, [...scope, "node", node.id, "visit", String(visit), "parallel", child.id, "graph", ${quote(child.graphId)}]);
-                return [child.id, result] as const;
+                ${node.failurePolicy === "collect" ? 'return result;\n                }));\n                return [child.id, collected] as const;' : 'return [child.id, result] as const;'}
               })`).join(",\n")}
             ], (child) => child(), { concurrency: ${node.concurrency ?? '"unbounded"'} });
             return Object.fromEntries(results);`; break;
@@ -117,7 +118,7 @@ ${node.children.map((child, index) => `              () => Effect.gen(function* 
             ${work}
           }));
           nodes[node.id] = result;
-          ${node.kind === "end" || node.kind === "finish" ? "return result;" : version === "dynamicwf-effect-v3" || version === "dynamicwf-effect-v4"
+          ${node.kind === "end" || node.kind === "finish" ? "return result;" : ["dynamicwf-effect-v3", "dynamicwf-effect-v4", "dynamicwf-effect-v5"].includes(version)
             ? 'pc = yield* runtime.route(context, edges, { input, nodes });\n          break;'
             : 'pc = yield* attempt(() => chooseEdge(node.id, edges, { input, nodes }));\n          break;'}
         }`;

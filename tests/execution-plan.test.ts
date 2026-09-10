@@ -29,10 +29,10 @@ function canonical(value: unknown): string {
 }
 function rehash<T extends { hash: string }>(value: T): T { const { hash: _, ...data } = value; value.hash = createHash("sha256").update(canonical(data)).digest("hex"); return value; }
 
-test("output repair is explicit, closed and frozen in v4; policy changes invalidate the plan hash", async () => {
+test("output repair is explicit, closed and frozen; policy changes invalidate the plan hash", async () => {
   const original = workflow({ outputRepair: { mode: "submit-only", maxRounds: 3 } });
   const plan = await prepareExecutionPlan(original, options);
-  assert.equal(plan.runtimeVersion, "dynamicwf-runtime-v4");
+  assert.equal(plan.runtimeVersion, "dynamicwf-runtime-v5");
   assert.deepEqual(plan.agents.main!.work!.outputRepair, { mode: "submit-only", maxRounds: 3 });
   assert.ok(Object.isFrozen(plan.agents.main!.work!.outputRepair));
   const changed = structuredClone(plan); changed.agents.main!.work!.outputRepair = { mode: "disabled" };

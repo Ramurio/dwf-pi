@@ -1,9 +1,10 @@
 import { layoutGraph } from "./layout.js";
-import { UsagePages, TracePages, AttemptPages } from "./usage-pages.js";
+import { UsagePages, TracePages, AttemptPages, CollectionPages } from "./usage-pages.js";
 
 const usagePages = new UsagePages();
 const tracePages = new TracePages();
 const attemptPages = new AttemptPages();
+const collectionPages = new CollectionPages();
 const routingLabels = { true: "Условие выполнено", false: "Условие не выполнено", "not-evaluated": "Не проверялось", fallback: "Выбран запасной переход", error: "Ошибка проверки" };
 const waitDrafts = new Map();
 
@@ -404,6 +405,7 @@ function renderInspector() {
     ),
   );
   if (node.children.length) {
+    if (node.failurePolicy === "collect") aside.append(el("p", "notice", "Сбор результатов с ошибками. Завершение этого узла означает, что результаты собраны; решения детей проверяются отдельно."));
     aside.append(el("h3", "", "ВЛОЖЕННЫЕ ГРАФЫ"));
     for (const child of node.children)
       aside.append(
@@ -469,6 +471,7 @@ function renderInspector() {
         ),
       );
     if (a.result) row.append(el("p", "", a.result));
+    if (node.failurePolicy === "collect") renderCollection(row, a);
     if (a.outputRepair) row.append(outputRepairView(a.outputRepair, a.status));
     if (a.failure) row.append(failureView(a.failure));
     else if (a.error) row.append(el("p", "", a.error));
@@ -491,6 +494,25 @@ function failureView(failure, runScope = false) {
   const panel=el("div","failure-detail");
   panel.append(el("strong","",`${labels[failure.code] ?? labels.unknown} · ${phases[failure.phase] ?? "этап неизвестен"}`),el("p","",failure.message),el("p","muted",runScope ? "Это причина остановки. Состояние действий показано в деталях отдельных узлов." : effects[failure.effects] ?? effects.unknown));
   return panel;
+}
+function renderCollection(container, activation) {
+  if (activation.collectionSummary) container.append(el("p", "notice", `Собрано результатов: ${activation.collectionSummary.total} · успешно ${activation.collectionSummary.succeeded} · ошибок ${activation.collectionSummary.failed}`));
+  const id = state.id, identity = JSON.stringify([id, activation.key]), page = collectionPages.get(identity);
+  const load = button(page.loading ? "Загружаем результаты…" : !page.opened ? "Результаты веток" : page.hasMore ? "Ещё результаты веток" : "Обновить результаты веток", async () => {
+    const pending = collectionPages.loadCollection(identity, (_identity, cursor) => api(`collections?id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}&after=${cursor}`));
+    renderInspector(); await pending; if (state.id === id) renderInspector();
+  }, "child-button");
+  load.disabled = page.loading; container.append(load);
+  if (page.error) container.append(el("p", "notice", page.error));
+  const summary = collectionPages.summaries.get(identity);
+  if (summary) container.append(el("p", "muted", `На момент запроса: собрано ${summary.total} · успешно ${summary.succeeded} · ошибок ${summary.failed}`));
+  for (const record of page.reports) {
+    const details = el("details");
+    details.append(el("summary", "", `${record.itemId} · ${record.result.status === "succeeded" ? "результат получен" : "ошибка ветки"} · попытка родителя ${record.attempt}`));
+    if (record.result.status === "failed") details.append(failureView(record.result.failure));
+    else details.append(el("pre", "", JSON.stringify(record.result.value, null, 2)));
+    container.append(details);
+  }
 }
 function outputRepairView(progress, status) {
   const labels = { running: status === "running" ? "выполняется" : "завершение не подтверждено", succeeded: "формат принят", invalid: "результат не прошёл проверку", failed: "прерван ошибкой или отменой" };

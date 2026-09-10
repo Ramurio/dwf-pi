@@ -13,6 +13,7 @@ export interface RuntimeContext {
 
 /** Injectable execution boundary. Persistence, pause and provider policy belong to its implementation. */
 export interface WorkflowRuntime {
+  collect(context: RuntimeContext, itemId: string, work: () => Effect.Effect<Json, Error>): Effect.Effect<Json, Error>;
   route(context: RuntimeContext, edges: readonly Edge[], scope: ExpressionScope): Effect.Effect<string, Error>;
   step(context: RuntimeContext, work: () => Effect.Effect<Json, Error>): Effect.Effect<Json, Error>;
   agent(context: RuntimeContext, node: Extract<Node, { kind: "agent" }>, task: string, input: Json): Effect.Effect<Json, Error>;

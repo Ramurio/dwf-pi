@@ -164,3 +164,8 @@ An agent's frozen `config.outputRepair` can enable submit-only format repair;
 see [output-repair.md](output-repair.md). `metadata.outputRepair` shows the latest
 round, while `activation.metadata` events preserve progression with key and attempt.
 Its report cursors refer to `run.usage` report IDs within that same attempt.
+
+`run.collections {"id":"run-...","key":"parent-activation-key","after":0,"limit":100}`
+pages committed collect-policy child results, with a whole-collection summary from
+the same read snapshot. Child errors stay separate from successful values/verdicts;
+recovery reuses both. See [collection-policy.md](collection-policy.md).

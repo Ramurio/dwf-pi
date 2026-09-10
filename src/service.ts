@@ -21,7 +21,7 @@ export const serviceToolNames = [
   "catalog.list", "catalog.describe", "catalog.models", "system.doctor", "workflow.schema", "workflow.create", "workflow.list", "workflow.inspect",
   "workflow.patch", "workflow.validate", "workflow.compile", "workflow.prepare", "run.start", "run.status",
   "run.list", "run.inspect", "run.events", "run.usage", "run.pause", "run.resume", "run.cancel",
-  "preset.save", "preset.list", "preset.inspect", "preset.run", "run.waits", "run.resolve", "run.trace", "workflow.prepared", "run.attempts",
+  "preset.save", "preset.list", "preset.inspect", "preset.run", "run.waits", "run.resolve", "run.trace", "workflow.prepared", "run.attempts", "run.collections",
 ] as const;
 export type ServiceToolName = typeof serviceToolNames[number];
 export type WorkflowServiceOptions = Omit<PrepareExecutionOptions, "cwd"> & { cwd?: string };
@@ -192,6 +192,11 @@ export class WorkflowService {
         const page = this.getController().store.attempts(identifier(input.id), nonemptyString(input.key,"key"),
           input.after === undefined ? 0 : cursor(input.after), input.limit === undefined ? 100 : cursor(input.limit));
         return publicAttempts(page);
+      }
+      case "run.collections": {
+        const input = object(request, ["id", "key", "after", "limit"]);
+        return this.getController().store.collections(identifier(input.id), nonemptyString(input.key,"key"),
+          input.after === undefined ? 0 : cursor(input.after), input.limit === undefined ? 100 : cursor(input.limit));
       }
       case "run.waits": {
         const input = object(request, ["id"]);

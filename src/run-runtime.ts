@@ -48,6 +48,32 @@ export class JournalRuntime implements WorkflowRuntime {
     if (current.ownerToken !== this.token) throw new Error("Supervisor ownership lost");
     return current;
   }
+  collect(context: RuntimeContext, itemId: string, work: () => Effect.Effect<Json, Error>): Effect.Effect<Json, Error> {
+    return Effect.suspend(() => {
+      const read = Effect.try({ try: () => {
+        this.current();
+        return this.store.collection(this.run.id, activationKey(context), itemId);
+      }, catch: errorOf });
+      const save = (result: import("./collection.js").CollectedResult) => Effect.try({ try: () => {
+        const record = this.store.recordCollection(this.run.id, this.token, activationKey(context), itemId, result);
+        return JSON.parse(JSON.stringify(record.result)) as Json;
+      }, catch: errorOf });
+      return read.pipe(Effect.flatMap(saved => saved ? Effect.succeed(JSON.parse(JSON.stringify(saved.result)) as Json) : Effect.suspend(work).pipe(
+        Effect.matchCauseEffect({
+          onSuccess: value => save({ status: "succeeded", value }),
+          onFailure: cause => {
+            // A composite cause can contain both an ordinary failure and interruption.
+            if (Cause.isInterrupted(cause) || Cause.isDie(cause)) return Effect.failCause(cause);
+            const failures = Array.from(Cause.failures(cause), error => describeFailureCause(Cause.fail(error)));
+            // Control/recovery uncertainty and cleanup failures are not branch data.
+            if (!failures.length || failures.some(failure => ["cancelled", "interrupted", "uncertain-effect"].includes(failure.code) || failure.phase === "cleanup")) return Effect.failCause(cause);
+            // A branch may have written before a read-only leaf failed.
+            return save({ status: "failed", failure: { ...failures[0]!, effects: "unknown" } });
+          },
+        }),
+      )));
+    });
+  }
   async gate(signal?: AbortSignal): Promise<void> {
     for (;;) {
       if (signal?.aborted) throw new ProcessCancelled();

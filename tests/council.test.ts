@@ -43,6 +43,7 @@ function votes(decisions: Decision[]): Record<Perspective, Vote> {
 }
 function runtime(results: Record<Perspective, Vote>, onCall?: (perspective: Perspective, task: string, input: Record<string, Json>) => void): WorkflowRuntime {
   return {
+    collect: (_context, _id, work) => work().pipe(Effect.map(value => ({ status: "succeeded", value } as Json))),
     finish: (_context, _node, _reason, _evidence, value) => Effect.succeed(value),
     route: (context, edges, scope) => Effect.try(() => chooseEdge(context.nodeId, edges, scope)),
     wait: () => Effect.fail(new Error("Unexpected await node")),

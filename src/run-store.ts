@@ -10,6 +10,7 @@ import { assertJson, createOutputValidator } from "./output-schema.js";
 import { explicitOutcome, legacyOutcome, type TaskOutcome, type TaskDecision } from "./task-outcome.js";
 import { isDeepStrictEqual } from "node:util";
 import type { RoutingDecision } from "./expressions.js";
+import { validateCollectedResult, type CollectedResult, type CollectionRecord } from "./collection.js";
 
 export type RunStatus = "queued" | "running" | "waiting" | "pausing" | "paused" | "cancelling" | "cancelled" | "succeeded" | "failed" | "interrupted";
 export type DesiredRunStatus = "running" | "paused" | "cancelled";
@@ -132,6 +133,13 @@ export class RunStore {
       CREATE TABLE IF NOT EXISTS workflow_run_failures (
         run_id TEXT PRIMARY KEY REFERENCES workflow_runs(id), failure TEXT NOT NULL
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS workflow_collections (
+        seq INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, activation_key TEXT NOT NULL,
+        item_id TEXT NOT NULL, attempt INTEGER NOT NULL, at INTEGER NOT NULL, result TEXT NOT NULL,
+        UNIQUE(run_id,activation_key,item_id),
+        FOREIGN KEY(run_id,activation_key) REFERENCES workflow_activations(run_id,activation_key)
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS workflow_collections_cursor ON workflow_collections(run_id,activation_key,seq);
     `);
   }
   close(): void { this.database.close(); }
@@ -479,7 +487,7 @@ export class RunStore {
       json_extract(a.context,'$.scope') AS scope,json_extract(t.decision,'$.edgeIndex') AS edge_index,
       COUNT(*) AS count,MAX(t.seq) AS last_seq FROM workflow_transitions t JOIN workflow_activations a
       ON a.run_id=t.run_id AND a.activation_key=t.activation_key WHERE t.run_id=? GROUP BY graph_id,scope,edge_index`).all(id);
-    return { supported: ["dynamicwf-effect-v3", "dynamicwf-effect-v4"].includes(run.plan.compilerVersion), count: rows.reduce((n, r) => n + Number(r.count), 0),
+    return { supported: ["dynamicwf-effect-v3", "dynamicwf-effect-v4", "dynamicwf-effect-v5"].includes(run.plan.compilerVersion), count: rows.reduce((n, r) => n + Number(r.count), 0),
       failed: rows.filter(r => r.edge_index === null).reduce((n, r) => n + Number(r.count), 0),
       lastSeq: rows.reduce((n, r) => Math.max(n, Number(r.last_seq)), 0),
       edges: rows.filter(r => r.edge_index !== null).map(r => ({ graphId: String(r.graph_id), scope: String(r.scope), edgeIndex: Number(r.edge_index), count: Number(r.count) })) };
@@ -521,6 +529,48 @@ export class RunStore {
   }
   appendEvent(id: string, token: string, type: string, payload: Json): void {
     this.transaction(() => { this.owned(id, token); this.event(id, type, payload); });
+  }
+  collection(id: string, key: string, itemId: string): CollectionRecord | undefined {
+    const row = this.database.prepare("SELECT * FROM workflow_collections WHERE run_id=? AND activation_key=? AND item_id=?").get(id,key,itemId);
+    return row ? this.decodeCollection(row) : undefined;
+  }
+  private decodeCollection(row: Record<string, unknown>): CollectionRecord {
+    return { seq:Number(row.seq),runId:String(row.run_id),key:String(row.activation_key),itemId:String(row.item_id),attempt:Number(row.attempt),at:Number(row.at),result:validateCollectedResult(JSON.parse(String(row.result))) };
+  }
+  recordCollection(id: string, token: string, key: string, itemId: string, result: CollectedResult): CollectionRecord {
+    const valid = validateCollectedResult(result);
+    return this.transaction(() => {
+      const activation = this.runningActivation(id,token,key), run = this.get(id);
+      const node = run.plan.workflow.graphs[activation.context.graphId]?.nodes.find(n=>n.id===activation.context.nodeId);
+      if (!node || (node.kind !== "map" && node.kind !== "parallel") || node.failurePolicy !== "collect") throw new Error("Activation does not collect child results");
+      if (node.kind === "parallel" ? !node.children.some(child=>child.id===itemId) : !/^(0|[1-9][0-9]*)$/.test(itemId) || !Number.isSafeInteger(Number(itemId))) throw new Error("Invalid collection item identity");
+      const previous = this.collection(id,key,itemId);
+      if (previous) { if (!isDeepStrictEqual(previous.result,valid)) throw new Error("Collected result already committed with different data"); return previous; }
+      const at = Date.now();
+      this.database.prepare("INSERT INTO workflow_collections(run_id,activation_key,item_id,attempt,at,result) VALUES(?,?,?,?,?,?)")
+        .run(id,key,itemId,activation.attempt,at,JSON.stringify(valid));
+      this.database.prepare(`UPDATE workflow_activations SET metadata=json_set(metadata,
+        '$.collectionSummary.total',COALESCE(json_extract(metadata,'$.collectionSummary.total'),0)+1,
+        '$.collectionSummary.succeeded',COALESCE(json_extract(metadata,'$.collectionSummary.succeeded'),0)+?,
+        '$.collectionSummary.failed',COALESCE(json_extract(metadata,'$.collectionSummary.failed'),0)+?)
+        WHERE run_id=? AND activation_key=?`).run(Number(valid.status==='succeeded'),Number(valid.status==='failed'),id,key);
+      this.event(id,"collection.settled",{key,itemId,attempt:activation.attempt,result:JSON.parse(JSON.stringify(valid)) as Json});
+      return this.collection(id,key,itemId)!;
+    });
+  }
+  collections(id: string, key: string, after = 0, limit = 100) {
+    if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error("Invalid collection page cursor or limit (1–1000)");
+    return this.transaction(() => {
+      const activation = this.getActivation(id,key);
+      if (!activation) throw new Error("Unknown collection activation");
+      const node = this.get(id).plan.workflow.graphs[activation.context.graphId]?.nodes.find(n=>n.id===activation.context.nodeId);
+      const enabled = (node?.kind === "map" || node?.kind === "parallel") && node.failurePolicy === "collect";
+      const rows = this.database.prepare("SELECT * FROM workflow_collections WHERE run_id=? AND activation_key=? AND seq>? ORDER BY seq LIMIT ?").all(id,key,after,limit+1);
+      const records = rows.slice(0,limit).map(row=>this.decodeCollection(row));
+      const counts = this.database.prepare("SELECT json_extract(result,'$.status') AS status,COUNT(*) AS count FROM workflow_collections WHERE run_id=? AND activation_key=? GROUP BY status").all(id,key);
+      const succeeded = Number(counts.find(row=>row.status==='succeeded')?.count??0), failed = Number(counts.find(row=>row.status==='failed')?.count??0);
+      return { enabled, key, records, summary:{succeeded,failed,total:succeeded+failed},nextAfter:records.at(-1)?.seq??after,hasMore:rows.length>limit };
+    }, "read");
   }
   startUsage(id: string, token: string, key: string): void {
     this.transaction(() => {

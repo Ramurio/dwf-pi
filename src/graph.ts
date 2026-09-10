@@ -23,8 +23,8 @@ export type Node = { id: string } & (
   | { kind: "subworkflow"; graphId: string; input: Expr }
   | { kind: "worktree"; graphId: string; input: Expr; base?: string }
   | { kind: "integrate"; sources: Expr }
-  | { kind: "map"; graphId: string; items: Expr; concurrency?: number }
-  | { kind: "parallel"; children: { id: string; graphId: string; input: Expr }[]; concurrency?: number }
+  | { kind: "map"; graphId: string; items: Expr; concurrency?: number; failurePolicy?: "fail-fast" | "collect" }
+  | { kind: "parallel"; children: { id: string; graphId: string; input: Expr }[]; concurrency?: number; failurePolicy?: "fail-fast" | "collect" }
   | { kind: "check"; command: string; args: string[]; cwd?: string }
 );
 export interface Edge { from: string; to: string; when?: Expr }
@@ -59,8 +59,8 @@ const definitions = {
     node("subworkflow", { graphId: id, input: expr }),
     node("worktree", { graphId: id, input: expr, base: Type.Optional(Type.String({ minLength: 1, pattern: "^[^\\u0000]+$" })) }),
     node("integrate", { sources: expr }),
-    node("map", { graphId: id, items: expr, concurrency: Type.Optional(positiveInt) }),
-    node("parallel", { children: Type.Array(Type.Object({ id, graphId: id, input: expr }, closed), { minItems: 1 }), concurrency: Type.Optional(positiveInt) }),
+    node("map", { graphId: id, items: expr, concurrency: Type.Optional(positiveInt), failurePolicy: Type.Optional(Type.Enum(["fail-fast", "collect"])) }),
+    node("parallel", { children: Type.Array(Type.Object({ id, graphId: id, input: expr }, closed), { minItems: 1 }), concurrency: Type.Optional(positiveInt), failurePolicy: Type.Optional(Type.Enum(["fail-fast", "collect"])) }),
     node("check", { command: Type.String({ minLength: 1, pattern: "^[^\\u0000]+$" }), args: Type.Array(Type.String({ pattern: "^[^\\u0000]*$" })), cwd: Type.Optional(Type.String({ minLength: 1, pattern: "^[^\\u0000]+$" })) }),
   ]),
   Graph: Type.Object({ entry: id, nodes: Type.Array(Type.Ref("Node"), { minItems: 1 }), edges: Type.Array(Type.Object({ from: id, to: id, when: Type.Optional(expr) }, closed)) }, closed),

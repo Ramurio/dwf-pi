@@ -12,7 +12,7 @@
 | Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Реализовано и проверено: await, run.waits/resolve, JSON-форма, idempotency, pause/resume, SIGKILL и worktree reattach; см. outcomes-and-waits.md |
 | Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Реализовано: controller.snapshot + projectRun, включая browser list и watch; проверка процессов отдельно от heartbeat, см. observation.md |
 | Usage | Учёт каждого ответа, cache/reasoning, попытки, dedup, отмена/ошибки, раскрытие сумм | Backend/API/UI реализованы; 65 targeted tests и браузерный fixture, см. usage.md. Общая приёмка с будущим recovery остаётся обязательной |
-| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures и настраиваемый submit-only output repair доступны в journal/API/UI; provider status, retry/collect и reconciliation остаются, см. attempt-history.md, execution-failures.md и output-repair.md |
+| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, submit-only output repair и durable collect реализованы; provider status, retry и reconciliation остаются, см. attempt-history.md, execution-failures.md, output-repair.md и collection-policy.md |
 | Артефакты | Snapshot/digest, версии критериев, применимость checks/reviews, diff | Не начато |
 | Интеграция | Отдельный integration workspace, проверки объединения, контроль target head | Не начато |
 | Authoring | Рецепты в обычный граф, агрегация коллекций, schemas и dataflow diagnostics | Не начато |
@@ -58,7 +58,7 @@ supervisor в worktree; повтор start; patch после prepare; конфл
   за 95,7 секунды; `/tmp/dynamicwf-usage-routes-full-20260910.log`.
   Нестабильность обычного параллельного прогона этим не считается исправленной.
 
-Следующие части восстановления: точные provider statuses, policies retry/collect и reconciliation. Остальные строки
+Следующие части восстановления: точные provider statuses, policies retry и reconciliation. Остальные строки
 сохраняют полный обязательный объём; завершённые изменения не означают завершение
 общего goal.
 
@@ -223,3 +223,40 @@ Native browser QA: успешный второй раунд в единстве�
 Проверка использовала отдельный временный journal, без inference и без demo run.
 Подробный контракт и границы: output-repair.md. Retry/collect, provider status и
 reconciliation остаются обязательными; общий goal не завершён этим этапом.
+
+### Durable collect для fan-out
+
+`failurePolicy: "collect"` на map/parallel собирает независимые child results вместе
+с типизированными ошибками. Default fail-fast сохранён. Обычный reviewer verdict
+или check exit code остаётся успешным execution value; техническая ошибка не
+превращается в vote. Map сохраняет порядок входа; вложенные envelopes не flatten.
+
+Отдельные child checkpoints фиксируются вместе с summary и event. После смерти
+supervisor сохранённый failed writer не исполняется заново; ожидающие ветки могут
+продолжить тот же parent visit. Отсутствующий checkpoint после неопределённого
+side effect по-прежнему блокирует повтор. Cancellation, defects, cleanup failure и
+составные причины с interrupt/uncertain-effect не попадают в успешную коллекцию.
+Ошибка сохранения collection checkpoint также не превращается в branch result.
+
+API/CLI/MCP run.collections и browser paging показывают результаты и ошибки по
+item ID, parent activation и исходной попытке. Parent inspector обновляет summary;
+terminal history/log не скрывает ошибки из-за succeeded статуса контейнера.
+Новые планы v5; golden v4 map+parallel с output repair произведён компилятором из
+f933bd9, сохраняет точные source/hash и прежние unwrapped outputs.
+
+Обычный полный параллельный набор: **289/289**, 66,1 секунды,
+`/tmp/dynamicwf-collect-full-20260910.log`. После усиления обработки составных причин
+и расширения golden fixture: **24/24** collection/monitor/MCP/paging, 10,6 секунды,
+`/tmp/dynamicwf-collect-final-targeted.log`. Typecheck, strict browser paging checkJs,
+browser syntax и skill validator прошли. Новый table/result/summary/event rollback,
+stale ownership, duplicate/conflicting delivery и read-only paging проверены.
+
+Native UI запускал настоящий detached runtime с failed/returned/awaiting ветками,
+без inference: 2 результата до ответа, 3 после, раздельный request_changes и error,
+итог inconclusive, сохранение страниц, консоль без ошибок. Временный стенд очищен.
+Контракт: collection-policy.md. Retry policy, provider status, reconciliation и
+остальные строки исходного плана остаются обязательными; общий goal не завершён.
+
+Дополнительно проверен именно сгенерированный TS для вложенных collect map/parallel:
+**7/7** compiler tests, 3,6 секунды; TypeScript diagnostics пусты и исполнение
+возвращает ожидаемые вложенные envelopes. `/tmp/dynamicwf-collect-compiler-final.log`.

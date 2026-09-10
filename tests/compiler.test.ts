@@ -58,6 +58,7 @@ async function load(t: TestContext, workflow: WorkflowDefinition) {
 function recorder(agent?: WorkflowRuntime["agent"], check?: WorkflowRuntime["check"]) {
   const steps: RuntimeContext[] = [];
   const runtime: WorkflowRuntime = {
+    collect: (_context, _id, work) => work().pipe(Effect.map(value => ({ status: "succeeded", value } as Json))),
     route: (context, edges, scope) => Effect.try(() => chooseEdge(context.nodeId, edges, scope)),
     step(context, work) { return Effect.suspend(() => { steps.push(structuredClone(context)); return work(); }); },
     agent: agent ?? (() => Effect.fail(new Error("Unexpected agent node"))),
@@ -69,6 +70,22 @@ function recorder(agent?: WorkflowRuntime["agent"], check?: WorkflowRuntime["che
   };
   return { runtime, steps };
 }
+
+test("collect map and parallel generate typechecked TypeScript with separately wrapped child outputs", async t => {
+  const workflow = definition({
+    main: { entry: "fan", nodes: [
+      { id: "fan", kind: "parallel", failurePolicy: "collect", children: [{ id: "items", graphId: "items", input: literal([1,2]) }] },
+      { id: "done", kind: "end", value: ref("nodes", "fan") },
+    ], edges: [{ from: "fan", to: "done" }] },
+    items: { entry: "map", nodes: [
+      { id: "map", kind: "map", failurePolicy: "collect", graphId: "value", items: ref("input") },
+      { id: "done", kind: "end", value: ref("nodes", "map") },
+    ], edges: [{ from: "map", to: "done" }] },
+    value: { entry: "done", nodes: [{ id: "done", kind: "end", value: ref("input") }], edges: [] },
+  });
+  const compiled = await load(t, workflow), { runtime } = recorder();
+  assert.deepEqual(await Effect.runPromise(compiled.run(runtime,null)), { items: { status: "succeeded", value: [{ status: "succeeded", value: 1 }, { status: "succeeded", value: 2 }] } });
+});
 
 const reviewWorkflow = definition({ main: {
   entry: "implement",
