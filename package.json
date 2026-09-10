@@ -11,7 +11,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test:spikes": "node --import tsx --test spikes/*.test.ts",
-    "test": "node --import tsx --test tests/*.test.ts spikes/*.test.ts",
+    "test": "node --import tsx --test --test-concurrency=4 tests/*.test.ts spikes/*.test.ts",
     "probe:pi": "node --import tsx spikes/pi-live.ts",
     "probe:workflow": "node --import tsx spikes/workflow-live.ts",
     "setup": "node --import tsx scripts/setup.ts",

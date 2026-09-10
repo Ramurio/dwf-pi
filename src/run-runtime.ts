@@ -291,9 +291,15 @@ export class JournalRuntime implements WorkflowRuntime {
       const operation:Extract<OperationRecord,{kind:"worktree"}>={kind:"worktree",source:runtime.workspaceCwd(context),childScope:[...childScope],...(node.base?{base:node.base}:{})};
       runtime.store.setActivationMetadata(runtime.run.id,runtime.token,key,{operation});
       const resuming = previous.workspacePhase === "children" && previous.workspace !== undefined;
+      const reconciliation = previous.reconciliation;
+      const recoveringAllocation = previous.workspacePhase === "allocating" && previous.workspace !== undefined &&
+        reconciliation && typeof reconciliation === "object" && !Array.isArray(reconciliation) && reconciliation.action === "retry";
       if (!resuming) runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspacePhase: "allocating", childScope });
       const allocation = yield* processEffect(signal => resuming
         ? runtime.workspaces.reattach(runtime.workspaceCwd(context), key, previous.workspace!, runtime.gitOptions(context, signal))
+        : recoveringAllocation
+          ? runtime.workspaces.recoverAllocation(runtime.workspaceCwd(context), key, previous.workspace!, runtime.gitOptions(context, signal),
+            progress => runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspaceRecovery: progress }))
         : runtime.workspaces.allocate(runtime.workspaceCwd(context), key, node.base,
           runtime.gitOptions(context, signal), allocation => runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspace: { ...allocation } })));
       runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspacePhase: "children" });

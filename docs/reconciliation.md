@@ -3,8 +3,9 @@
 This work implements the recovery scenario in the project audit. Operation capture,
 worker/group observations and public `run.recovery` inspection are implemented below.
 `run.reconcile` now accepts checked results and authorizes one-use retries through
-CLI/MCP. Browser inspection shows decision provenance and application receipts.
-Some Git repair paths and the browser decision form remain under implementation.
+CLI/MCP and the local browser form. Inspection shows decision provenance and
+application receipts. The remaining Git fault-injection and repair cases are
+distinguished from the implemented allocation recovery below.
 
 ## Persisted operation observations
 
@@ -272,10 +273,55 @@ checks a clean settled target and unchanged owned sources; earlier committed mer
 remain and normal Git admission handles the remaining work. No rollback is implied.
 Worktree failures before any allocation was recorded can retry normal allocation.
 
-Still required: safe recovery of a missing partially allocated worktree with a
-retained branch/registration, full fault-injection coverage of allocation/commit
-and multi-source integration gaps, and the browser decision form. Such missing
-paths or unresolved Git operations currently fail verification and require explicit
-repair followed by fresh inspection. No implicit `prune`, reset, or deletion is
-performed. Isolated integration workspaces and versioned artifact proofs remain
-separate requirements of the overall implementation plan.
+Initial allocation recovery now handles intent-only, retained-branch and valid
+missing-registration states. It requires phase `allocating` with no admitted child
+activation. The exact run/key path, base commit, branch and every registration using
+that branch are checked. A branch at a different head, moved/locked registration,
+foreign path, unresolved Git operation or malformed registration fails inspection.
+A missing worktree after child checkpoints is not recreated beneath replayed outputs:
+those checkpoints do not prove the missing uncommitted files can be reconstructed.
+
+After one-use retry admission, the runtime rechecks allocation ownership. If the
+exact registered path is missing, it copies that administrative directory, including
+its index, into the run's private `recovery/allocation-*` directory. It verifies that
+the source stayed unchanged, flushes archive files/directories and records the
+archive path and source digest before removing that one registration with
+`git worktree remove` without force. It then reuses the preserved branch; intent-only
+recovery creates the branch at the recorded base. No global prune, forced branch
+checkout, reset, or removal of an existing working directory is performed. Sibling
+registrations remain. A rejected pre-removal checkpoint prevents removal; a failure
+after removal retains the archive/branch and a fresh decision can recover the
+branch-only state. Existing valid worktrees reattach with their files preserved.
+
+Progress is recorded as `metadata.workspaceRecovery` and metadata events, including
+`registration-archived`, `removing-registration`, `registration-removed`,
+`creating-worktree` and `allocation-restored`. Starting another attempt archives and
+clears the old progress. The original failed attempt and each consumed decision
+remain independently inspectable.
+
+## Browser decision form
+
+Select a failed operation, request fresh inspection, then choose accepting a result
+or authorizing one retry. The form collects the actor, reason and observed evidence;
+accept additionally takes JSON output, checked against the same backend contract.
+An existing pending retry must be explicitly selected for replacement. The form
+keeps text, selection and focus across polls and keys drafts by run/activation/attempt.
+Drafts remain in page memory; reloading does not persist private form text.
+
+Before delivery the form freezes the request and a generated decision ID. A failed
+response offers redelivery of those same bytes or explicit inspection/editing for
+a new decision. It never silently substitutes a fresh checkpoint into an old
+request. Receipts distinguish replaced decisions and pending/applied retries.
+Saving does not start a supervisor or lift pause; continuation is a separate control.
+The POST endpoint requires the local page origin, JSON content type and control
+header, uses the existing private URL/host guard, and limits browser request bodies
+to 1 MiB. The shared control/await/reconciliation body reader bounds raw bytes,
+decodes UTF-8 only after collecting all chunks, and rejects invalid encoding before
+dispatch. A Cyrillic character split between chunks cannot change the stored decision
+or break its identical redelivery. CLI/MCP remain available for direct structured requests.
+
+Still required: the full allocation/commit and multi-source integration crash matrix,
+and evidence-preserving handling of malformed partial registrations. Missing worktree
+files after admitted child work require explicit artifact repair and fresh inspection.
+Isolated integration workspaces and versioned artifact proofs remain separate
+requirements of the overall implementation plan.

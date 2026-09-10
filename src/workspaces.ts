@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { mkdir, realpath, stat } from "node:fs/promises";
+import { mkdir, realpath, stat, lstat, readdir, readFile, cp, mkdtemp, open } from "node:fs/promises";
+import { constants } from "node:fs";
 import { join, resolve } from "node:path";
 import { resolveAgentConfig } from "./catalog.js";
 import type { ExecutionPlan } from "./execution-types.js";
@@ -7,10 +8,12 @@ import type { Json, WorkflowDefinition } from "./graph.js";
 import { assertJson } from "./output-schema.js";
 import { runCheckProcess, type ProcessOptions } from "./process-client.js";
 import type { IntegrationProgress } from "./operation-record.js";
+import { observeRecoveryFiles } from "./recovery-files.js";
 
 export interface WorkspaceAllocation { path: string; branch: string; base: string }
 export interface WorkspaceRecord extends WorkspaceAllocation { head: string }
 export interface GitOperationOptions extends ProcessOptions { onFinished?: () => void }
+export interface AllocationRecovery { mode: "reattach" | "create" | "reuse-branch" | "replace-registration"; allocation: WorkspaceAllocation; registration?: string }
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const unsafeGitEnvironment = /^GIT_(?:DIR|WORK_TREE|COMMON_DIR|INDEX_FILE|INDEX_VERSION|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|QUARANTINE_PATH|NAMESPACE|REPLACE_REF_BASE|NO_REPLACE_OBJECTS|SHALLOW_FILE|CEILING_DIRECTORIES|DISCOVERY_ACROSS_FILESYSTEM|CONFIG(?:_.*)?|EXEC_PATH|AUTHOR_.*|COMMITTER_.*|ATTR_SOURCE|INTERNAL_SUPER_PREFIX|PREFIX|EXTERNAL_DIFF)$/;
 const hashPattern = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
@@ -61,6 +64,90 @@ export class GitWorkspaces {
     await this.noOperation(allocation.path, options);
     if (await this.commonDirectory(allocation.path, options) !== await this.commonDirectory(source, options)) throw new Error("Persisted workspace belongs to a different repository");
     return allocation;
+  }
+  /** Only callers that prove no child was admitted may use allocation-gap recovery. */
+  async inspectAllocationRecovery(source: string, key: string, value: Json, options: GitOperationOptions = {}): Promise<AllocationRecovery> {
+    if (!value || typeof value !== "object" || Array.isArray(value) || typeof value.path !== "string" || typeof value.branch !== "string" || typeof value.base !== "string") throw new Error("Invalid persisted workspace allocation");
+    const allocation = { path: value.path, branch: value.branch, base: value.base }, suffix = digest(key);
+    if (allocation.branch !== `dynamicwf/${this.runId}/${suffix}` || allocation.path !== join(await realpath(join(this.directory, "worktrees")), suffix) || !hashPattern.test(allocation.base)) throw new Error("Workspace allocation does not belong to this activation");
+    let present = false;
+    try { await lstat(allocation.path); present = true; } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    if (present) return { mode: "reattach", allocation: await this.reattach(source, key, value, options) };
+    const cwd = await realpath(source); await this.requireRepositoryRoot(cwd, options); await this.noOperation(cwd, options);
+    await this.head(cwd, allocation.base, options);
+    const branch = await this.git(cwd, ["rev-parse", "--verify", "--quiet", "--end-of-options", `refs/heads/${allocation.branch}^{commit}`], options, [0, 1]);
+    if (branch.exitCode === 0 && branch.stdout.trim() !== allocation.base) throw new Error("Allocation branch changed; missing workspace requires artifact repair");
+    const entries = (await this.git(cwd, ["worktree", "list", "--porcelain", "-z"], options)).stdout.split("\0\0").filter(Boolean).map(text => {
+      const fields = new Map<string, string>();
+      for (const line of text.split("\0").filter(Boolean)) { const at = line.indexOf(" "); fields.set(at < 0 ? line : line.slice(0, at), at < 0 ? "" : line.slice(at + 1)); }
+      return fields;
+    });
+    const target = entries.filter(entry => entry.get("worktree") === allocation.path);
+    if (target.length > 1 || entries.some(entry => entry.get("branch") === `refs/heads/${allocation.branch}` && entry.get("worktree") !== allocation.path)) throw new Error("Allocation branch is registered to another workspace");
+    if (!target.length) return { mode: branch.exitCode === 0 ? "reuse-branch" : "create", allocation };
+    const entry = target[0]!;
+    if (branch.exitCode !== 0 || entry.get("branch") !== `refs/heads/${allocation.branch}` || entry.get("HEAD") !== allocation.base || entry.has("locked") || entry.has("detached") || entry.has("bare")) throw new Error("Missing workspace registration is not an unlocked allocation at its recorded base");
+    const administrative = join(await this.commonDirectory(cwd, options), "worktrees"), matches: string[] = [];
+    if (await realpath(administrative) !== administrative) throw new Error("Git worktree administration cannot use a symlink");
+    for (const name of await readdir(administrative)) {
+      const path = join(administrative, name), info = await lstat(path);
+      if (!info.isDirectory() || info.isSymbolicLink()) continue;
+      const marker = join(path, "gitdir");
+      let targetPath: string;
+      try { if (!(await lstat(marker)).isFile()) continue; targetPath = (await readFile(marker, "utf8")).replace(/\r?\n$/, ""); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") continue; throw error; }
+      if (targetPath === join(allocation.path, ".git")) matches.push(path);
+    }
+    if (matches.length !== 1) throw new Error("Cannot identify the exact owned worktree registration");
+    const registration = matches[0]!;
+    for (const name of ["locked", "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "rebase-apply", "rebase-merge", "BISECT_START"]) {
+      try { await lstat(join(registration, name)); throw new Error(`Workspace registration requires inspection: ${name}`); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    }
+    return { mode: "replace-registration", allocation, registration };
+  }
+  async recoverAllocation(source: string, key: string, value: Json, options: GitOperationOptions, onProgress: (value: Json) => void): Promise<WorkspaceAllocation> {
+    const cwd = await realpath(source);
+    return this.locked(cwd, async () => {
+      const inspected = await this.inspectAllocationRecovery(cwd, key, value, options), { allocation } = inspected;
+      if (inspected.mode === "reattach") return allocation;
+      if (inspected.registration) {
+        const recoveryDirectory = join(await realpath(this.directory), "recovery");
+        await mkdir(recoveryDirectory, { recursive: true, mode: 0o700 });
+        if ((await lstat(recoveryDirectory)).isSymbolicLink()) throw new Error("Recovery archive directory cannot be a symlink");
+        const archive = await mkdtemp(join(recoveryDirectory, "allocation-"));
+        // Preserve the exact admin directory (including any index) before removing this one registration.
+        const before = await observeRecoveryFiles([inspected.registration]);
+        await cp(inspected.registration, join(archive, "registration"), { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true });
+        if ((await observeRecoveryFiles([inspected.registration])).digest !== before.digest) throw new Error("Worktree registration changed while archiving");
+        await this.flushArchive(archive);
+        const parent = await open(recoveryDirectory, constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW);
+        try { await parent.sync(); } finally { await parent.close(); }
+        onProgress({ phase: "registration-archived", archive, registration: inspected.registration, registrationDigest: before.digest, path: allocation.path });
+        const fresh = await this.inspectAllocationRecovery(cwd, key, value, options);
+        if (fresh.mode !== inspected.mode || fresh.registration !== inspected.registration) throw new Error("Allocation registration changed before recovery");
+        if ((await observeRecoveryFiles([inspected.registration])).digest !== before.digest) throw new Error("Worktree registration changed before removal");
+        onProgress({ phase: "removing-registration", archive, registration: inspected.registration, path: allocation.path });
+        await this.git(cwd, ["worktree", "remove", "--", allocation.path], options);
+        onProgress({ phase: "registration-removed", archive, path: allocation.path });
+      }
+      onProgress({ phase: "creating-worktree", mode: inspected.mode, path: allocation.path, branch: allocation.branch, base: allocation.base });
+      await this.git(cwd, inspected.mode === "create"
+        ? ["worktree", "add", "--no-track", "-b", allocation.branch, "--", allocation.path, allocation.base]
+        : ["worktree", "add", "--", allocation.path, allocation.branch], options);
+      await this.assertAllocation(allocation, options);
+      if (await this.head(allocation.path, "HEAD", options) !== allocation.base) throw new Error("Allocation branch changed during recovery");
+      onProgress({ phase: "allocation-restored", path: allocation.path, branch: allocation.branch, base: allocation.base });
+      return allocation;
+    });
+  }
+  private async flushArchive(path: string): Promise<void> {
+    const info = await lstat(path);
+    if (info.isSymbolicLink()) return;
+    if (info.isDirectory()) for (const name of await readdir(path)) await this.flushArchive(join(path, name));
+    else if (!info.isFile()) throw new Error("Unsupported special file in Git registration archive");
+    const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | (info.isDirectory() ? constants.O_DIRECTORY : 0));
+    try { await handle.sync(); } finally { await handle.close(); }
   }
   async integrate(target: string, sources: Json, owned: readonly WorkspaceRecord[], options: GitOperationOptions = {}, onProgress?: (progress: IntegrationProgress) => void): Promise<Json> {
     const cwd = await realpath(target);

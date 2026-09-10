@@ -8,6 +8,7 @@ const collectionPages = new CollectionPages();
 const retryPages = new RetryPages();
 const recoveryInspections = new Map();
 const reconciliationRecords = new Map();
+const recoveryDrafts = new Map();
 const routingLabels = { true: "Условие выполнено", false: "Условие не выполнено", "not-evaluated": "Не проверялось", fallback: "Выбран запасной переход", error: "Ошибка проверки" };
 const waitDrafts = new Map();
 
@@ -383,6 +384,8 @@ function selectNode(graphId, id) {
   renderPanel();
 }
 function renderInspector() {
+  const focused = document.activeElement, recoveryField = focused?.dataset?.recoveryField ? focused.id : null;
+  const selection = recoveryField && typeof focused.selectionStart === "number" ? [focused.selectionStart, focused.selectionEnd] : null;
   const scroll = $("inspector").scrollTop;
   const aside = $("inspector");
   aside.replaceChildren();
@@ -516,19 +519,26 @@ function renderInspector() {
     aside.append(row);
   }
   aside.scrollTop = scroll;
+  if (recoveryField) {
+    const field = document.getElementById(recoveryField);
+    if (field) { field.focus({ preventScroll: true }); if (selection) field.setSelectionRange(...selection); }
+  }
 }
 const svgNS = "http://www.w3.org/2000/svg";
 function renderRecovery(container, activation) {
   const id = state.id, identity = JSON.stringify([id, activation.key]);
   const cached = recoveryInspections.get(identity) ?? {};
-  const inspect = button(cached.loading ? "Сканирование состояния…" : cached.value ? "Обновить инспекцию" : "Проверить состояние для восстановления", async () => {
+  const inspectState = async () => {
     recoveryInspections.set(identity, { ...cached, loading: true, error: null }); renderInspector();
     try {
-      const value = await api(`recovery?id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}`);
-      recoveryInspections.set(identity, { value });
+      const suffix = `id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}`;
+      const [value, records] = await Promise.all([api(`recovery?${suffix}`), api(`reconciliations?${suffix}`)]);
+      recoveryInspections.set(identity, { value, records });
+      reconciliationRecords.set(identity, { value: records, at: Date.now() });
     } catch (error) { recoveryInspections.set(identity, { ...cached, error: error.message }); }
     if (state.id === id) renderInspector();
-  }, "child-button");
+  };
+  const inspect = button(cached.loading ? "Сканирование состояния…" : cached.value ? "Обновить инспекцию" : "Проверить состояние для восстановления", inspectState, "child-button");
   inspect.disabled = !!cached.loading; container.append(inspect);
   if (cached.error) container.append(el("p", "notice", cached.error));
   if (!cached.value) return;
@@ -543,6 +553,68 @@ function renderRecovery(container, activation) {
   } else details.append(el("p", "muted", "Файлы не сканировались: сначала нужно устранить препятствия выше."));
   const raw = el("details"); raw.append(el("summary", "", "Checkpoint, файлы и контракт результата"), el("pre", "", JSON.stringify(value, null, 2)));
   details.append(raw); container.append(details);
+  if (value.workspace && !value.blockers.length && value.attempt === activation.attempt) renderRecoveryForm(container, activation, cached, inspectState);
+}
+function renderRecoveryForm(container, activation, inspection, inspectState) {
+  const id = state.id, identity = JSON.stringify([id, activation.key, activation.attempt]), snapshot = inspection.value;
+  let draft = recoveryDrafts.get(identity);
+  if (!draft) { draft = { action: "", actor: "", reason: "", evidence: "", output: "", replace: false, request: null, receipt: null, busy: false, error: null }; recoveryDrafts.set(identity, draft); }
+  const card = el("section", "recovery-form"), pending = (inspection.records ?? []).find(record => record.request.action === "retry" && !record.application && !record.supersededBy);
+  card.append(el("h4", "", "Решение о восстановлении"));
+  if (draft.receipt) {
+    card.append(el("p", "notice", "Решение сохранено. После разрешения остальных ошибок запуск можно продолжить отдельной кнопкой «Продолжить»."),
+      button("Подготовить другое решение", async () => { draft.request = null; draft.receipt = null; draft.replace = false; await inspectState(); }, "child-button"));
+    container.append(card); return;
+  }
+  const frozen = !!draft.request || draft.busy;
+  const field = (name, label, tag = "textarea") => {
+    const wrapper = el("label", "", label), input = el(tag);
+    input.id = `recovery-${encodeURIComponent(identity)}-${name}`; input.dataset.recoveryField = "1"; input.setAttribute("aria-label", label);
+    input.value = draft[name]; input.disabled = frozen; if (tag === "textarea") input.rows = name === "output" ? 6 : 3;
+    input.addEventListener("input", () => { draft[name] = input.value; }); wrapper.append(input); card.append(wrapper); return input;
+  };
+  const action = field("action", "Действие", "select");
+  for (const [value, label] of [["", "Выбери действие"], ["accept", "Принять готовый результат"], ["retry", "Разрешить один повтор"]]) {
+    const option = el("option", "", label); option.value = value; action.append(option);
+  }
+  action.value = draft.action; action.addEventListener("change", () => { draft.action = action.value; renderInspector(); });
+  field("actor", "Автор решения", "input"); field("reason", "Причина решения"); field("evidence", "Что проверено: файлы, проверки и внешние действия");
+  if (draft.action === "accept") field("output", "Принятый результат (JSON)");
+  if (pending) {
+    card.append(el("p", "notice", `Есть разрешение повтора от ${pending.request.actor}: ${pending.request.reason}`));
+    const label = el("label", ""), replace = el("input"); replace.type = "checkbox"; replace.checked = draft.replace; replace.disabled = frozen;
+    replace.id = `recovery-${encodeURIComponent(identity)}-replace`; replace.dataset.recoveryField = "1";
+    replace.addEventListener("change", () => { draft.replace = replace.checked; }); label.append(replace, document.createTextNode(" Заменить прежнее неприменённое решение")); card.append(label);
+  }
+  card.append(el("p", "muted", draft.action === "retry" ? "Разрешение действует на одну следующую попытку. Перед допуском файлы проверяются заново." : "Результат должен соответствовать контракту узла. Его принятие сохраняет исходную ошибку и расход в истории."));
+  card.append(el("p", "muted", "Сохранение решения не запускает работу и не снимает паузу."));
+  const submit = button(draft.busy ? "Сохраняем решение…" : draft.request ? "Повторить отправку того же решения" : "Сохранить решение", async () => {
+    if (draft.busy) return;
+    draft.error = null;
+    try {
+      if (!draft.request) {
+        if (!["accept", "retry"].includes(draft.action) || !draft.actor.trim() || !draft.reason.trim() || !draft.evidence.trim()) throw new Error("Выбери действие и заполни автора, причину и проверенные основания.");
+        if (pending && !draft.replace) throw new Error("Для замены прежнего разрешения отметь соответствующий пункт.");
+        const output = draft.action === "accept" ? JSON.parse(draft.output) : undefined;
+        draft.request = { id, key: activation.key, attempt: snapshot.attempt, checkpoint: snapshot.checkpoint, workspaceDigest: snapshot.workspace.digest,
+          decisionId: crypto.randomUUID(), action: draft.action, actor: draft.actor.trim(), reason: draft.reason.trim(), evidence: [{ description: draft.evidence.trim() }],
+          ...(draft.action === "accept" ? { output } : {}), ...(pending ? { supersedes: pending.request.decisionId } : {}) };
+      }
+      draft.busy = true; renderInspector();
+      draft.receipt = await api("reconcile", { method: "POST", headers: { "Content-Type": "application/json", "X-Dynamicwf-View": "1" }, body: JSON.stringify(draft.request) });
+      const records = [...(inspection.records ?? []).filter(record => record.request.decisionId !== draft.receipt.request.decisionId).map(record => record.request.decisionId === draft.receipt.request.supersedes ? { ...record, supersededBy: draft.receipt.request.decisionId } : record), draft.receipt];
+      recoveryInspections.set(JSON.stringify([id, activation.key]), { ...inspection, records });
+      reconciliationRecords.set(JSON.stringify([id, activation.key]), { value: records, at: Date.now(), saved: true });
+      if (state.id === id) { notice("Решение о восстановлении сохранено. Запуск продолжится по отдельной команде."); await refreshSnapshot(); }
+    } catch (error) { draft.error = error.message; }
+    finally { draft.busy = false; if (state.id === id) renderInspector(); }
+  }, "child-button");
+  submit.id = `recovery-${encodeURIComponent(identity)}-submit`; submit.dataset.recoveryField = "1";
+  submit.disabled = draft.busy || !!inspection.loading; card.append(submit);
+  if (draft.error) { const error = el("p", "notice", draft.error); error.setAttribute("role", "alert"); card.append(error); }
+  if (draft.request && !draft.busy) card.append(el("p", "muted", `ID решения: ${draft.request.decisionId}. Повторная отправка использует те же данные.`),
+    button("Проверить состояние и изменить решение", async () => { draft.request = null; draft.error = null; draft.replace = false; await inspectState(); }, "child-button"));
+  container.append(card);
 }
 function failureView(failure, runScope = false) {
   const labels = { configuration:"Настройки",resource:"Ресурсы",provider:"Ответ провайдера",output:"Формат результата",process:"Процесс",protocol:"Обмен с worker",cancelled:"Прерывание",interrupted:"Потерян процесс","expression":"Выражение графа","uncertain-effect":"Нужна сверка действий",unknown:"Причина не уточнена" };
@@ -640,6 +712,7 @@ function renderReconciliations(container, activation) {
   load.disabled = !!cached.loading; container.append(load);
   if (cached.error) container.append(el("p", "notice", cached.error));
   if (!cached.value) return;
+  if (cached.saved) container.append(el("p", "notice", ["interrupted", "paused"].includes(state.run.status) ? "Решение сохранено. После разрешения остальных ошибок нажми «Продолжить»." : "Решение сохранено в истории восстановления."));
   container.append(el("p", "muted", `Решения на ${date(cached.at)}. ${cached.value.length ? "" : "Сохранённых решений нет."}`));
   for (const record of cached.value) {
     const r = record.request, panel = el("details"), status = record.supersededBy ? "заменено" : record.application ? `применено к попытке ${record.application.attempt}` : "ожидает допуска";

@@ -391,12 +391,12 @@ export class RunStore {
       const { failure: _previousFailure, failureCauses: _previousCauses, outputRepair: _previousRepair, retry: _previousRetry,
         operation: _operation, sessionFile: _session, workerPid: _pid, workerToken: _worker, workerKind: _workerKind, workerLaunch: _workerLaunch,
         workerGroupPid: _groupPid, workerGroupState: _groupState,
-        cwd: _cwd, model: _model, thinking: _thinking, reconciliation: _reconciliation, ...metadata } = old?.metadata ?? {};
+        cwd: _cwd, model: _model, thinking: _thinking, reconciliation: _reconciliation, workspaceRecovery: _workspaceRecovery, ...metadata } = old?.metadata ?? {};
       const now = Date.now();
       if (manual) {
         this.applyReconciliation(id, manual.request.decisionId, old!.attempt + 1, now);
         metadata.reconciliation = { decisionId: manual.request.decisionId, sourceAttempt: old!.attempt, action: "retry" };
-        if (old!.kind === "worktree" && metadata.workspace) metadata.workspacePhase = "children";
+        if (old!.kind === "worktree" && metadata.workspace && metadata.workspacePhase !== "allocating") metadata.workspacePhase = "children";
       }
       if (run.status === "waiting") {
         this.database.prepare("UPDATE workflow_runs SET status='running',updated_at=? WHERE id=?").run(now, id);

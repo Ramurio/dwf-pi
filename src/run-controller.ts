@@ -242,7 +242,10 @@ export class RunController {
       if (selected.metadata.workspace === undefined) {
         if (request.action === "accept" || selected.metadata.workspacePhase !== "allocating") throw new Error("No owned workspace allocation was recorded");
       } else {
-        const workspace = await git.inspectWorktree(operation.source, selected.key, selected.metadata.workspace, request.action === "accept");
+        const allocating = selected.metadata.workspacePhase === "allocating" && !state.activations.some(a => a.key !== selected.key && operation.childScope.every((part, index) => a.context.scope[index] === part));
+        const workspace = request.action === "retry" && allocating
+          ? (await git.inspectAllocationRecovery(operation.source, selected.key, selected.metadata.workspace)).allocation
+          : await git.inspectWorktree(operation.source, selected.key, selected.metadata.workspace, request.action === "accept");
         if (request.action === "accept") {
           const completed = state.activations.find(a => ["end", "finish"].includes(a.kind) && a.status === "succeeded" && isDeepStrictEqual(a.context.scope, operation.childScope));
           const result = Object.hasOwn(operation, "childResult") ? operation.childResult! : completed?.output;

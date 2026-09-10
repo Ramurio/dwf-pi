@@ -12,7 +12,7 @@
 | Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Реализовано и проверено: await, run.waits/resolve, JSON-форма, idempotency, pause/resume, SIGKILL и worktree reattach; см. outcomes-and-waits.md |
 | Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Реализовано: controller.snapshot + projectRun, включая browser list и watch; проверка процессов отдельно от heartbeat, см. observation.md |
 | Usage | Учёт каждого ответа, cache/reasoning, попытки, dedup, отмена/ошибки, раскрытие сумм | Backend/API/UI реализованы; 65 targeted tests и браузерный fixture, см. usage.md. Общая приёмка с будущим recovery остаётся обязательной |
-| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, output repair, collect, safe retry, HTTP observations и provider retry policy реализованы; для reconciliation добавлены запись операций, workers/groups и публичная инспекция checkpoint/файлов. Добавлены immutable accept/retry, одноразовый допуск, Git-проверки и browser receipts; неполные Git allocation/registration repairs и browser форма решений остаются. См. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md, retry-policy.md, provider-responses.md и reconciliation.md |
+| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, output repair, collect, safe retry, HTTP observations и provider retry policy реализованы; для reconciliation добавлены запись операций, workers/groups и публичная инспекция checkpoint/файлов. Добавлены immutable accept/retry, одноразовый допуск, Git-проверки и browser receipts; Начальные allocation gaps и browser форма решений реализованы; полная crash-матрица Git и malformed registrations остаются. См. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md, retry-policy.md, provider-responses.md и reconciliation.md |
 | Артефакты | Snapshot/digest, версии критериев, применимость checks/reviews, diff | Не начато |
 | Интеграция | Отдельный integration workspace, проверки объединения, контроль target head | Не начато |
 | Authoring | Рецепты в обычный граф, агрегация коллекций, schemas и dataflow diagnostics | Не начато |
@@ -544,3 +544,64 @@ worktree с сохранённой branch/registration, полная fault-injec
 `/tmp/dynamicwf-reconciliation-full-verified-20260910.log`. Typecheck, browser syntax,
 skill validator и diff check прошли. Протокольный targeted log:
 `/tmp/dynamicwf-reconciliation-protocol-20260910.log`.
+
+### Allocation gaps и браузерное применение решений
+
+Начальная фаза allocating восстанавливается из трёх состояний: только сохранённый
+intent, оставшаяся ветка, точная регистрация отсутствующей папки. До разрешения
+проверяются run/key/path/base, HEAD ветки, все регистрации этой ветки и отсутствие
+дочерних activations. Moved/locked/advanced/foreign registrations отвергаются.
+После допущенного child отсутствующая папка не создаётся под уже сохранёнными
+child outputs: это могло бы скрыть потерю незакоммиченных результатов.
+
+При повторе runtime заново проверяет состояние. Перед удалением единственной
+missing registration копирует её admin directory, включая index, в принадлежащий
+run архив, проверяет неизменность источника, выполняет sync файлов/директорий
+архива и записывает путь/digest в журнал. Используется адресный `git worktree remove`
+без force и добавление worktree на сохранённой ветке/base. Соседние регистрации
+и существующие рабочие папки не удаляются; global prune/reset отсутствуют.
+Отклонённый checkpoint до удаления предотвращает его; сбой после удаления оставляет
+архив и ветку, с которыми новая инспекция/решение может продолжить восстановление.
+
+Добавлена browser форма accept/retry после явной инспекции. Автор, причина,
+основания и output проверяются тем же backend; прежнее pending решение заменяется
+только отмеченным пользователем supersedes. Запрос/ID фиксируются перед отправкой,
+повтор после ошибки связи использует те же данные. Новый checkpoint не подставляется
+в отправленное решение автоматически. Ввод/выделение/фокус сохраняются при poll;
+drafts адресуются по run/key/attempt и остаются в памяти страницы. POST требует
+local origin, private URL, JSON и control header. Сохранение не снимает pause и
+не запускает supervisor. Показаны сохранённое решение и отдельный шаг продолжения.
+
+Проверки allocation **5/5**: все три начальных состояния, сохранение sibling
+registration/index archive, locked/moved/advanced отказ, сбои до/после удаления,
+настоящее продолжение того же run с единственным child и запрет восстановления
+утраченной папки под уже checkpointed child. Browser/API + reconciliation **18/18**:
+origin/header/body checks, stale workspace, duplicate/conflicting identity и прежние
+сценарии принятия/повтора. Native QA: две настоящие ошибки запуска check; сохранение
+текста и фокуса через poll, намеренно stale snapshot, повтор того же ID, новая
+инспекция и synthetic accept без worker; затем явная замена retry и настоящий
+`Real retry executed` в попытке 2. Старое решение показано как заменённое, новое
+как применённое. Финальная browser console без ошибок. Оба сервера, вкладки и
+временный каталог удалены; модели и пользовательский demo journal не использовались.
+
+Первый полный прогон **345/347** завершился двумя timeout в прежних тестах запуска
+harness/установленного executable. Их наборы отдельно прошли **14/14**. Полный набор
+с четырьмя одновременно работающими test files прошёл **348/348**, 132,5 секунды:
+`/tmp/dynamicwf-recovery-form-full-verified-20260910.log`. Эта команда теперь задаётся
+`npm test`: ограничивается нагрузка тестовых процессов, все файлы/сценарии остаются,
+runtime concurrency и таймауты assertions не менялись. Typecheck, browser syntax,
+skill validator и diff check прошли.
+
+Остаются обязательными полная crash-матрица allocation/commit/multi-source merge
+и сохранение доказательств при malformed partial registrations. Изоляция интеграции,
+versioned artifact proofs и остальные строки полного плана также остаются в работе.
+
+Дополнительно исправлен общий HTTP JSON reader для control/await/reconcile: граница
+сетевого фрагмента больше не повреждает многобайтовую букву. Лимит считается по
+исходным bytes; invalid UTF-8 отвергается до записи. HTTP-тест разделяет русскую
+букву между chunks, сверяет исходный текст/идемпотентную повторную доставку и
+проверяет отказ malformed encoding без нового решения.
+
+Финальный `npm test` после этого исправления: **348/348**, 136,5 секунды,
+`/tmp/dynamicwf-recovery-form-final-20260910.log`. Typecheck, browser syntax и
+diff check повторно прошли; skill validator прошёл для обновлённого skill.

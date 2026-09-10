@@ -14,6 +14,7 @@ import type { ReconciliationRequest } from "../src/reconciliation.js";
 import type { Json, WorkflowDefinition } from "../src/graph.js";
 import { GitWorkspaces } from "../src/workspaces.js";
 import { startGraphServer } from "../src/graph-view/server.js";
+import { request as httpRequest } from "node:http";
 
 const context = { graphId: "main", nodeId: "work", scope: ["graph", "main"], visit: 0 };
 const flow = (command: string, args: string[] = []): WorkflowDefinition => ({ schemaVersion: 1, id: "reconcile", name: "Reconciliation fixture", revision: 1, entryGraph: "main", graphs: { main: { entry: "work", nodes: [
@@ -148,6 +149,31 @@ test("review acceptance binds the recorded artifact and criteria; CLI and browse
   const server=await startGraphServer(filename,id);try{
     const records=await (await fetch(`${server.url}reconciliations?id=${encodeURIComponent(id)}&key=${encodeURIComponent(a.key)}`)).json();
     assert.deepEqual(records,controller.store.reconciliations(id,a.key));
+  }finally{await server.close();}
+}));
+
+test("browser decisions require the local control origin, reject stale files and preserve one-use identity", async () => fixture(async (controller,directory,filename) => {
+  const {id,token,a}=await seed(controller,directory);controller.store.setActivationMetadata(id,token,a.key,{operation:{kind:"check",cwd:directory,command:"unused",args:[]}});fail(controller,id,token,a.key);
+  const server=await startGraphServer(filename,id);try {
+    const r=await request(controller,id,a.key,"retry"),headers={Origin:new URL(server.url).origin,"Content-Type":"application/json","X-Dynamicwf-View":"1"};
+    const send=(value:unknown, supplied:Record<string,string>=headers)=>fetch(`${server.url}reconcile`,{method:"POST",headers:supplied,body:JSON.stringify(value)});
+    for(const wrong of [{...headers,Origin:"https://foreign.invalid"},{...headers,"X-Dynamicwf-View":"0"},{...headers,"Content-Type":"text/plain"}]) assert.equal((await send(r,wrong)).status,403);
+    assert.equal(controller.store.reconciliations(id).length,0);
+    await writeFile(join(directory,"artifact"),"changed after inspection");assert.equal((await send(r)).status,400);
+    assert.equal(controller.store.getActivation(id,a.key)!.attempt,1);
+    const fresh={...await request(controller,id,a.key,"retry"),reason:"Повтор после проверки файлов"};
+    const bytes=Buffer.from(JSON.stringify(fresh)),split=bytes.indexOf(Buffer.from("Повтор"))+1;
+    const malformed=Buffer.from(bytes);malformed[split-1]=0xff;
+    assert.equal((await fetch(`${server.url}reconcile`,{method:"POST",headers,body:malformed})).status,400);assert.equal(controller.store.reconciliations(id).length,0);
+    const saved=await new Promise<{status:number;body:string}>((resolve,reject)=>{
+      const req=httpRequest(`${server.url}reconcile`,{method:"POST",headers},response=>{
+        const chunks:Buffer[]=[];response.on("data",chunk=>chunks.push(chunk));response.on("end",()=>resolve({status:response.statusCode!,body:Buffer.concat(chunks).toString("utf8")}));response.on("error",reject);
+      });req.on("error",reject);req.write(bytes.subarray(0,split));setTimeout(()=>req.end(bytes.subarray(split)),10);
+    });assert.equal(saved.status,200);const receipt=JSON.parse(saved.body);assert.equal(receipt.request.reason,fresh.reason);
+    assert.equal(controller.store.get(id).ownerToken,null);assert.equal(controller.store.get(id).status,"interrupted");
+    const events=controller.store.events(id).length,again=await send(fresh);assert.deepEqual(await again.json(),receipt);assert.equal(controller.store.events(id).length,events);
+    assert.equal((await send({...fresh,reason:"conflicting delivery"})).status,400);
+    assert.equal(controller.store.reconciliations(id).length,1);
   }finally{await server.close();}
 }));
 

@@ -8,13 +8,20 @@ import { publicAttempts } from "../service.js";
 import { graphSnapshot } from "./model.js";
 import type { Json } from "../graph.js";
 
-async function resolutionBody(request: IncomingMessage) {
-  let body = "";
+async function requestJson(request: IncomingMessage, limit: number): Promise<unknown> {
+  const chunks: Buffer[] = []; let bytes = 0;
   for await (const chunk of request) {
-    body += String(chunk);
-    if (Buffer.byteLength(body) > 1024 * 1024) throw new Error("Request too large");
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    bytes += buffer.length;
+    if (bytes > limit) throw new Error("Request too large");
+    chunks.push(buffer);
   }
-  const value = JSON.parse(body) as Record<string, unknown>;
+  // A multibyte character may span HTTP chunks; decode only the complete bounded body.
+  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)));
+}
+
+async function resolutionBody(request: IncomingMessage) {
+  const value = await requestJson(request, 1024 * 1024) as Record<string, unknown>;
   if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).some(key => !["id", "waitId", "response"].includes(key)) ||
     typeof value.id !== "string" || typeof value.waitId !== "string" || !Object.hasOwn(value, "response")) throw new Error("Invalid wait resolution");
   return { id: value.id, waitId: value.waitId, response: value.response as Json };
@@ -23,12 +30,7 @@ async function resolutionBody(request: IncomingMessage) {
 async function controlBody(
   request: IncomingMessage,
 ): Promise<{ id: string; command: "pause" | "resume" | "cancel" }> {
-  let body = "";
-  for await (const chunk of request) {
-    body += String(chunk);
-    if (Buffer.byteLength(body) > 4096) throw new Error("Request too large");
-  }
-  const value: unknown = JSON.parse(body);
+  const value = await requestJson(request, 4096);
   if (
     !value ||
     typeof value !== "object" ||
@@ -98,7 +100,7 @@ export async function startGraphServer(
       response.end(JSON.stringify(value));
     };
     try {
-      if (request.method === "POST" && ["control", "resolve"].includes(name)) {
+      if (request.method === "POST" && ["control", "resolve", "reconcile"].includes(name)) {
         if (
           request.headers.origin !== `http://${expected}` ||
           request.headers["content-type"] !== "application/json" ||
@@ -107,7 +109,10 @@ export async function startGraphServer(
           json({ error: "Control requires this local page" }, 403);
           return;
         }
-        if (name === "resolve") {
+        if (name === "reconcile") {
+          json(await controller.reconcile(await requestJson(request, 1024 * 1024)));
+          return;
+        } else if (name === "resolve") {
           const body = await resolutionBody(request);
           await controller.resolve(body.id, body.waitId, body.response, "browser");
         } else {
