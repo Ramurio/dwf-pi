@@ -71,6 +71,7 @@ export function verifyExecutionPlan(value: unknown): ExecutionPlan {
   const plan = object(value, "execution plan");
   keys(plan, ["version", "runtimeVersion", "compilerVersion", "workflow", "source", "sourceHash", "agents", "hash"], "execution plan");
   const compatible = plan.runtimeVersion === runtimeVersion && plan.compilerVersion === compilerVersion ||
+    plan.runtimeVersion === "dynamicwf-runtime-v6" && plan.compilerVersion === "dynamicwf-effect-v6" ||
     plan.runtimeVersion === "dynamicwf-runtime-v5" && plan.compilerVersion === "dynamicwf-effect-v5" ||
     plan.runtimeVersion === "dynamicwf-runtime-v4" && plan.compilerVersion === "dynamicwf-effect-v4" ||
     plan.runtimeVersion === "dynamicwf-runtime-v3" && plan.compilerVersion === "dynamicwf-effect-v3" ||
@@ -84,7 +85,7 @@ export function verifyExecutionPlan(value: unknown): ExecutionPlan {
   for (const [graphId, graph] of Object.entries(compiled.workflow.graphs)) {
     const configs = object(agents[graphId], `agents.${graphId}`);
     keys(configs, graph.nodes.filter((node) => node.kind === "agent").map((node) => node.id), `agents.${graphId}`);
-    for (const [nodeId, value] of Object.entries(configs)) verifyAgent(value, `${graphId}/${nodeId}`, ["dynamicwf-runtime-v4", "dynamicwf-runtime-v5", "dynamicwf-runtime-v6"].includes(String(plan.runtimeVersion)));
+    for (const [nodeId, value] of Object.entries(configs)) verifyAgent(value, `${graphId}/${nodeId}`, ["dynamicwf-runtime-v4", "dynamicwf-runtime-v5", "dynamicwf-runtime-v6", "dynamicwf-runtime-v7"].includes(String(plan.runtimeVersion)));
   }
   assertParallelWriterIsolation(compiled.workflow, agents as ExecutionPlan["agents"]);
   const { hash, ...data } = plan;

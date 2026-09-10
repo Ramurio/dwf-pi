@@ -117,6 +117,7 @@ export function validateWorkflow(value: unknown): ValidationResult {
     if (!nodes.has(graph.entry)) add(`${base}.entry`, "Entry node does not exist");
     for (const [i, item] of graph.nodes.entries()) {
       const path = `${base}.nodes[${i}]`;
+      if ((item.kind === "agent" || item.kind === "check") && item.retryPolicy?.provider && !item.retryPolicy.codes.includes("provider")) add(`${path}.retryPolicy.provider`, "Provider retry options require the provider failure code");
       if (item.kind === "subworkflow" || item.kind === "map" || item.kind === "worktree") refs.add(item.graphId);
       if (item.kind === "parallel") {
         const childIds = new Set<string>();

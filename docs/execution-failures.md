@@ -66,6 +66,12 @@ its event. Beginning a new attempt archives the old record and clears the curren
 failure while preserving worktree/wait metadata. History therefore retains the old
 cause without making the recovered attempt appear to have failed.
 
+Composite agent/check failures additionally retain `metadata.failureCauses` and
+the event's `causes`, even when retry is denied. All causes participate in retry
+selection, so this prevents a later excluded status from being hidden behind the
+primary failure. The browser attempt/node panels expose the list; the new attempt
+clears it after archiving. Older records without this list retain only known data.
+
 `RunRecord.failure` is persisted separately for failed/interrupted runs. Successful
 completion clears it. Run events retain the typed cause; normal summaries and
 inspection expose it. CLI/MCP tool errors also include a typed record when the

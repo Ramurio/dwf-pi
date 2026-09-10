@@ -69,9 +69,9 @@ or extended arrays before schema validation can coerce or inspect them.
 
 ## Loading a persisted plan
 
-New plans use `dynamicwf-effect-v6` / `dynamicwf-runtime-v6` with explicit safe
+New plans use `dynamicwf-effect-v7` / `dynamicwf-runtime-v7` with explicit safe
 retry, fan-out failure policy, frozen output repair and durable routing. This runtime also
-verifies and executes paired v1/v2/v3/v4/v5 plans by regenerating their
+verifies and executes paired v1/v2/v3/v4/v5/v6 plans by regenerating their
 byte-identical source. The v2 golden fixture predates routing (`034b270`).
 The golden fixture `tests/fixtures/legacy-v1-plan.json` was produced by the compiler
 at commit `4b4ae53`; it guards source/hash compatibility. V1 rejects new finish/await
@@ -86,6 +86,9 @@ it still returns unwrapped child values. V5 and newer support authored `failureP
 The golden v5 collect fixture was generated at `6dcafc3`; v6 adds node-level
 `retryPolicy` on agent/check. Older compilers reject authored retry policies.
 See [retry-policy.md](retry-policy.md) for admission and persistence semantics.
+The golden v6 retry fixture was generated at `61fdb9a`; it retains original
+code-family selection and delay. V7 adds explicit provider HTTP filtering and
+Retry-After policy; v6 and older compilers reject those provider options.
 
 `verifyExecutionPlan(value)` checks JSON structure, exact field sets, graph validity,
 agent coverage/configuration, output schemas, safe skill resource paths and hashes,

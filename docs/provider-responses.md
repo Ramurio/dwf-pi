@@ -58,11 +58,11 @@ run/node/attempt panels and terminal watch show the available status and delay.
 Token accounting remains independent; an error response does not make partial
 usage complete or certify zero spending.
 
-The existing retry policy still selects `codes`, including the whole `provider`
-family. HTTP observations do not authorize retries or automatically change a frozen
-delay. Filtering automatic retry by HTTP status and honoring a server delay are
-separate policy work; do not assume these controls already exist. A graph can read
-the facts in a collected failure when explicitly authoring downstream decisions.
+The [retry policy](retry-policy.md) can explicitly select `provider.statuses` and
+`provider.retryAfter: "honor"` in v7 plans. With no provider options, code-family
+selection and configured delay retain their original behavior. HTTP observations
+alone do not authorize retries. A graph can also read the facts in a collected
+failure when explicitly authoring downstream decisions.
 
 ## Verification
 

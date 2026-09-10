@@ -3,7 +3,8 @@
 An `agent` or `check` node can declare a frozen `retryPolicy`:
 
 ```json
-{"codes":["process","provider"],"delayMs":5000,"maxAttempts":3}
+{"codes":["process","provider"],"delayMs":5000,"maxAttempts":3,
+ "provider":{"statuses":[429,503],"retryAfter":"honor"}}
 ```
 
 The policy is absent by default, so automatic retry is disabled. `codes` selects
@@ -25,18 +26,31 @@ For that case, [submit-only output repair](output-repair.md) can explicitly repa
 the result in the same settled session. It does not repeat the writing task.
 Read-only describes granted tools, not an OS sandbox; model calls still spend tokens.
 
-Selecting `provider` means selecting that whole currently reported failure family.
-It does not claim a transient failure or select an HTTP status. Available HTTP facts
-are recorded separately in [providerResponse](provider-responses.md); this policy
-does not yet filter them or automatically adopt Retry-After. An unbounded policy can continue on a
-persistent selected error until paused or cancelled.
+Without `provider.statuses`, selecting the `provider` code selects the whole
+reported family, including errors without an HTTP response. A nonempty unique
+`statuses` list restricts provider failures to the observed HTTP status; a missing
+status fails that filter. Values are integers 100–599. HTTP 200 can accompany a
+broken stream, so the status is response evidence, not a claim of successful work.
+The filter does not affect other selected codes such as `process` or `resource`.
+`provider` options require `codes` to include `provider`.
+
+`provider.retryAfter: "honor"` sets the next attempt's delay to the maximum of
+`delayMs` and valid observed Retry-After delays. Missing/invalid headers leave the
+configured delay in effect. `"ignore"` or an omitted option preserves the configured
+delay. There is no server-delay cap. A supplied header never shortens the workflow's
+minimum delay, and these options never authorize unknown effects. Every cause in a
+composite failure must pass the filter; all its valid delays contribute to the
+maximum. An unbounded policy can continue on a persistent selected error until
+paused or cancelled. See [providerResponse](provider-responses.md) for capture limits.
 
 ## Durable decisions
 
 The failure checkpoint, immutable retry decision, progress metadata and event are
 committed together. The decision identifies the failed and next attempts, cause,
-schedule time and frozen delay. Admission checks the current attempt, exact saved
-decision, progress, failure and frozen policy inside the journal transaction. It
+schedule time and chosen delay. For a composite error, `causes` preserves all typed
+causes used in the decision; older records may retain only the primary failure.
+Admission checks the current attempt, exact saved
+decision, progress, failures and frozen policy inside the journal transaction. It
 archives the failed attempt with `admitted` progress and starts a fresh attempt.
 That decision cannot authorize another attempt after a crash during execution.
 
@@ -77,9 +91,11 @@ worker or turn its waiting structural parent into active work. Browser Now, grap
 and node inspector show pending retry, policy and paged decisions. Clock updates
 do not duplicate append-only watch messages or reset history pages.
 
-New plans use compiler/runtime v6. Frozen v1–v5 source/hash verification is retained;
-older compilers reject authored retry policies. The golden v5 collect fixture was
-generated at `6dcafc3` before retry support.
+New plans use compiler/runtime v7. Frozen v1–v6 source/hash verification is retained;
+v1–v5 reject authored retry policies, and v6 rejects the new provider options.
+Existing v6 policies retain their original delay and code-family selection.
+The golden v5 collect fixture was generated at `6dcafc3` before retry support;
+the v6 retry fixture was generated at `61fdb9a` and executes on the new detached runtime.
 
 ## Validation
 

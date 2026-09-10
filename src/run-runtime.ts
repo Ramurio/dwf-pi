@@ -162,12 +162,13 @@ export class JournalRuntime implements WorkflowRuntime {
           const latest = runtime.store.getActivation(runtime.run.id, record.key);
           if (latest?.status === "running" && runtime.store.get(runtime.run.id).ownerToken === runtime.token) {
             const failure = Exit.isFailure(exit) ? describeFailureCause(exit.cause) : executionFailure("unknown","execution","unknown","Activation finished without a checkpoint").failure;
+            const causes=Exit.isFailure(exit)?Array.from(Cause.failures(exit.cause),error=>describeFailureCause(Cause.fail(error))):[];
+            const policy=node.kind === "agent" || node.kind === "check" ? node.retryPolicy : undefined;
+            const retryEligible=Exit.isFailure(exit) && !Cause.isInterrupted(exit.cause) && !Cause.isDie(exit.cause) && causes.length>0 && causes.every(cause=>permitsRetry(policy,record.attempt,cause));
             runtime.store.failActivation(runtime.run.id, runtime.token, record.key,
               Exit.isFailure(exit) ? Cause.pretty(exit.cause) : "Activation finished without a checkpoint",
               ["map","parallel","subworkflow","worktree","integrate"].includes(node.kind) ? {...failure,effects:"unknown"} : failure,
-              {retryEligible:Exit.isFailure(exit) && !Cause.isInterrupted(exit.cause) && !Cause.isDie(exit.cause) &&
-                Array.from(Cause.failures(exit.cause)).length>0 && Array.from(Cause.failures(exit.cause)).every(error=>permitsRetry(
-                  node.kind === "agent" || node.kind === "check" ? node.retryPolicy : undefined, record.attempt, describeFailureCause(Cause.fail(error))))});
+              {retryEligible,...((node.kind==="agent" || node.kind==="check") && causes.length>0?{retryCauses:causes}:{})});
           }
         }),
       ).pipe(Effect.catchAll(error => {

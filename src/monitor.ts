@@ -1,4 +1,4 @@
-import { parseExecutionFailure } from "./execution-failure.js";
+import { parseExecutionFailure, parseFailureCauses } from "./execution-failure.js";
 import { providerResponseSummary } from "./provider-response.js";
 import { parseOutputRepairProgress } from "./output-repair.js";
 import { parseRetryProgress, retryRemaining } from "./retry-policy.js";
@@ -61,6 +61,8 @@ function evidence(a: ActivationRecord): string {
     if (typeof output.accepted === "boolean") return output.accepted ? "результат принят" : "результат НЕ принят";
   }
   const failure = parseExecutionFailure(a.metadata.failure);
+  const causes = parseFailureCauses(a.metadata.failureCauses);
+  if (causes) return terminalText(causes.map(cause=>`${cause.code}/${cause.phase} (${cause.effects})${providerResponseSummary(cause.providerResponse)}`).join("; "),180);
   if (failure) return terminalText(`${failure.code}/${failure.phase} (${failure.effects})${providerResponseSummary(failure.providerResponse)}: ${failure.message}`,180);
   if (a.error) return terminalText(a.error, 180);
   if (a.metadata.collectionSummary) return collectionEvidence(a);

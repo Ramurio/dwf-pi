@@ -12,7 +12,7 @@
 | Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Реализовано и проверено: await, run.waits/resolve, JSON-форма, idempotency, pause/resume, SIGKILL и worktree reattach; см. outcomes-and-waits.md |
 | Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Реализовано: controller.snapshot + projectRun, включая browser list и watch; проверка процессов отдельно от heartbeat, см. observation.md |
 | Usage | Учёт каждого ответа, cache/reasoning, попытки, dedup, отмена/ошибки, раскрытие сумм | Backend/API/UI реализованы; 65 targeted tests и браузерный fixture, см. usage.md. Общая приёмка с будущим recovery остаётся обязательной |
-| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, output repair, collect, safe retry и HTTP observations реализованы; фильтр HTTP-статусов/применение Retry-After в политике и reconciliation остаются, см. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md, retry-policy.md и provider-responses.md |
+| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, output repair, collect, safe retry, HTTP observations и provider retry policy реализованы; reconciliation остаётся, см. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md, retry-policy.md и provider-responses.md |
 | Артефакты | Snapshot/digest, версии критериев, применимость checks/reviews, diff | Не начато |
 | Интеграция | Отдельный integration workspace, проверки объединения, контроль target head | Не начато |
 | Authoring | Рецепты в обычный граф, агрегация коллекций, schemas и dataflow diagnostics | Не начато |
@@ -58,7 +58,7 @@ supervisor в worktree; повтор start; patch после prepare; конфл
   за 95,7 секунды; `/tmp/dynamicwf-usage-routes-full-20260910.log`.
   Нестабильность обычного параллельного прогона этим не считается исправленной.
 
-Следующие части восстановления: HTTP-фильтры/Retry-After в retry policy и reconciliation. Остальные строки
+Следующая часть восстановления: reconciliation. Остальные строки
 сохраняют полный обязательный объём; завершённые изменения не означают завершение
 общего goal.
 
@@ -333,3 +333,37 @@ validator прошли. Контракт и точные границы: provide
 Текущая policy ещё выбирает семейство provider целиком: новый HTTP record сам
 не разрешает повтор и не меняет frozen delay. Настраиваемый HTTP-фильтр, применение
 Retry-After, reconciliation и остальные строки общего плана остаются обязательными.
+
+### Provider retry policy и все причины отказа
+
+Новые планы v7 поддерживают retryPolicy.provider.statuses и retryAfter honor/ignore.
+HTTP-фильтр применяется только к выбранному provider code, требует наблюдаемый
+статус и проверяет каждую причину; другие выбранные коды сохраняют свою семантику.
+Honor сохраняет максимум configured delay и всех валидных серверных задержек,
+без дополнительного лимита. Missing/invalid header оставляет configured delay.
+Отсутствующие provider options сохраняют прежние правила. Старые компиляторы
+явно отклоняют новый authoring, golden v6 из 61fdb9a сохраняет точные source/hash
+и выполняет реальный detached retry с прежней задержкой.
+
+Составные причины сохраняются атомарно вместе с retry decision в отдельной таблице;
+допуск после открытия журнала повторно проверяет весь список и назначенную задержку.
+Смерть/смена owner не назначает новый срок. Даже при отказе от повтора agent/check
+checkpoint сохраняет failureCauses: исключённый второй статус виден за первым,
+внешне подходящим под policy. История сохраняет список, новая попытка очищает его.
+Browser policy/decision/attempt и terminal history показывают соответствующие факты.
+
+Настоящий native SDK проверяет 429→503→401: две запланированные попытки, уважение
+серверного минимума, остановка на 401, сохранённые ответы/usage и архивы ошибок.
+Дополнительно проверены отсутствие HTTP-статуса, неизвестные effects, schema,
+составные причины/максимум задержек, rollback записи причин, stale ownership,
+повторное открытие store и cancel. Полный параллельный набор после всех изменений:
+**314/314**, 70,8 секунды, `/tmp/dynamicwf-provider-policy-full-final-20260910.log`.
+Typecheck, browser syntax, strict paging checkJs и skill validator прошли.
+
+Native UI QA использует настоящий detached supervisor со scripted worker IPC faults:
+429 назначает 5 секунд вместо базовых 100 мс, pause удерживает допуск, resume→401
+останавливает дальнейшие повторы. Во втором записанном fixture показаны обе причины
+отказа (429 и 401) в node/attempt; это проверка UI, реальные составные Effect causes
+проверяются отдельно в тестах. Консоль без ошибок, оба стенда и вкладки очищены.
+Контракт: retry-policy.md. Reconciliation и остальные строки остаются обязательными;
+общий goal не завершён.

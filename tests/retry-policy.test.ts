@@ -150,3 +150,12 @@ test('every member of a composite failure must match the selected retry codes',a
   const result=await Effect.runPromiseExit(runtime.step(context,()=>{calls++;return Effect.failCause(Cause.parallel(Cause.fail(executionFailure('provider','execution','read-only','Selected')),Cause.fail(executionFailure('output','output','read-only','Not selected'))));}));
   assert.ok(Exit.isFailure(result));assert.equal(calls,1);assert.equal(c.store.retries('run-mixed-codes',c.store.listActivations('run-mixed-codes')[0]!.key).records.length,0);
 }));
+
+test('golden v6 retry plan retains source/hash and its original delay on the new detached runtime',{timeout:15000},async()=>fixture(async(c,directory)=>{
+  const plan=verifyExecutionPlan(JSON.parse(await readFile(new URL('./fixtures/legacy-v6-plan.json',import.meta.url),'utf8')));
+  assert.equal(plan.hash,'52d8be01225a6b24f0ac5912d7aee68972b26337883376373e95f427c511c568');
+  const run=await c.startPrepared(plan,null,directory),record=(await pending(c,run.id))!,decision=c.store.retries(run.id,record.key).records[0]!;
+  assert.equal(decision.delayMs,1000);assert.equal(decision.causes,undefined);
+  await writeFile(join(directory,'available-later'),'#!/bin/sh\nprintf x >> marker\n',{mode:0o700});
+  await status(c,run.id,'succeeded');assert.equal(await readFile(join(directory,'marker'),'utf8'),'x');assert.equal(c.store.getActivation(run.id,record.key)!.attempt,2);
+}));

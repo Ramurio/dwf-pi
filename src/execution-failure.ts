@@ -40,3 +40,13 @@ export function parseExecutionFailure(value: unknown): ExecutionFailureRecord | 
 export function failureRecord(error: unknown, fallback: Omit<ExecutionFailureRecord,"version">): ExecutionFailureRecord {
   return error instanceof ExecutionFailure ? error.failure : { version: 1, ...fallback };
 }
+export function parseFailureCauses(value: unknown): ExecutionFailureRecord[] | undefined {
+  if (!Array.isArray(value) || value.length<2 || Reflect.ownKeys(value).length!==value.length+1) return;
+  const result:ExecutionFailureRecord[]=[];
+  for(let i=0;i<value.length;i++){
+    const field=Object.getOwnPropertyDescriptor(value,String(i));
+    if(!field?.enumerable || !Object.hasOwn(field,"value"))return;
+    const failure=parseExecutionFailure(field.value);if(!failure)return;result.push(failure);
+  }
+  return result;
+}

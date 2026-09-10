@@ -1,4 +1,4 @@
-import { parseExecutionFailure } from "../execution-failure.js";
+import { parseExecutionFailure, parseFailureCauses } from "../execution-failure.js";
 import { parseOutputRepairProgress } from "../output-repair.js";
 import { parseRetryProgress } from "../retry-policy.js";
 import type { ActivationRecord, RunRecord, WaitRecord, RunStore } from "../run-store.js";
@@ -91,6 +91,7 @@ export function graphSnapshot(
                 : null,
             error: a.error ?? null,
             failure: parseExecutionFailure(a.metadata.failure) ?? null,
+            failureCauses: parseFailureCauses(a.metadata.failureCauses) ?? null,
             outputRepair: parseOutputRepairProgress(a.metadata.outputRepair),
             collectionSummary: a.metadata.collectionSummary ?? null,
             retry: parseRetryProgress(a.metadata.retry),

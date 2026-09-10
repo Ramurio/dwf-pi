@@ -429,6 +429,7 @@ function renderInspector() {
   }
   const outgoing = selectedGraph().edges.filter((e) => e.from === node.id);
   if (node.retryPolicy) aside.append(el("p", "notice", `Повторы по политике: ${node.retryPolicy.codes.join(", ")} · задержка ${number(node.retryPolicy.delayMs)} мс · ${node.retryPolicy.maxAttempts === undefined ? "без лимита попыток" : `всего попыток до ${node.retryPolicy.maxAttempts}`}. Допускаются только подтверждённые not-started / read-only ошибки.`));
+  if (node.retryPolicy?.provider) aside.append(el("p","muted",`Ошибки провайдера: ${node.retryPolicy.provider.statuses ? `только HTTP ${node.retryPolicy.provider.statuses.join(", ")}; без HTTP-статуса повтор не допускается` : "без фильтра HTTP-статусов"}. Retry-After: ${node.retryPolicy.provider.retryAfter === "honor" ? "учитывается как минимальная задержка" : "не изменяет задержку политики"}.`));
   if (state.transition?.context.graphId === state.graph && state.transition.decision.from === node.id) {
     aside.append(el("h3", "", "ВЫБРАННЫЙ ПЕРЕХОД"), transitionDetails(state.transition));
   }
@@ -482,7 +483,8 @@ function renderInspector() {
     if (node.retryPolicy) renderRetries(row,a);
     if (node.failurePolicy === "collect") renderCollection(row, a);
     if (a.outputRepair) row.append(outputRepairView(a.outputRepair, a.status));
-    if (a.failure) row.append(failureView(a.failure));
+    if (a.failureCauses) for(const cause of a.failureCauses)row.append(failureView(cause));
+    else if (a.failure) row.append(failureView(a.failure));
     else if (a.error) row.append(el("p", "", a.error));
     if (a.findings.length) {
       const details = el("details");
@@ -509,6 +511,7 @@ function retryView(progress) {
   const labels = {scheduled:"запланирована",admitted:"допущена",abandoned:"снята при завершении запуска"};
   const panel = el("div","notice"), when = progress.dueAt !== null && Number.isFinite(new Date(progress.dueAt).getTime()) ? date(progress.dueAt) : `задержка ${number(progress.delayMs)} мс`;
   panel.append(el("strong","",`Попытка ${progress.nextAttempt}: ${labels[progress.status] ?? progress.status}`),el("p","muted",`После ошибки попытки ${progress.attempt} · не раньше ${when}`));
+  panel.append(el("p","muted",`Назначенная задержка: ${number(progress.delayMs)} мс.`));
   if (progress.status === "scheduled") panel.append(el("p","muted","Новая попытка ещё не началась. Для допуска запуск должен работать и срок задержки должен истечь."));
   return panel;
 }
@@ -521,7 +524,7 @@ function renderRetries(container,activation) {
     });renderInspector();await pending;if(state.id===id)renderInspector();
   },"child-button");load.disabled=page.loading;container.append(load);
   if(page.error)container.append(el("p","notice",page.error));
-  for(const record of page.reports){const details=el("details");details.append(el("summary","",`Решение: попытка ${record.attempt} → ${record.nextAttempt} · ${date(record.at)}`),failureView(record.failure),el("p","muted",`Задержка ${number(record.delayMs)} мс. Фактический допуск и состояние — в истории попыток.`));container.append(details);}
+  for(const record of page.reports){const details=el("details");details.append(el("summary","",`Решение: попытка ${record.attempt} → ${record.nextAttempt} · ${date(record.at)}`));for(const cause of record.causes??[record.failure])details.append(failureView(cause));details.append(el("p","muted",`Задержка ${number(record.delayMs)} мс. Фактический допуск и состояние — в истории попыток.`));container.append(details);}
 }
 function renderCollection(container, activation) {
   if (activation.collectionSummary) container.append(el("p", "notice", `Собрано результатов: ${activation.collectionSummary.total} · успешно ${activation.collectionSummary.succeeded} · ошибок ${activation.collectionSummary.failed}`));
@@ -569,7 +572,8 @@ function renderAttempts(container, activation) {
     if(record.kind==="agent")card.append(el("p","",record.accounting.usage ? `${number(record.accounting.usage.totalTokens)} ток. · ответов ${record.accounting.responses}${record.accounting.complete ? "" : " · частично"}` : "Расход этой попытки неизвестен: нет отчётов SDK."));
     if(record.metadata.outputRepair)card.append(outputRepairView(record.metadata.outputRepair,record.status));
     if(record.metadata.retry)card.append(retryView(record.metadata.retry));
-    if(record.metadata.failure)card.append(failureView(record.metadata.failure));
+    if(record.metadata.failureCauses)for(const cause of record.metadata.failureCauses)card.append(failureView(cause));
+    else if(record.metadata.failure)card.append(failureView(record.metadata.failure));
     else if(record.error)card.append(el("pre","",record.error));
     if(Object.hasOwn(record,"output"))card.append(el("pre","",JSON.stringify(record.output,null,2)));
     if(Object.keys(record.metadata).length){const details=el("details");details.append(el("summary","","Данные попытки"),el("pre","",JSON.stringify(record.metadata,null,2)));card.append(details);}

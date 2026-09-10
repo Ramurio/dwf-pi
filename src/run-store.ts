@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { openWorkflowDatabase } from "./sqlite.js";
 import { preparedExecutionId, type ExecutionPlan } from "./execution-types.js";
-import { executionFailure, parseExecutionFailure, type ExecutionFailureRecord } from "./execution-failure.js";
+import { executionFailure, parseExecutionFailure, parseFailureCauses, type ExecutionFailureRecord } from "./execution-failure.js";
 import type { Json } from "./graph.js";
 import type { RuntimeContext } from "./runtime-contract.js";
 import { parseUsage, sumTokenUsage, type TokenUsage } from "./usage.js";
@@ -11,7 +11,7 @@ import { explicitOutcome, legacyOutcome, type TaskOutcome, type TaskDecision } f
 import { isDeepStrictEqual } from "node:util";
 import type { RoutingDecision } from "./expressions.js";
 import { validateCollectedResult, type CollectedResult, type CollectionRecord } from "./collection.js";
-import { parseRetryProgress, permitsRetry, retryProgress, retryRemaining, RetryNotReady, type RetryRecord } from "./retry-policy.js";
+import { parseRetryProgress, permitsRetry, retryDelay, retryProgress, retryRemaining, RetryNotReady, type RetryRecord } from "./retry-policy.js";
 
 export type RunStatus = "queued" | "running" | "waiting" | "pausing" | "paused" | "cancelling" | "cancelled" | "succeeded" | "failed" | "interrupted";
 export type DesiredRunStatus = "running" | "paused" | "cancelled";
@@ -148,6 +148,10 @@ export class RunStore {
         FOREIGN KEY(run_id,activation_key) REFERENCES workflow_activations(run_id,activation_key)
       ) STRICT;
       CREATE INDEX IF NOT EXISTS workflow_retries_cursor ON workflow_retries(run_id,activation_key,seq);
+      CREATE TABLE IF NOT EXISTS workflow_retry_causes (
+        retry_seq INTEGER PRIMARY KEY REFERENCES workflow_retries(seq) ON DELETE CASCADE,
+        causes TEXT NOT NULL
+      );
     `);
   }
   close(): void { this.database.close(); }
@@ -361,7 +365,7 @@ export class RunStore {
       // Preserve the complete prior checkpoint atomically before replacing the current attempt.
       if (old) this.database.prepare("INSERT INTO workflow_activation_history(run_id,activation_key,attempt,record) VALUES(?,?,?,?)")
         .run(id, key, old.attempt, JSON.stringify(allowed ? {...old,metadata:{...old.metadata,retry:retryProgress(decision!,"admitted")}} : old));
-      const { failure: _previousFailure, outputRepair: _previousRepair, retry: _previousRetry, ...metadata } = old?.metadata ?? {};
+      const { failure: _previousFailure, failureCauses: _previousCauses, outputRepair: _previousRepair, retry: _previousRetry, ...metadata } = old?.metadata ?? {};
       const now = Date.now();
       if (run.status === "waiting") {
         this.database.prepare("UPDATE workflow_runs SET status='running',updated_at=? WHERE id=?").run(now, id);
@@ -506,7 +510,7 @@ export class RunStore {
       json_extract(a.context,'$.scope') AS scope,json_extract(t.decision,'$.edgeIndex') AS edge_index,
       COUNT(*) AS count,MAX(t.seq) AS last_seq FROM workflow_transitions t JOIN workflow_activations a
       ON a.run_id=t.run_id AND a.activation_key=t.activation_key WHERE t.run_id=? GROUP BY graph_id,scope,edge_index`).all(id);
-    return { supported: ["dynamicwf-effect-v3", "dynamicwf-effect-v4", "dynamicwf-effect-v5", "dynamicwf-effect-v6"].includes(run.plan.compilerVersion), count: rows.reduce((n, r) => n + Number(r.count), 0),
+    return { supported: ["dynamicwf-effect-v3", "dynamicwf-effect-v4", "dynamicwf-effect-v5", "dynamicwf-effect-v6", "dynamicwf-effect-v7"].includes(run.plan.compilerVersion), count: rows.reduce((n, r) => n + Number(r.count), 0),
       failed: rows.filter(r => r.edge_index === null).reduce((n, r) => n + Number(r.count), 0),
       lastSeq: rows.reduce((n, r) => Math.max(n, Number(r.last_seq)), 0),
       edges: rows.filter(r => r.edge_index !== null).map(r => ({ graphId: String(r.graph_id), scope: String(r.scope), edgeIndex: Number(r.edge_index), count: Number(r.count) })) };
@@ -529,23 +533,27 @@ export class RunStore {
       this.event(id, "activation.succeeded", { key, output });
     });
   }
-  failActivation(id: string, token: string, key: string, error: string, failure?: ExecutionFailureRecord, options: { retryEligible?: boolean } = {}): void {
+  failActivation(id: string, token: string, key: string, error: string, failure?: ExecutionFailureRecord, options: { retryEligible?: boolean; retryCauses?: ExecutionFailureRecord[] } = {}): void {
     this.transaction(() => {
       const activation = this.runningActivation(id, token, key), run = this.get(id);
       const detail = failure ?? executionFailure("unknown","execution","unknown",error).failure;
       if (!parseExecutionFailure(detail)) throw new Error("Invalid structured execution failure");
+      const causes=options.retryCauses??[detail];
+      if (!causes.length || !isDeepStrictEqual(causes[0],detail) || causes.length>1 && !parseFailureCauses(causes)) throw new Error("Invalid retry failure causes");
       this.database.prepare("UPDATE workflow_activations SET status='failed',error=?,finished_at=?,metadata=json_set(metadata,'$.failure',json(?)) WHERE run_id=? AND activation_key=?")
         .run(error, Date.now(), JSON.stringify(detail), id, key);
-      this.event(id, "activation.failed", { key, error, failure: JSON.parse(JSON.stringify(detail)) as Json });
+      if(causes.length>1)this.database.prepare("UPDATE workflow_activations SET metadata=json_set(metadata,'$.failureCauses',json(?)) WHERE run_id=? AND activation_key=?").run(JSON.stringify(causes),id,key);
+      this.event(id, "activation.failed", { key, error, failure: JSON.parse(JSON.stringify(detail)) as Json,...(causes.length>1?{causes:JSON.parse(JSON.stringify(causes)) as Json}:{}) });
       const node = run.plan.workflow.graphs[activation.context.graphId]?.nodes.find(n=>n.id===activation.context.nodeId);
       const policy = node?.kind === "agent" || node?.kind === "check" ? node.retryPolicy : undefined;
-      if (options.retryEligible && run.desired !== "cancelled" && permitsRetry(policy,activation.attempt,detail)) {
-        const at = Date.now(), delayMs = policy!.delayMs, target = at + delayMs;
+      if (options.retryEligible && run.desired !== "cancelled" && causes.every(cause=>permitsRetry(policy,activation.attempt,cause))) {
+        const at = Date.now(), delayMs = retryDelay(policy!,causes), target = at + delayMs;
         this.database.prepare("INSERT INTO workflow_retries(run_id,activation_key,attempt,at,delay_ms,due_at,failure) VALUES(?,?,?,?,?,?,?)")
           .run(id,key,activation.attempt,at,delayMs,Number.isSafeInteger(target)?target:null,JSON.stringify(detail));
+        if(causes.length>1) this.database.prepare("INSERT INTO workflow_retry_causes(retry_seq,causes) VALUES(last_insert_rowid(),?)").run(JSON.stringify(causes));
         const progress = retryProgress(this.retry(id,key,activation.attempt)!,"scheduled");
         this.database.prepare("UPDATE workflow_activations SET metadata=json_set(metadata,'$.retry',json(?)) WHERE run_id=? AND activation_key=?").run(JSON.stringify(progress),id,key);
-        this.event(id,"retry.scheduled",{key,retry:progress,failure:JSON.parse(JSON.stringify(detail)) as Json});
+        this.event(id,"retry.scheduled",{key,retry:progress,failure:JSON.parse(JSON.stringify(detail)) as Json,...(causes.length>1?{causes:JSON.parse(JSON.stringify(causes)) as Json}:{})});
       }
     });
   }
@@ -562,13 +570,17 @@ export class RunStore {
     if (!decision || !progress || !isDeepStrictEqual(progress,retryProgress(decision,"scheduled"))) return;
     const node = run.plan.workflow.graphs[activation.context.graphId]?.nodes.find(n=>n.id===activation.context.nodeId);
     const policy = node?.kind === "agent" || node?.kind === "check" ? node.retryPolicy : undefined;
-    return isDeepStrictEqual(parseExecutionFailure(activation.metadata.failure),decision.failure) && permitsRetry(policy,activation.attempt,decision.failure) && policy!.delayMs===decision.delayMs ? decision : undefined;
+    const causes=decision.causes??[decision.failure];
+    return isDeepStrictEqual(parseExecutionFailure(activation.metadata.failure),decision.failure) && causes.every(cause=>permitsRetry(policy,activation.attempt,cause)) && retryDelay(policy!,causes)===decision.delayMs ? decision : undefined;
   }
   private decodeRetry(row: Record<string, unknown>): RetryRecord {
     const failure = parseExecutionFailure(JSON.parse(String(row.failure)));
     if (!failure) throw new Error("Invalid saved retry failure");
+    const extra=this.database.prepare("SELECT causes FROM workflow_retry_causes WHERE retry_seq=?").get(row.seq as number);
+    const causes=extra?JSON.parse(String(extra.causes)):undefined;
+    if(causes!==undefined && (!parseFailureCauses(causes) || !isDeepStrictEqual(causes[0],failure))) throw new Error("Invalid saved retry causes");
     return {seq:Number(row.seq),runId:String(row.run_id),key:String(row.activation_key),attempt:Number(row.attempt),nextAttempt:Number(row.attempt)+1,
-      at:Number(row.at),delayMs:Number(row.delay_ms),dueAt:row.due_at===null?null:Number(row.due_at),failure};
+      at:Number(row.at),delayMs:Number(row.delay_ms),dueAt:row.due_at===null?null:Number(row.due_at),failure,...(causes?{causes}:{})};
   }
   retries(id: string, key: string, after = 0, limit = 100) {
     if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error("Invalid retry page cursor or limit (1–1000)");
