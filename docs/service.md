@@ -159,3 +159,8 @@ inspection.
 Attempt history and its cursor/current distinction are documented in [attempt-history.md](attempt-history.md). This read-only operation does not authorize repeated effects.
 
 Structured failure records are described in [execution-failures.md](execution-failures.md). Run summaries expose `failure` for known failed/interrupted observations; activation details carry `metadata.failure`. CLI/MCP error envelopes include a typed failure only when the application actually raised one. These fields do not change retry admission.
+
+An agent's frozen `config.outputRepair` can enable submit-only format repair;
+see [output-repair.md](output-repair.md). `metadata.outputRepair` shows the latest
+round, while `activation.metadata` events preserve progression with key and attempt.
+Its report cursors refer to `run.usage` report IDs within that same attempt.

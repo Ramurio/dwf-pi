@@ -76,8 +76,9 @@ No graph/source/plan version changes are needed for this additive journal/IPC da
 Older v1/v2/v3 plans retain their frozen source/hash. Execution admission is unchanged:
 failed/uncertain side-effect nodes are still blocked from implicit repetition, even
 if a new failure observation supplies more information. Explicit retry/collect
-policies, output repair with closed write tools, and reconciliation remain separate
-required implementation steps.
+policies and reconciliation remain separate required implementation steps.
+[Output repair](output-repair.md) is available as an explicit v4 policy, inside
+the same settled worker session with only the result tool enabled.
 
 ## Validation
 

@@ -12,6 +12,113 @@ import { executePiWorker, type PiWorkerOptions } from "../src/pi-worker.js";
 import type { PiWorkerRequest } from "../src/execution-types.js";
 
 const provider = "dynamicwf-worker-test";
+test("output repair preserves the same transcript and blocks every original tool, including hallucinated writes", async t => {
+  const denied = ["write", "bash", "edit", "read", "grep", "find", "ls"];
+  const f = await fixture(t, [
+    () => reply([{ type: "toolCall", id: "initial-write", name: "write", arguments: { path: "artifact.txt", content: "original evidence" } }], "toolUse"),
+    () => submit({ answer: "42" }),
+    () => reply([
+      { type: "toolCall", id: "blocked-write", name: "write", arguments: { path: "artifact.txt", content: "REPEATED TASK" } },
+      { type: "toolCall", id: "blocked-bash", name: "bash", arguments: { command: "touch forbidden.txt" } },
+      { type: "toolCall", id: "blocked-edit", name: "edit", arguments: { path: "artifact.txt", oldText: "original", newText: "changed" } },
+      ...["read", "grep", "find", "ls"].map(name => ({ type: "toolCall" as const, id: `blocked-${name}`, name, arguments: { path: ".", pattern: "*" } })),
+      { type: "toolCall", id: "fixed", name: "submit_result", arguments: { answer: 42 } },
+    ], "toolUse"),
+  ]);
+  Object.assign(f.request.config, { permission: "workspace-write", tools: denied, outputRepair: { mode: "submit-only" } });
+  const result = await executePiWorker(f.request, f.options);
+  assert.deepEqual(result.output, { answer: 42 });
+  assert.equal(await readFile(join(f.request.cwd, "artifact.txt"), "utf8"), "original evidence");
+  await assert.rejects(readFile(join(f.request.cwd, "forbidden.txt")), { code: "ENOENT" });
+  assert.deepEqual(f.calls[2]!.tools!.map(tool => tool.name), ["submit_result"]);
+  assert.match(JSON.stringify(f.calls[2]!.messages), /original evidence/);
+  assert.equal(f.calls[2]!.messages.filter(m => m.role === "user" && JSON.stringify(m.content).includes("Assigned task:")).length, 1);
+  for (const toolName of denied) assert.ok(f.events.some((e: any) => e.type === "tool_execution_end" && e.toolName === toolName && e.isError === true), toolName);
+  assert.deepEqual(f.events.filter((e: any) => e.type === "output.repair"), [
+    { type: "output.repair", progress: { round: 1, status: "running", cause: "schema", afterReport: 2, throughReport: 2 } },
+    { type: "output.repair", progress: { round: 1, status: "succeeded", cause: "schema", afterReport: 2, throughReport: 3 } },
+  ]);
+  assert.equal(result.usage.totalTokens, 15);
+  assert.deepEqual(f.events.filter((e: any) => e.type === "usage.report").map((e: any) => e.reportId), ["1", "2", "3"]);
+  assert.equal(f.events.filter((e: any) => e.type === "usage.settled").length, 1);
+  assert.equal(f.events.filter((e: any) => e.type === "session.started").length, 1);
+});
+
+test("each invalid repair takes one configured round; missing, duplicate and unavailable-tool results cannot bypass the bound", async t => {
+  const duplicate = () => reply([...(submit().content), { type: "toolCall", id: "second", name: "submit_result", arguments: { answer: 42 } }], "toolUse");
+  const f = await fixture(t, [duplicate, () => reply([{ type: "text", text: "Not submitted" }]), () => reply([{ type: "toolCall", id: "no-tool", name: "read", arguments: { path: "." } }], "toolUse")]);
+  f.request.config.outputRepair = { mode: "submit-only", maxRounds: 2 };
+  await assert.rejects(executePiWorker(f.request, f.options), (error: unknown) => {
+    assert.ok(error instanceof ExecutionFailure); assert.equal(error.failure.code, "output"); return true;
+  });
+  assert.equal(f.calls.length, 3);
+  assert.deepEqual(f.events.filter((e: any) => e.type === "output.repair").map((e: any) => [e.progress.round, e.progress.status, e.progress.cause]), [[1,"running","duplicate"],[1,"invalid","duplicate"],[2,"running","missing"],[2,"invalid","missing"]]);
+  assert.ok(f.events.some((e: any) => e.type === "usage.settled" && e.complete === true));
+});
+
+test("enabled repair without a bound continues through multiple malformed rounds to a valid result", async t => {
+  const f = await fixture(t, [() => reply([]), ...Array.from({ length: 5 }, () => () => submit({})), () => submit()]);
+  f.request.config.outputRepair = { mode: "submit-only" };
+  assert.deepEqual((await executePiWorker(f.request, f.options)).output, { answer: 42 });
+  assert.equal(f.calls.length, 7);
+  assert.ok(f.events.some((e: any) => e.type === "output.repair" && e.progress.round === 6 && e.progress.status === "succeeded"));
+});
+
+test("provider and setup failures do not enter format repair; provider failure inside repair terminates it", async t => {
+  for (const steps of [[() => reply([], "error")], [() => submit({}), () => reply([], "error")]]) {
+    const f = await fixture(t, steps); f.request.config.outputRepair = { mode: "submit-only" };
+    await assert.rejects(executePiWorker(f.request, f.options), (error: unknown) => { assert.ok(error instanceof ExecutionFailure); assert.equal(error.failure.code, "provider"); return true; });
+    assert.equal(f.calls.length, steps.length);
+    const repairs = f.events.filter((e: any) => e.type === "output.repair") as any[];
+    assert.equal(repairs.length, steps.length === 1 ? 0 : 2);
+    if (repairs.length) assert.equal(repairs[1].progress.status, "failed");
+    assert.ok(f.events.some((e: any) => e.type === "usage.settled" && e.complete === false));
+  }
+  const f = await fixture(t, []); f.request.config.outputRepair = { mode: "submit-only" };
+  await assert.rejects(executePiWorker(f.request, { ...f.options, onSession() { throw new Error("format-looking SDK failure"); } }), (error: unknown) => { assert.ok(error instanceof ExecutionFailure); assert.equal(error.failure.code, "unknown"); return true; });
+  assert.equal(f.calls.length, 0);
+});
+
+test("cancelling an active repair drains the session and preserves every known response report", { timeout: 10_000 }, async t => {
+  const started = gate(), controller = new AbortController();
+  const f = await fixture(t, [() => submit({}), async (_context, options) => {
+    started.resolve();
+    if (!options?.signal?.aborted) await new Promise<void>(resolve => options!.signal!.addEventListener("abort", () => resolve(), { once: true }));
+    return reply([], "aborted");
+  }]);
+  f.request.config.outputRepair = { mode: "submit-only" };
+  const running = executePiWorker(f.request, { ...f.options, signal: controller.signal }).then(value => ({ value }), error => ({ error }));
+  try {
+    await started.promise; controller.abort(); const result = await running;
+    assert.ok("error" in result && result.error instanceof ExecutionFailure);
+    assert.equal(result.error.failure.code, "cancelled");
+    assert.equal(result.error.failure.phase, "output");
+    assert.equal(f.calls.length, 2);
+    assert.equal(f.events.filter((e: any) => e.type === "usage.report").length, 2);
+    assert.ok(f.events.some((e: any) => e.type === "output.repair" && e.progress.status === "failed"));
+    assert.ok(f.events.some((e: any) => e.type === "usage.settled" && e.complete === false));
+  } finally { controller.abort(); await running; }
+});
+
+test("continued visits restore original configured tools and only count new invocation responses after repair", async t => {
+  const f = await fixture(t, [() => submit({}), () => submit(), () => submit()]);
+  f.request.config.session = "continue-node"; f.request.config.tools = ["read"];
+  f.request.config.outputRepair = { mode: "submit-only" };
+  const first = await executePiWorker(f.request, f.options);
+  const second = await executePiWorker({ ...f.request, sessionFile: first.sessionFile, resourceDirectory: join(f.directory, "continued-resources") }, f.options);
+  assert.equal(second.sessionFile, first.sessionFile);
+  assert.deepEqual(f.calls[2]!.tools!.map(tool => tool.name), ["read", "submit_result"]);
+  assert.equal(first.usage.totalTokens, 10); assert.equal(second.usage.totalTokens, 5);
+});
+
+test("invalid output repair policy fails before model admission", async t => {
+  for (const policy of [null, { mode: "submit-only", maxRounds: 0 }, { mode: "disabled", maxRounds: 1 }, { mode: "retry-task" }]) {
+    const f = await fixture(t, []); f.request.config.outputRepair = policy as any;
+    await assert.rejects(executePiWorker(f.request, f.options), /Invalid frozen output repair policy/);
+    assert.equal(f.calls.length, 0);
+  }
+});
+
 test("typed output failure distinguishes read-only work from a writer that already changed an artifact", async t => {
   const readonly = await fixture(t,[()=>submit({answer:"invalid"})]);
   await assert.rejects(executePiWorker(readonly.request,readonly.options),(error:unknown)=>{

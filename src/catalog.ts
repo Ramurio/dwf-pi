@@ -5,6 +5,11 @@ const closed = { additionalProperties: false } as const;
 export const toolNames = ["read", "bash", "edit", "write", "grep", "find", "ls"] as const;
 export const roleNames = ["general", "researcher", "planner", "implementer", "reviewer", "verifier", "synthesizer", "arbiter", "orchestrator"] as const;
 export type RoleName = typeof roleNames[number];
+export const OutputRepairSchema = Type.Union([
+  Type.Object({ mode: Type.Literal("disabled") }, closed),
+  Type.Object({ mode: Type.Literal("submit-only"), maxRounds: Type.Optional(Type.Integer({ minimum: 1, maximum: Number.MAX_SAFE_INTEGER })) }, closed),
+]);
+export type OutputRepairPolicy = Static<typeof OutputRepairSchema>;
 export const AgentConfigSchema = Type.Object({
   model: Type.Optional(Type.Object({ provider: Type.String({ minLength: 1 }), id: Type.String({ minLength: 1 }) }, closed)),
   thinking: Type.Optional(Type.Enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"])),
@@ -14,6 +19,7 @@ export const AgentConfigSchema = Type.Object({
   session: Type.Optional(Type.Union([Type.Literal("fresh"), Type.Literal("continue-node")])),
   permission: Type.Optional(Type.Union([Type.Literal("read-only"), Type.Literal("workspace-write"), Type.Literal("unrestricted")])),
   outputSchema: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+  outputRepair: Type.Optional(OutputRepairSchema),
 }, closed);
 export type AgentConfig = Static<typeof AgentConfigSchema>;
 export interface RoleDefinition { readonly name: RoleName; readonly description: string; readonly defaults: AgentConfig }
@@ -43,7 +49,7 @@ const readTools: NonNullable<AgentConfig["tools"]> = ["read", "grep", "find", "l
 function role(name: RoleName, description: string, prompt: string, overrides: AgentConfig = {}): RoleDefinition {
   return { name, description, defaults: {
     thinking: "medium", systemPrompt: `${baseline}\n\n${prompt}`, tools: [...readTools], skills: [],
-    session: "fresh", permission: "read-only", ...overrides,
+    session: "fresh", permission: "read-only", outputRepair: { mode: "disabled" }, ...overrides,
   } };
 }
 export const roleCatalog: Readonly<Record<RoleName, RoleDefinition>> = deepFreeze({

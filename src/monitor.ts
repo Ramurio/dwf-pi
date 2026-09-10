@@ -1,4 +1,5 @@
 import { parseExecutionFailure } from "./execution-failure.js";
+import { parseOutputRepairProgress } from "./output-repair.js";
 import type { ActivationRecord, RunEvent, RunRecord } from "./run-store.js";
 import { activationUsage, summarizeUsage, tokenNumber, tokenSummary } from "./usage.js";
 import { renderRun, terminalText } from "./terminal.js";
@@ -106,6 +107,8 @@ export function monitorBody(run: RunRecord, records: readonly ActivationRecord[]
     const last = observed && observed.at >= a.startedAt ? observed : undefined;
     const detail = run.status === "paused" && structural.has(a.kind) ? "контейнер на паузе" : last ? `${last.label} · ${duration(now - last.at)} назад` : a.kind === "agent" ? "worker запущен; подробных событий пока нет" : structural.has(a.kind) ? "подготовка / завершение вложенных задач" : "команда выполняется";
     lines.push(`  ${config ? `${config.model.id} · ${config.thinking} · ` : ""}${detail}`);
+    const repair = parseOutputRepairProgress(a.metadata.outputRepair);
+    if (repair) lines.push(`  исправление формата · раунд ${repair.round} · ${repair.status} · только submit_result`);
   }
   lines.push("", "НЕДАВНО ЗАВЕРШЕНО");
   lines.push(...(completed.length ? completed.slice(0, 5).map(historyLine) : ["Пока ничего. Долгий первый ответ не означает повторный запуск."]));
@@ -162,10 +165,11 @@ export class MonitorLog {
     }
     const initialVisible = new Set([...records.filter(a => presentation.activeKeys.includes(a.key) || presentation.waitingKeys.includes(a.key)), ...records.filter(a => a.status !== "running" && significant(a)).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0)).slice(0, 5)].map(a => a.key));
     for (const a of records) {
-      const value = `${activationState(a)}/${a.attempt}`;
+      const repair = parseOutputRepairProgress(a.metadata.outputRepair);
+      const value = `${activationState(a)}/${a.attempt}/${repair?.round ?? 0}/${repair?.status ?? ""}`;
       if (significant(a) && (this.state || initialVisible.has(a.key)) && this.records.get(a.key) !== value) lines.push(activationState(a) === "waiting"
         ? `? ${activationPath(a)} — ${terminalText(String(a.metadata.waitReason), 500)} · ${terminalText(String(a.metadata.waitId))}`
-        : a.status === "running" ? `▶ ${activationPath(a)} — начат` : historyLine(a));
+        : a.status === "running" ? `▶ ${activationPath(a)} — ${repair ? `исправление формата · раунд ${repair.round} · ${repair.status} · только submit_result` : "начат"}` : historyLine(a));
       this.records.set(a.key, value);
     }
     this.state = state;

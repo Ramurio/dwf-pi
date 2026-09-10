@@ -12,7 +12,7 @@
 | Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Реализовано и проверено: await, run.waits/resolve, JSON-форма, idempotency, pause/resume, SIGKILL и worktree reattach; см. outcomes-and-waits.md |
 | Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Реализовано: controller.snapshot + projectRun, включая browser list и watch; проверка процессов отдельно от heartbeat, см. observation.md |
 | Usage | Учёт каждого ответа, cache/reasoning, попытки, dedup, отмена/ошибки, раскрытие сумм | Backend/API/UI реализованы; 65 targeted tests и браузерный fixture, см. usage.md. Общая приёмка с будущим recovery остаётся обязательной |
-| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts и typed failure code/phase/effects доступны в journal/API/UI; provider status, policies, output repair и reconciliation остаются, см. attempt-history.md и execution-failures.md |
+| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures и настраиваемый submit-only output repair доступны в journal/API/UI; provider status, retry/collect и reconciliation остаются, см. attempt-history.md, execution-failures.md и output-repair.md |
 | Артефакты | Snapshot/digest, версии критериев, применимость checks/reviews, diff | Не начато |
 | Интеграция | Отдельный integration workspace, проверки объединения, контроль target head | Не начато |
 | Authoring | Рецепты в обычный граф, агрегация коллекций, schemas и dataflow diagnostics | Не начато |
@@ -58,7 +58,7 @@ supervisor в worktree; повтор start; patch после prepare; конфл
   за 95,7 секунды; `/tmp/dynamicwf-usage-routes-full-20260910.log`.
   Нестабильность обычного параллельного прогона этим не считается исправленной.
 
-Следующий блок: типы ошибок и управляемое восстановление с сохранением попыток. Остальные строки
+Следующие части восстановления: точные provider statuses, policies retry/collect и reconciliation. Остальные строки
 сохраняют полный обязательный объём; завершённые изменения не означают завершение
 общего goal.
 
@@ -188,3 +188,38 @@ typecheck, browser syntax, strict checkJs paging module и skill validation пр
 Не завершены: точные provider statuses, явные policies retry/collect, output repair
 с закрытыми write tools и reconciliation. Никаких автоматических повторов этот
 этап не вводит; общий goal сохраняет полный обязательный объём.
+
+### Исправление формата в той же сессии
+
+`agent.config.outputRepair` явно включает дополнительные submit-only раунды после
+settlement исходной задачи. Все семь рабочих инструментов закрыты на уровне SDK
+registry; даже явный повторный вызов write/bash/edit в ответе не выполняется.
+Прежняя работа и transcript сохраняются. Схема не меняется, provider/setup ошибки
+и semantic revision mismatch не превращаются в форматирование. Каждый раунд — один
+assistant turn; maxRounds только явно заданный, без скрытого лимита по умолчанию.
+Pause дренирует уже работающего worker; cancel прерывает и завершает очистку.
+
+Прогресс с границами report IDs сохраняется вместе с metadata event и номером
+попытки. История попыток архивирует прогресс; новые attempts его не наследуют.
+Все known SDK reports учитываются один раз, включая отменённый раунд. В browser
+node/attempt inspector и terminal виден номер раунда. Потерянный progress settlement
+не выдаётся за активную работу или отсутствие уже сохранённых токенов.
+
+Новые frozen plans v4 содержат явную политику, default disabled. Golden v3 agent
+plan создан до смены compiler: исходные байты/hash проверены, программа исполняется
+через текущий runtime contract. Старые v1–v3 не включают repair задним числом.
+
+Обычный параллельный `npm test`: **282/282**, 68,0 секунды,
+`/tmp/dynamicwf-output-repair-full-20260910.log`. После уточнения проверки null policy
+и подписи незавершённого расхода: **68/68** targeted, 4,4 секунды,
+`/tmp/dynamicwf-output-repair-final-targeted.log`. Typecheck, browser syntax,
+skill validation и diff check прошли. Offline real SDK tests проверяют закрытие
+всех tools, действительный файл до ошибки, повторные malformed rounds, заданный
+предел, cancellation, provider failures, continuation и точные usage IDs.
+
+Native browser QA: успешный второй раунд в единственной попытке; прерванный первый
+раунд с неподтверждённым завершением; 150+30 сохранённых токенов в исходных отчётах.
+Сумма сохраняется при отсутствии последнего progress event; консоль без ошибок.
+Проверка использовала отдельный временный journal, без inference и без demo run.
+Подробный контракт и границы: output-repair.md. Retry/collect, provider status и
+reconciliation остаются обязательными; общий goal не завершён этим этапом.

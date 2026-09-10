@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import test, { type TestContext } from "node:test";
@@ -9,8 +9,22 @@ import { compileWorkflow } from "../src/compiler.js";
 import type { Expr, Graph, Json, WorkflowDefinition } from "../src/graph.js";
 import type { RuntimeContext, WorkflowRuntime } from "../src/runtime-contract.js";
 import { chooseEdge } from "../src/expressions.js";
+import { verifyExecutionPlan } from "../src/execution-plan.js";
+import { loadGeneratedModule } from "../src/generated-module.js";
 
 const literal = (value: Json): Expr => ({ op: "literal", value });
+test("golden v3 compiled agent plan still executes and routes on the current runtime contract", async t => {
+  const plan = verifyExecutionPlan(JSON.parse(await readFile(new URL("./fixtures/legacy-v3-plan.json", import.meta.url), "utf8")));
+  const directory = await mkdtemp(join(process.cwd(), ".compiler-test-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const module = await loadGeneratedModule(plan, directory);
+  let agentCalls = 0, routeCalls = 0;
+  const { runtime, steps } = recorder(() => { agentCalls++; return Effect.succeed({ result: "legacy" }); });
+  runtime.route = (context, edges, scope) => { routeCalls++; return Effect.try(() => chooseEdge(context.nodeId, edges, scope)); };
+  assert.deepEqual(await Effect.runPromise(module.run(runtime, null)), { result: "legacy" });
+  assert.equal(agentCalls, 1); assert.equal(routeCalls, 1);
+  assert.deepEqual(steps.map(step => step.nodeId), ["work", "done"]);
+});
 const ref = (...path: string[]): Expr => ({ op: "ref", path });
 const definition = (graphs: Record<string, Graph>, entryGraph = "main"): WorkflowDefinition => ({
   schemaVersion: 1, id: "compiler-test", name: "Compiler test", revision: 1, entryGraph, graphs,

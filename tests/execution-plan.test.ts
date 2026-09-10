@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, writeFile, chmod, rm, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, chmod, rm, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { prepareExecutionPlan, verifyExecutionPlan, type AvailableExecutionModel } from "../src/execution-plan.js";
@@ -28,6 +28,38 @@ function canonical(value: unknown): string {
   return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical((value as Record<string, unknown>)[key])}`).join(",")}}`;
 }
 function rehash<T extends { hash: string }>(value: T): T { const { hash: _, ...data } = value; value.hash = createHash("sha256").update(canonical(data)).digest("hex"); return value; }
+
+test("output repair is explicit, closed and frozen in v4; policy changes invalidate the plan hash", async () => {
+  const original = workflow({ outputRepair: { mode: "submit-only", maxRounds: 3 } });
+  const plan = await prepareExecutionPlan(original, options);
+  assert.equal(plan.runtimeVersion, "dynamicwf-runtime-v4");
+  assert.deepEqual(plan.agents.main!.work!.outputRepair, { mode: "submit-only", maxRounds: 3 });
+  assert.ok(Object.isFrozen(plan.agents.main!.work!.outputRepair));
+  const changed = structuredClone(plan); changed.agents.main!.work!.outputRepair = { mode: "disabled" };
+  assert.throws(() => verifyExecutionPlan(changed), /hash mismatch/);
+  delete changed.agents.main!.work!.outputRepair;
+  assert.throws(() => verifyExecutionPlan(rehash(changed)), /fields/);
+  const disabled = await prepareExecutionPlan(workflow(), options);
+  assert.deepEqual(disabled.agents.main!.work!.outputRepair, { mode: "disabled" });
+  const unbounded = await prepareExecutionPlan(workflow({ outputRepair: { mode: "submit-only" } }), options);
+  assert.deepEqual(unbounded.agents.main!.work!.outputRepair, { mode: "submit-only" });
+  for (const policy of [{ mode: "disabled", maxRounds: 1 }, { mode: "submit-only", maxRounds: 0 }, { mode: "submit-only", maxRounds: 1.5 }, { mode: "submit-only", tools: ["write"] }]) {
+    await assert.rejects(prepareExecutionPlan(workflow({ outputRepair: policy as any }), options));
+  }
+});
+
+test("golden v3 plan retains its exact source, hash and absent repair policy; old plans cannot opt in", async () => {
+  const saved = JSON.parse(await readFile(new URL("./fixtures/legacy-v3-plan.json", import.meta.url), "utf8"));
+  const plan = verifyExecutionPlan(saved);
+  assert.equal(plan.hash, "2d64083e65c7cf51a8a1330ad8dba584f65063b18e1665a5751431cea0acf8e0");
+  assert.equal(plan.source, saved.source); assert.equal(plan.agents.main!.work!.outputRepair, undefined);
+  const extra = structuredClone(plan); extra.agents.main!.work!.outputRepair = { mode: "submit-only" };
+  assert.throws(() => verifyExecutionPlan(rehash(extra)), /fields/);
+  const definition = structuredClone(plan);
+  const node = definition.workflow.graphs.main!.nodes[0]!;
+  assert.equal(node.kind, "agent"); if (node.kind === "agent") node.config = { outputRepair: { mode: "submit-only" } };
+  assert.throws(() => verifyExecutionPlan(rehash(definition)), /requires compiler v4/);
+});
 
 test("plan freezes concrete model, role defaults, schema and generated code independently of caller", async () => {
   const original = workflow();

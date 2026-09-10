@@ -1,4 +1,5 @@
 import { parseExecutionFailure } from "../execution-failure.js";
+import { parseOutputRepairProgress } from "../output-repair.js";
 import type { ActivationRecord, RunRecord, WaitRecord, RunStore } from "../run-store.js";
 import { activationUsage, summarizeUsage } from "../usage.js";
 import { activationPath, type WorkerActivity } from "../monitor.js";
@@ -85,6 +86,7 @@ export function graphSnapshot(
                 : null,
             error: a.error ?? null,
             failure: parseExecutionFailure(a.metadata.failure) ?? null,
+            outputRepair: parseOutputRepairProgress(a.metadata.outputRepair),
             result: resultSummary(a),
             findings: findings(a),
           })),

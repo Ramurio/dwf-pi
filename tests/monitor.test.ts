@@ -18,6 +18,17 @@ const base = ["graph", "main"];
 const child = [...base, "node", "candidate", "visit", "0", "worktree", "graph", "child"];
 const reviewer = (branch: string, visit = 0) => activation("review", "agent", [...child, "node", "council", "visit", "1", "parallel", branch, "graph", "child"], visit);
 
+test("repair progress is visible without new activation attempts and clock polling does not duplicate it", () => {
+  const record = reviewer("format"), current = run(), log = new MonitorLog();
+  record.metadata.outputRepair = { round: 1, status: "running", cause: "schema", afterReport: 2, throughReport: 2 };
+  assert.match(monitorBody(current, [record]).join("\n"), /исправление формата · раунд 1/);
+  assert.match(log.update(current, [record]).join("\n"), /только submit_result/);
+  assert.deepEqual(log.update(current, [record]), []);
+  record.metadata.outputRepair = { round: 2, status: "running", cause: "missing", afterReport: 3, throughReport: 3 };
+  assert.match(log.update(current, [record]).join("\n"), /раунд 2/);
+  assert.equal(record.attempt, 1);
+});
+
 test("active tasks omit waiting containers, retain separate council branches and numbered passes", () => {
   const records = [activation("candidate", "worktree", base), activation("council", "parallel", child, 1), reviewer("correctness"), reviewer("tests"), reviewer("docs", 1)];
   assert.equal(activeWork(records).length, 3);

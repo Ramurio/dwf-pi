@@ -256,7 +256,7 @@ export class RunStore {
       if (run.desired !== "running" || !["running", "waiting"].includes(run.status)) return false;
       const metadata = { ...record.metadata, workspacePhase: "committing" };
       this.database.prepare("UPDATE workflow_activations SET metadata=? WHERE run_id=? AND activation_key=?").run(JSON.stringify(metadata), id, key);
-      this.event(id, "activation.metadata", { key, metadata: JSON.parse(JSON.stringify(metadata)) as Json });
+      this.event(id, "activation.metadata", { key, attempt: record.attempt, metadata: JSON.parse(JSON.stringify(metadata)) as Json });
       return true;
     });
   }
@@ -335,7 +335,7 @@ export class RunStore {
       // Preserve the complete prior checkpoint atomically before replacing the current attempt.
       if (old) this.database.prepare("INSERT INTO workflow_activation_history(run_id,activation_key,attempt,record) VALUES(?,?,?,?)")
         .run(id, key, old.attempt, JSON.stringify(old));
-      const { failure: _previousFailure, ...metadata } = old?.metadata ?? {};
+      const { failure: _previousFailure, outputRepair: _previousRepair, ...metadata } = old?.metadata ?? {};
       const now = Date.now();
       if (run.status === "waiting") {
         this.database.prepare("UPDATE workflow_runs SET status='running',updated_at=? WHERE id=?").run(now, id);
@@ -479,7 +479,7 @@ export class RunStore {
       json_extract(a.context,'$.scope') AS scope,json_extract(t.decision,'$.edgeIndex') AS edge_index,
       COUNT(*) AS count,MAX(t.seq) AS last_seq FROM workflow_transitions t JOIN workflow_activations a
       ON a.run_id=t.run_id AND a.activation_key=t.activation_key WHERE t.run_id=? GROUP BY graph_id,scope,edge_index`).all(id);
-    return { supported: run.plan.compilerVersion === "dynamicwf-effect-v3", count: rows.reduce((n, r) => n + Number(r.count), 0),
+    return { supported: ["dynamicwf-effect-v3", "dynamicwf-effect-v4"].includes(run.plan.compilerVersion), count: rows.reduce((n, r) => n + Number(r.count), 0),
       failed: rows.filter(r => r.edge_index === null).reduce((n, r) => n + Number(r.count), 0),
       lastSeq: rows.reduce((n, r) => Math.max(n, Number(r.last_seq)), 0),
       edges: rows.filter(r => r.edge_index !== null).map(r => ({ graphId: String(r.graph_id), scope: String(r.scope), edgeIndex: Number(r.edge_index), count: Number(r.count) })) };
@@ -516,7 +516,7 @@ export class RunStore {
     this.transaction(() => {
       const record = this.runningActivation(id, token, key);
       this.database.prepare("UPDATE workflow_activations SET metadata=? WHERE run_id=? AND activation_key=?").run(JSON.stringify({ ...record.metadata, ...metadata }), id, key);
-      this.event(id, "activation.metadata", { key, metadata: JSON.parse(JSON.stringify(metadata)) as Json });
+      this.event(id, "activation.metadata", { key, attempt: record.attempt, metadata: JSON.parse(JSON.stringify(metadata)) as Json });
     });
   }
   appendEvent(id: string, token: string, type: string, payload: Json): void {

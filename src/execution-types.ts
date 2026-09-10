@@ -4,7 +4,7 @@ import type { AgentConfig } from "./catalog.js";
 import type { Json, WorkflowDefinition } from "./graph.js";
 import type { TokenUsage } from "./usage.js";
 
-export const runtimeVersion = "dynamicwf-runtime-v3";
+export const runtimeVersion = "dynamicwf-runtime-v4";
 export interface SkillFileSnapshot { path: string; base64: string; executable: boolean }
 export interface SkillSnapshot { name: string; hash: string; files: SkillFileSnapshot[] }
 export interface FrozenAgent {
@@ -16,10 +16,12 @@ export interface FrozenAgent {
   session: "fresh" | "continue-node";
   permission: "read-only" | "workspace-write" | "unrestricted";
   outputSchema: Record<string, unknown>;
+  /** Required in v4 plans; absent in v1–v3 means disabled. */
+  outputRepair?: NonNullable<AgentConfig["outputRepair"]>;
 }
 export interface ExecutionPlan {
   version: 1;
-  runtimeVersion: "dynamicwf-runtime-v1" | "dynamicwf-runtime-v2" | typeof runtimeVersion;
+  runtimeVersion: "dynamicwf-runtime-v1" | "dynamicwf-runtime-v2" | "dynamicwf-runtime-v3" | typeof runtimeVersion;
   compilerVersion: string;
   workflow: WorkflowDefinition;
   source: string;

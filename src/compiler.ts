@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { parseWorkflow, type Graph, type Node, type WorkflowDefinition } from "./graph.js";
 
-export const compilerVersion = "dynamicwf-effect-v3";
-export type CompilerVersion = "dynamicwf-effect-v1" | "dynamicwf-effect-v2" | typeof compilerVersion;
+export const compilerVersion = "dynamicwf-effect-v4";
+export type CompilerVersion = "dynamicwf-effect-v1" | "dynamicwf-effect-v2" | "dynamicwf-effect-v3" | typeof compilerVersion;
 export interface CompiledWorkflow {
   readonly source: string;
   /** SHA-256 of generated UTF-8 source, including compiler version. */
@@ -23,7 +23,8 @@ function quote(value: string): string { return JSON.stringify(value); }
 /** Compile validated graph structure into TypeScript + Effect control flow, without evaluating author text. */
 export function compileWorkflow(value: unknown, version: CompilerVersion = compilerVersion): CompiledWorkflow {
   const workflow = parseWorkflow(value);
-  if (!["dynamicwf-effect-v1", "dynamicwf-effect-v2", compilerVersion].includes(version)) throw new Error("Unsupported compiler version");
+  if (!["dynamicwf-effect-v1", "dynamicwf-effect-v2", "dynamicwf-effect-v3", compilerVersion].includes(version)) throw new Error("Unsupported compiler version");
+  if (version !== compilerVersion && Object.values(workflow.graphs).some(g => g.nodes.some(n => n.kind === "agent" && n.config?.outputRepair !== undefined))) throw new Error("outputRepair requires compiler v4");
   if (version === "dynamicwf-effect-v1" && Object.values(workflow.graphs).some(g => g.nodes.some(n => n.kind === "finish" || n.kind === "await"))) throw new Error("finish/await require compiler v2");
   const graphIds = Object.keys(workflow.graphs).sort();
   const names = new Map(graphIds.map((id, index) => [id, `graph_${index}`]));
@@ -116,7 +117,7 @@ ${node.children.map((child, index) => `              () => Effect.gen(function* 
             ${work}
           }));
           nodes[node.id] = result;
-          ${node.kind === "end" || node.kind === "finish" ? "return result;" : version === "dynamicwf-effect-v3"
+          ${node.kind === "end" || node.kind === "finish" ? "return result;" : version === "dynamicwf-effect-v3" || version === "dynamicwf-effect-v4"
             ? 'pc = yield* runtime.route(context, edges, { input, nodes });\n          break;'
             : 'pc = yield* attempt(() => chooseEdge(node.id, edges, { input, nodes }));\n          break;'}
         }`;

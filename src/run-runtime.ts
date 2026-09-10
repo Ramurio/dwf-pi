@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Cause, Effect, Exit, Option } from "effect";
 import { executionFailure, failureRecord } from "./execution-failure.js";
+import { parseOutputRepairProgress } from "./output-repair.js";
 import type { ExecutionPlan, FrozenAgent, PiWorkerRequest } from "./execution-types.js";
 import type { Json, Node } from "./graph.js";
 import { assertJson, createOutputValidator } from "./output-schema.js";
@@ -166,6 +167,11 @@ export class JournalRuntime implements WorkflowRuntime {
             } else if (event.type === "usage.settled") {
               if (typeof event.complete !== "boolean") throw new Error("Invalid worker accounting completion");
               this.store.settleUsage(this.run.id, this.token, key, event.complete);
+            } else if (event.type === "output.repair") {
+              const progress = parseOutputRepairProgress(event.progress);
+              if (!progress) throw new Error("Invalid worker output repair progress");
+              // Metadata and its journal event commit together when progress arrives.
+              this.store.setActivationMetadata(this.run.id, this.token, key, { outputRepair: progress });
             } else if (event.type === "session.started" && typeof event.sessionFile === "string") {
               this.store.setActivationMetadata(this.run.id, this.token, key, { sessionFile: event.sessionFile });
             } else this.store.appendEvent(this.run.id, this.token, "worker.event", { key, event: JSON.parse(JSON.stringify(event)) as Json });

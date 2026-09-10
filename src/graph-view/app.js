@@ -469,6 +469,7 @@ function renderInspector() {
         ),
       );
     if (a.result) row.append(el("p", "", a.result));
+    if (a.outputRepair) row.append(outputRepairView(a.outputRepair, a.status));
     if (a.failure) row.append(failureView(a.failure));
     else if (a.error) row.append(el("p", "", a.error));
     if (a.findings.length) {
@@ -491,6 +492,14 @@ function failureView(failure, runScope = false) {
   panel.append(el("strong","",`${labels[failure.code] ?? labels.unknown} · ${phases[failure.phase] ?? "этап неизвестен"}`),el("p","",failure.message),el("p","muted",runScope ? "Это причина остановки. Состояние действий показано в деталях отдельных узлов." : effects[failure.effects] ?? effects.unknown));
   return panel;
 }
+function outputRepairView(progress, status) {
+  const labels = { running: status === "running" ? "выполняется" : "завершение не подтверждено", succeeded: "формат принят", invalid: "результат не прошёл проверку", failed: "прерван ошибкой или отменой" };
+  const panel = el("div", "notice");
+  panel.append(el("strong", "", `Исправление формата · раунд ${progress.round}: ${labels[progress.status] ?? progress.status}`));
+  panel.append(el("p", "muted", "Та же сессия; в раунде доступен только submit_result. Принятый формат не подтверждает качество результата."));
+  panel.append(el("p", "muted", progress.status === "running" ? "Итоговые границы расхода раунда не подтверждены. Уже полученные отчёты включены в сумму узла." : progress.throughReport > progress.afterReport ? `Отчёты SDK этого раунда: ${progress.afterReport + 1}–${progress.throughReport}. Расход включён в сумму узла.` : "В завершённых отчётах SDK этого раунда расход не зафиксирован."));
+  return panel;
+}
 function renderAttempts(container, activation) {
   const id=state.id, identity=JSON.stringify([id,activation.key]), page=attemptPages.get(identity);
   const load=button(page.loading ? "Загружаем попытки…" : !page.opened ? `Попытки: ${activation.attempt}` : page.hasMore ? "Ещё попытки" : "Обновить попытки", async()=>{
@@ -508,6 +517,7 @@ function renderAttempts(container, activation) {
     card.append(el("strong","",`Попытка ${record.attempt}${record.attempt===snapshot.current.attempt ? " · последняя" : ""}`),badge(record.status));
     card.append(el("p","muted",`${date(record.startedAt)} · ${record.finishedAt===null ? "не завершена на момент запроса" : duration(record.finishedAt-record.startedAt)}`));
     if(record.kind==="agent")card.append(el("p","",record.accounting.usage ? `${number(record.accounting.usage.totalTokens)} ток. · ответов ${record.accounting.responses}${record.accounting.complete ? "" : " · частично"}` : "Расход этой попытки неизвестен: нет отчётов SDK."));
+    if(record.metadata.outputRepair)card.append(outputRepairView(record.metadata.outputRepair,record.status));
     if(record.metadata.failure)card.append(failureView(record.metadata.failure));
     else if(record.error)card.append(el("pre","",record.error));
     if(Object.hasOwn(record,"output"))card.append(el("pre","",JSON.stringify(record.output,null,2)));
@@ -737,6 +747,7 @@ function taskRow(a) {
     el("div", "muted", a.path),
   );
   if (a.result) body.append(el("div", "muted result-preview", a.result));
+  if (a.outputRepair?.status === "running" && a.status === "running") body.append(el("div", "notice", `Исправление формата · раунд ${a.outputRepair.round} · только submit_result`));
   if (a.error) body.append(el("div", "muted", a.error));
   const right = el(
     "div",

@@ -49,6 +49,7 @@ export async function prepareExecutionPlan(workflow: unknown, options: PrepareEx
         model: { provider: model.provider, id: model.id }, thinking,
         systemPrompt: config.systemPrompt!, tools: [...config.tools!], skills,
         session: config.session!, permission: config.permission!, outputSchema,
+        outputRepair: structuredClone(config.outputRepair!),
       };
     }
   }
@@ -70,6 +71,7 @@ export function verifyExecutionPlan(value: unknown): ExecutionPlan {
   const plan = object(value, "execution plan");
   keys(plan, ["version", "runtimeVersion", "compilerVersion", "workflow", "source", "sourceHash", "agents", "hash"], "execution plan");
   const compatible = plan.runtimeVersion === runtimeVersion && plan.compilerVersion === compilerVersion ||
+    plan.runtimeVersion === "dynamicwf-runtime-v3" && plan.compilerVersion === "dynamicwf-effect-v3" ||
     plan.runtimeVersion === "dynamicwf-runtime-v2" && plan.compilerVersion === "dynamicwf-effect-v2" ||
     plan.runtimeVersion === "dynamicwf-runtime-v1" && plan.compilerVersion === "dynamicwf-effect-v1";
   if (plan.version !== 1 || !compatible) throw new Error("Unsupported execution plan/compiler/runtime version");
@@ -80,7 +82,7 @@ export function verifyExecutionPlan(value: unknown): ExecutionPlan {
   for (const [graphId, graph] of Object.entries(compiled.workflow.graphs)) {
     const configs = object(agents[graphId], `agents.${graphId}`);
     keys(configs, graph.nodes.filter((node) => node.kind === "agent").map((node) => node.id), `agents.${graphId}`);
-    for (const [nodeId, value] of Object.entries(configs)) verifyAgent(value, `${graphId}/${nodeId}`);
+    for (const [nodeId, value] of Object.entries(configs)) verifyAgent(value, `${graphId}/${nodeId}`, plan.runtimeVersion === runtimeVersion);
   }
   assertParallelWriterIsolation(compiled.workflow, agents as ExecutionPlan["agents"]);
   const { hash, ...data } = plan;
@@ -88,9 +90,9 @@ export function verifyExecutionPlan(value: unknown): ExecutionPlan {
   return freeze(structuredClone(plan)) as unknown as ExecutionPlan;
 }
 
-function verifyAgent(value: unknown, location: string): void {
+function verifyAgent(value: unknown, location: string, supportsRepair: boolean): void {
   const agent = object(value, location);
-  keys(agent, ["model", "thinking", "systemPrompt", "tools", "skills", "session", "permission", "outputSchema"], location);
+  keys(agent, ["model", "thinking", "systemPrompt", "tools", "skills", "session", "permission", "outputSchema", ...(supportsRepair ? ["outputRepair"] : [])], location);
   if (!Array.isArray(agent.skills)) throw new Error(`${location}: skills must be an array`);
   // Reuse config validation with all frozen values supplied; role defaults cannot alter the snapshot.
   const { skills, ...config } = agent;
