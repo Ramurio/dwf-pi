@@ -12,6 +12,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { RoutingDecision } from "./expressions.js";
 import { validateCollectedResult, type CollectedResult, type CollectionRecord } from "./collection.js";
 import { parseRetryProgress, permitsRetry, retryDelay, retryProgress, retryRemaining, RetryNotReady, type RetryRecord } from "./retry-policy.js";
+import { parseOperation } from "./operation-record.js";
 
 export type RunStatus = "queued" | "running" | "waiting" | "pausing" | "paused" | "cancelling" | "cancelled" | "succeeded" | "failed" | "interrupted";
 export type DesiredRunStatus = "running" | "paused" | "cancelled";
@@ -365,7 +366,9 @@ export class RunStore {
       // Preserve the complete prior checkpoint atomically before replacing the current attempt.
       if (old) this.database.prepare("INSERT INTO workflow_activation_history(run_id,activation_key,attempt,record) VALUES(?,?,?,?)")
         .run(id, key, old.attempt, JSON.stringify(allowed ? {...old,metadata:{...old.metadata,retry:retryProgress(decision!,"admitted")}} : old));
-      const { failure: _previousFailure, failureCauses: _previousCauses, outputRepair: _previousRepair, retry: _previousRetry, ...metadata } = old?.metadata ?? {};
+      const { failure: _previousFailure, failureCauses: _previousCauses, outputRepair: _previousRepair, retry: _previousRetry,
+        operation: _operation, sessionFile: _session, workerPid: _pid, workerToken: _worker, workerKind: _workerKind,
+        cwd: _cwd, model: _model, thinking: _thinking, ...metadata } = old?.metadata ?? {};
       const now = Date.now();
       if (run.status === "waiting") {
         this.database.prepare("UPDATE workflow_runs SET status='running',updated_at=? WHERE id=?").run(now, id);
@@ -594,6 +597,10 @@ export class RunStore {
   setActivationMetadata(id: string, token: string, key: string, metadata: ActivationMetadata): void {
     this.transaction(() => {
       const record = this.runningActivation(id, token, key);
+      if(Object.hasOwn(metadata,"operation")){
+        const operation=parseOperation(metadata.operation);
+        if(!operation || operation.kind!==record.kind)throw new Error("Invalid operation observation for activation");
+      }
       this.database.prepare("UPDATE workflow_activations SET metadata=? WHERE run_id=? AND activation_key=?").run(JSON.stringify({ ...record.metadata, ...metadata }), id, key);
       this.event(id, "activation.metadata", { key, attempt: record.attempt, metadata: JSON.parse(JSON.stringify(metadata)) as Json });
     });

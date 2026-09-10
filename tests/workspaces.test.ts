@@ -15,6 +15,7 @@ import { prepareExecutionPlan, verifyExecutionPlan } from "../src/execution-plan
 import { RunController } from "../src/run-controller.js";
 import type { RunRecord } from "../src/run-store.js";
 import type { Expr, Graph, Node, WorkflowDefinition } from "../src/graph.js";
+import { parseOperation, type IntegrationProgress } from "../src/operation-record.js";
 
 const literal = (value: any): Expr => ({ op: "literal", value });
 const ref = (...path: string[]): Expr => ({ op: "ref", path });
@@ -107,6 +108,17 @@ test("reattach preserves dirty files but refuses different owners, paths, reposi
   } finally { await rm(f.directory, { recursive: true, force: true }); await rm(other.directory, { recursive: true, force: true }); }
 });
 
+test("failed pre-merge observation prevents Git mutation of the integration target",async()=>{
+  const f=await fixture();
+  try{const manager=new GitWorkspaces('run-intent',join(f.directory,'run')),allocation=await manager.allocate(f.repo,'source',undefined);
+    await writeFile(join(allocation.path,'feature.txt'),'candidate');const source=await manager.commit(allocation);
+    const observed:IntegrationProgress[]=[];
+    await assert.rejects(manager.integrate(f.repo,[source] as any,[source],{},progress=>{observed.push(progress);if(progress.phase==='merging')throw Error('Journal rejected intent');}),/Journal rejected intent/);
+    assert.deepEqual(observed.map(record=>record.phase),['ready','merging']);assert.equal(observed[1]!.current?.before,f.base);
+    assert.equal(git(f.repo,'rev-parse','HEAD'),f.base);await assert.rejects(readFile(join(f.repo,'feature.txt')),/ENOENT/);assert.equal(git(f.repo,'status','--porcelain'),'');
+  }finally{await rm(f.directory,{recursive:true,force:true});}
+});
+
 test("real parallel child graphs edit separate worktrees and explicit integration merges both", async () => {
   const f = await fixture();
   const controller = new RunController(join(f.directory, "state.sqlite"));
@@ -137,8 +149,14 @@ test("real parallel child graphs edit separate worktrees and explicit integratio
       assert.equal(git(records[index]!.path, "rev-parse", "HEAD"), records[index]!.head);
       assert.equal(records[index]!.base, f.base);
       assert.equal(activation.sideEffect, true);
+      const operation=parseOperation(activation.metadata.operation);assert.equal(operation?.kind,"worktree");
+      if(operation?.kind==="worktree"){assert.equal(operation.source,f.repo);assert.deepEqual(operation.childResult,(activation.output as any).result);}
     }
     assert.equal((finished.output as any).workspace.head, git(f.repo, "rev-parse", "HEAD"));
+    const integrated=controller.store.listActivations(id).find(a=>a.kind==="integrate")!,operation=parseOperation(integrated.metadata.operation);
+    assert.equal(operation?.kind,"integrate");if(operation?.kind==="integrate"){assert.equal(operation.target,f.repo);assert.equal(operation.progress?.originalHead,f.base);assert.equal(operation.progress?.phase,"complete");assert.equal(operation.progress?.head,(finished.output as any).workspace.head);assert.deepEqual(operation.progress?.merged,(finished.output as any).merged);}
+    const progress=controller.store.events(id).filter(e=>e.type==="activation.metadata"&&(e.payload as any).key===integrated.key).map(e=>(e.payload as any).metadata.operation?.progress).filter(Boolean);
+    assert.deepEqual(progress.map(p=>p.phase),["ready","merging","between","merging","between","complete"]);
     assert.equal((finished.output as any).merged.length, 2);
     assert.equal(controller.store.listActivations(id).find(item => item.kind === "integrate")!.sideEffect, true);
   } finally { await cleanup(controller, id); await rm(f.directory, { recursive: true, force: true }); }
@@ -153,7 +171,9 @@ test("conflicting integration aborts only its merge and preserves earlier commit
     await writeFile(join(left.path, "base.txt"), "left\n");
     await writeFile(join(right.path, "base.txt"), "right\n");
     const a = await manager.commit(left), b = await manager.commit(right);
-    await assert.rejects(manager.integrate(f.repo, [a, b] as any, [a, b]), /Integration failed/);
+    const progress:IntegrationProgress[]=[];
+    await assert.rejects(manager.integrate(f.repo, [a, b] as any, [a, b],{},record=>progress.push(record)), /Integration failed/);
+    assert.equal(progress.at(-1)?.phase,"merging");assert.equal(progress.at(-1)?.current?.sourceHead,b.head);assert.deepEqual(progress.at(-1)?.merged,[a.head]);assert.equal(progress[0]?.originalHead,f.base);
     assert.equal(await readFile(join(f.repo, "base.txt"), "utf8"), "left\n");
     assert.equal(git(f.repo, "status", "--porcelain"), "");
     assert.throws(() => git(f.repo, "rev-parse", "--verify", "MERGE_HEAD"));

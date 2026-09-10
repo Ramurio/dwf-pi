@@ -12,7 +12,7 @@
 | Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Реализовано и проверено: await, run.waits/resolve, JSON-форма, idempotency, pause/resume, SIGKILL и worktree reattach; см. outcomes-and-waits.md |
 | Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Реализовано: controller.snapshot + projectRun, включая browser list и watch; проверка процессов отдельно от heartbeat, см. observation.md |
 | Usage | Учёт каждого ответа, cache/reasoning, попытки, dedup, отмена/ошибки, раскрытие сумм | Backend/API/UI реализованы; 65 targeted tests и браузерный fixture, см. usage.md. Общая приёмка с будущим recovery остаётся обязательной |
-| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, output repair, collect, safe retry, HTTP observations и provider retry policy реализованы; reconciliation остаётся, см. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md, retry-policy.md и provider-responses.md |
+| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, output repair, collect, safe retry, HTTP observations и provider retry policy реализованы; для reconciliation добавлена запись операций, протокол решений остаётся в работе. См. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md, retry-policy.md, provider-responses.md и reconciliation.md |
 | Артефакты | Snapshot/digest, версии критериев, применимость checks/reviews, diff | Не начато |
 | Интеграция | Отдельный integration workspace, проверки объединения, контроль target head | Не начато |
 | Authoring | Рецепты в обычный граф, агрегация коллекций, schemas и dataflow diagnostics | Не начато |
@@ -367,3 +367,30 @@ Native UI QA использует настоящий detached supervisor со sc
 проверяются отдельно в тестах. Консоль без ошибок, оба стенда и вкладки очищены.
 Контракт: retry-policy.md. Reconciliation и остальные строки остаются обязательными;
 общий goal не завершён.
+
+### Запись операций перед внешними действиями
+
+Agent/check сохраняют фактический запрос до запуска worker. Worktree сохраняет
+source/child scope и результат детей до допуска commit. Integrate записывает target,
+sources, исходный HEAD, уже слитые source HEAD и намерение следующего merge; после
+слияний — наблюдаемый итоговый HEAD. Ошибка записи намерения предотвращает следующее
+внешнее действие. Промежуток между действием и его checkpoint остаётся неопределённым.
+
+Закрытая JSON-схема проверяет вид записи относительно activation. Новая попытка
+архивирует и очищает старую operation/session/worker/model provenance. Параметры
+доступны через inspect/attempts и отдельное раскрытие браузера; обычный graph snapshot
+не включает task/input и каталоги сессии/ресурсов. Старым запускам данные не выдумываются.
+
+Проверены сохранение до настоящей команды/worker IPC, отказ журнала до записи файла
+и merge, порядок нескольких слияний, частичный merge при конфликте, архивирование и
+публичная проекция. Полный параллельный набор: **319/319**, 73,0 секунды,
+`/tmp/dynamicwf-operation-full-20260910.log`. Typecheck и browser syntax прошли.
+Native browser QA: реальный detached supervisor, scripted IPC 429→pause→401;
+обе попытки показывают свои каталоги ресурсов, task/input раскрываются отдельно,
+консоль без ошибок. Модели не вызывались, стенд и вкладка очищены.
+
+Контракт и полный список оставшихся сценариев: reconciliation.md. Команд принятия
+проверенного результата или разрешения повторной записи пока нет. Следующий этап
+должен учитывать запуск процесса до записи PID, оставшиеся process groups,
+проверку актуальности Git/checkpoint и неизменяемую историю решений. Этот этап
+не завершает reconciliation или общий goal.

@@ -576,9 +576,25 @@ function renderAttempts(container, activation) {
     else if(record.metadata.failure)card.append(failureView(record.metadata.failure));
     else if(record.error)card.append(el("pre","",record.error));
     if(Object.hasOwn(record,"output"))card.append(el("pre","",JSON.stringify(record.output,null,2)));
+    if(record.metadata.operation)card.append(operationView(record.metadata.operation));
     if(Object.keys(record.metadata).length){const details=el("details");details.append(el("summary","","Данные попытки"),el("pre","",JSON.stringify(record.metadata,null,2)));card.append(details);}
     container.append(card);
   }
+}
+function operationView(operation) {
+  const details=el("details");details.append(el("summary","","Операция этой попытки"),el("p","muted","Записанные параметры и этапы операции. Они не подтверждают завершение внешних действий."));
+  const field=(label,value)=>{if(value!==undefined)details.append(el("strong","",label),el("pre","",typeof value==="string"?value:JSON.stringify(value,null,2)));};
+  field("Рабочая папка",operation.cwd??operation.source??operation.target);
+  if(operation.kind==="agent") {
+    field("Каталог сессий из запроса",operation.sessionDirectory);field("Каталог ресурсов из запроса",operation.resourceDirectory);field("Продолжение сессии",operation.continuedSessionFile);
+    const input=el("details");input.append(el("summary","","Задание и вход агента"),el("pre","",operation.task),el("pre","",JSON.stringify(operation.input,null,2)));details.append(input);
+  } else if(operation.kind==="check") {field("Команда",operation.command);field("Аргументы",operation.args);}
+  else if(operation.kind==="worktree") {field("Базовая ревизия из запроса",operation.base);field("Дочерняя область",operation.childScope);if(Object.hasOwn(operation,"childResult"))field("Результат детей перед commit",operation.childResult);}
+  else if(operation.kind==="integrate") {
+    field("Источники интеграции",operation.sources);
+    if(operation.progress){const progress=operation.progress;field("Последний записанный этап",{ready:"До начала слияний",merging:"Перед запуском merge",between:"После одного из слияний",complete:"После всех слияний"}[progress.phase]??progress.phase);field("Целевая ветка",progress.branch);field("Исходный HEAD",progress.originalHead);field("Записанные завершённые слияния",progress.merged);field("Допущенный merge",progress.current);field("Прочитанный итоговый HEAD",progress.head);}
+  }
+  return details;
 }
 function svgEl(tag, attrs = {}, text) {
   const node = document.createElementNS(svgNS, tag);

@@ -53,6 +53,13 @@ recorded local workspace/session paths, errors and outputs. Browser **Данны
 shows these on demand; it does not read session files or expose raw prompts through
 the graph snapshot. The read-only browser endpoint uses the same public projection.
 
+For new executions, **Операция этой попытки** expands the recorded operation intent
+and progress; agent task/input has a further disclosure. The current attempt does
+not inherit an old operation, session file, worker identity or model observation
+when it begins. Their prior values remain in the archive. Workspace, wait and
+usage checkpoints retain their replay semantics. See [reconciliation.md](reconciliation.md)
+for the captured fields and the distinction between observations and completed effects.
+
 ## Browser behavior and validation
 
 Select a node and open **Попытки** beneath its activation. Archived and latest

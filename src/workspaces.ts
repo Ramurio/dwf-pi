@@ -6,6 +6,7 @@ import type { ExecutionPlan } from "./execution-types.js";
 import type { Json, WorkflowDefinition } from "./graph.js";
 import { assertJson } from "./output-schema.js";
 import { runCheckProcess, type ProcessOptions } from "./process-client.js";
+import type { IntegrationProgress } from "./operation-record.js";
 
 export interface WorkspaceAllocation { path: string; branch: string; base: string }
 export interface WorkspaceRecord extends WorkspaceAllocation { head: string }
@@ -61,7 +62,7 @@ export class GitWorkspaces {
     if (await this.commonDirectory(allocation.path, options) !== await this.commonDirectory(source, options)) throw new Error("Persisted workspace belongs to a different repository");
     return allocation;
   }
-  async integrate(target: string, sources: Json, owned: readonly WorkspaceRecord[], options: GitOperationOptions = {}): Promise<Json> {
+  async integrate(target: string, sources: Json, owned: readonly WorkspaceRecord[], options: GitOperationOptions = {}, onProgress?: (progress: IntegrationProgress) => void): Promise<Json> {
     const cwd = await realpath(target);
     const records = parseWorkspaceSources(sources);
     if (!records.length) throw new Error("Integration requires at least one workspace source");
@@ -76,6 +77,7 @@ export class GitWorkspaces {
       const originalHead = await this.head(cwd, "HEAD", options);
       const common = await this.commonDirectory(cwd, options);
       const merged: string[] = [];
+      onProgress?.({phase:"ready",branch,originalHead,merged:[]});
       for (const source of records) {
         await this.assertAllocation(source, options);
         await this.clean(source.path, options);
@@ -85,6 +87,7 @@ export class GitWorkspaces {
         if (await this.branch(cwd, options) !== branch) throw new Error("Integration target branch changed during operation");
         const before = await this.head(cwd, "HEAD", options);
         await this.assertNoIgnoredCollision(cwd, source.head, options);
+        onProgress?.({phase:"merging",branch,originalHead,merged:[...merged],current:{sourceHead:source.head,before}});
         try {
           await this.git(cwd, ["merge", "--no-edit", "--no-ff", "--no-stat", "--no-verify", "--no-gpg-sign", "--no-overwrite-ignore", "--", source.head], options);
         } catch (error) {
@@ -104,8 +107,11 @@ export class GitWorkspaces {
         }
         await this.clean(cwd, options);
         merged.push(source.head);
+        onProgress?.({phase:"between",branch,originalHead,merged:[...merged]});
       }
-      return { workspace: { path: cwd, branch, base: originalHead, head: await this.head(cwd, "HEAD", options) }, merged };
+      const head=await this.head(cwd,"HEAD",options);
+      onProgress?.({phase:"complete",branch,originalHead,merged:[...merged],head});
+      return { workspace: { path: cwd, branch, base: originalHead, head }, merged };
     });
   }
   private async assertAllocation(allocation: WorkspaceAllocation, options: GitOperationOptions): Promise<void> {

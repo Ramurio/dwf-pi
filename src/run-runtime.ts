@@ -4,6 +4,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { Cause, Effect, Exit, Option } from "effect";
 import { executionFailure, failureRecord } from "./execution-failure.js";
 import { parseOutputRepairProgress } from "./output-repair.js";
+import type { OperationRecord } from "./operation-record.js";
 import { retryProgress, retryRemaining, RetryNotReady, permitsRetry } from "./retry-policy.js";
 import type { ExecutionPlan, FrozenAgent, PiWorkerRequest } from "./execution-types.js";
 import type { Json, Node } from "./graph.js";
@@ -200,6 +201,7 @@ export class JournalRuntime implements WorkflowRuntime {
         resourceDirectory: join(this.directory, "resources", workerToken),
         ...(previous ? { sessionFile: previous } : {}),
       };
+      this.store.setActivationMetadata(this.run.id,this.token,key,{operation:{kind:"agent",cwd:request.cwd,task,input,sessionDirectory:request.sessionDirectory,resourceDirectory:request.resourceDirectory,...(request.sessionFile?{continuedSessionFile:request.sessionFile}:{})}});
       this.store.startUsage(this.run.id, this.token, key);
       this.checkReviewInput(node, config, input);
       try {
@@ -240,6 +242,7 @@ export class JournalRuntime implements WorkflowRuntime {
       const key = activationKey(context);
       const workerToken = randomUUID();
       const cwd = node.cwd ? resolve(this.workspaceCwd(context), node.cwd) : this.workspaceCwd(context);
+      this.store.setActivationMetadata(this.run.id,this.token,key,{operation:{kind:"check",cwd,command:node.command,args:[...node.args]}});
       try {
         return await runCheckProcess(node.command, node.args, cwd, {
           signal, identity: workerToken,
@@ -271,6 +274,8 @@ export class JournalRuntime implements WorkflowRuntime {
       const key = activationKey(context);
       const childScope = [...context.scope, "node", node.id, "visit", String(context.visit), "worktree", "graph", node.graphId];
       const previous = runtime.store.getActivation(runtime.run.id, key)!.metadata;
+      const operation:Extract<OperationRecord,{kind:"worktree"}>={kind:"worktree",source:runtime.workspaceCwd(context),childScope:[...childScope],...(node.base?{base:node.base}:{})};
+      runtime.store.setActivationMetadata(runtime.run.id,runtime.token,key,{operation});
       const resuming = previous.workspacePhase === "children" && previous.workspace !== undefined;
       if (!resuming) runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspacePhase: "allocating", childScope });
       const allocation = yield* processEffect(signal => resuming
@@ -279,6 +284,7 @@ export class JournalRuntime implements WorkflowRuntime {
           runtime.gitOptions(context, signal), allocation => runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspace: { ...allocation } })));
       runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspacePhase: "children" });
       const result = yield* child(childScope);
+      runtime.store.setActivationMetadata(runtime.run.id,runtime.token,key,{operation:{...operation,childResult:result}});
       for (;;) {
         yield* Effect.tryPromise({ try: signal => runtime.gate(signal), catch: errorOf });
         const admitted = yield* Effect.try({ try: () => runtime.store.admitWorkspaceCommit(runtime.run.id, runtime.token, key), catch: errorOf });
@@ -291,11 +297,13 @@ export class JournalRuntime implements WorkflowRuntime {
   }
   integrate(context: RuntimeContext, _node: Extract<Node, { kind: "integrate" }>, sources: Json): Effect.Effect<Json, Error> {
     return processEffect(async signal => {
+      const key=activationKey(context),operation:Extract<OperationRecord,{kind:"integrate"}>={kind:"integrate",target:this.workspaceCwd(context),sources};
+      this.store.setActivationMetadata(this.run.id,this.token,key,{operation});
       const owned: WorkspaceRecord[] = [];
       for (const activation of this.store.listActivations(this.run.id)) {
         if (activation.kind === "worktree" && activation.status === "succeeded" && activation.output) owned.push(...parseWorkspaceSources([activation.output]));
       }
-      return this.workspaces.integrate(this.workspaceCwd(context), sources, owned, this.gitOptions(context, signal));
+      return this.workspaces.integrate(operation.target,sources,owned,this.gitOptions(context,signal),progress=>this.store.setActivationMetadata(this.run.id,this.token,key,{operation:{...operation,progress}}));
     });
   }
   private clearPid(key: string): void {
