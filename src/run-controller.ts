@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { spawn, execFileSync } from "node:child_process";
 import { closeSync, mkdirSync, openSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { prepareExecutionPlan, verifyExecutionPlan, type PrepareExecutionOptions } from "./execution-plan.js";
@@ -11,6 +12,8 @@ import { assertJson } from "./output-schema.js";
 import { RunStore, type RunRecord, type PreparedStart, type ActivationRecord } from "./run-store.js";
 import { projectRun } from "./observation.js";
 import { groupMembers, processGroups, type GroupProcess } from "./process-groups.js";
+import { observeRecoveryFiles, recoveryGitDirectories } from "./recovery-files.js";
+import { recoveryBlockers, recoveryCheckpoint, recoveryOutputContract, recoveryRoots } from "./recovery-inspection.js";
 
 export interface UnresolvedWorkerGroup { key: string; attempt: number; groupPid: number; ownership: "unverified"; processes: GroupProcess[] }
 
@@ -184,6 +187,30 @@ export class RunController {
       await this.launch(id); run = this.store.get(id);
     }
     return run;
+  }
+  /** Explicit inspection hashes local state; it never authorizes another execution. */
+  async recovery(id: string, key: string) {
+    const observed = this.observe(id), initial = this.store.recoveryState(id);
+    const selected = initial.activations.find(a => a.key === key);
+    if (!selected) throw new Error("Unknown recovery activation");
+    const blockers = recoveryBlockers(initial.run, selected, initial.activations, initial.collections);
+    if (observed.supervisorAlive || observed.workersAlive) blockers.push({ code: "live-processes", message: "Execution processes are still alive." });
+    if (observed.unresolvedGroups.length) blockers.push({ code: "unresolved-groups", message: "Process groups require inspection before recovery." });
+    const checkpoint = recoveryCheckpoint(initial.run, initial.activations, initial.collections, initial.eventSeq);
+    let workspace: Awaited<ReturnType<typeof observeRecoveryFiles>> | null = null;
+    if (!blockers.length) {
+      const roots = recoveryRoots(initial.run, selected);
+      const gitDirectories = (await Promise.all(roots.map(recoveryGitDirectories))).flat();
+      const journal = await realpath(this.filename);
+      workspace = await observeRecoveryFiles([...roots, ...gitDirectories], [...new Set([this.filename, journal])].flatMap(path => [path, path + "-wal", path + "-shm"]).concat(this.directory(id)));
+      const current = this.observe(id), final = this.store.recoveryState(id);
+      if (current.supervisorAlive || current.workersAlive || current.unresolvedGroups.length || recoveryCheckpoint(final.run, final.activations, final.collections, final.eventSeq) !== checkpoint) throw new Error("Run changed during recovery inspection; inspect again");
+    }
+    const { workerToken: _token, ...metadata } = selected.metadata;
+    return { version: 1 as const, runId: id, planHash: initial.run.plan.hash, key, attempt: selected.attempt, checkpoint,
+      status: initial.run.status, desired: initial.run.desired, eventSeq: initial.eventSeq, observedAt: Date.now(), blockers, workspace, outputSchema: recoveryOutputContract(initial.run, selected),
+      activation: { context: selected.context, kind: selected.kind, status: selected.status, error: selected.error ?? null, metadata },
+      processes: { supervisorAlive: observed.supervisorAlive, workersAlive: observed.workersAlive, unresolvedGroups: observed.unresolvedGroups } };
   }
   async resolve(id: string, waitId: string, response: Json, resolvedBy = "client") {
     this.observe(id);

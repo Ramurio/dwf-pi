@@ -633,6 +633,11 @@ export class RunStore {
     const row = this.database.prepare("SELECT * FROM workflow_collections WHERE run_id=? AND activation_key=? AND item_id=?").get(id,key,itemId);
     return row ? this.decodeCollection(row) : undefined;
   }
+  recoveryState(id: string) {
+    return this.transaction(() => ({ run: this.get(id), activations: this.listActivations(id),
+      eventSeq: Number(this.database.prepare("SELECT COALESCE(MAX(seq),0) AS seq FROM workflow_run_events WHERE run_id=?").get(id)!.seq),
+      collections: this.database.prepare("SELECT * FROM workflow_collections WHERE run_id=? ORDER BY seq").all(id).map(row => this.decodeCollection(row)) }), "read");
+  }
   private decodeCollection(row: Record<string, unknown>): CollectionRecord {
     return { seq:Number(row.seq),runId:String(row.run_id),key:String(row.activation_key),itemId:String(row.item_id),attempt:Number(row.attempt),at:Number(row.at),result:validateCollectedResult(JSON.parse(String(row.result))) };
   }

@@ -175,6 +175,12 @@ export async function startGraphServer(
         json(store.usageReports(id, Number(url.searchParams.get("after") ?? 0), 100));
         return;
       }
+      if (name === "recovery") {
+        const id = url.searchParams.get("id") ?? runId, key = url.searchParams.get("key");
+        if (!id || !key) throw new Error("Select a run and activation key");
+        json(await controller.recovery(id, key));
+        return;
+      }
       if (name === "attempts") {
         const id = url.searchParams.get("id") ?? runId, key = url.searchParams.get("key");
         if (!id || !key) throw new Error("Select a run and activation key");

@@ -6,6 +6,7 @@ const tracePages = new TracePages();
 const attemptPages = new AttemptPages();
 const collectionPages = new CollectionPages();
 const retryPages = new RetryPages();
+const recoveryInspections = new Map();
 const routingLabels = { true: "Условие выполнено", false: "Условие не выполнено", "not-evaluated": "Не проверялось", fallback: "Выбран запасной переход", error: "Ошибка проверки" };
 const waitDrafts = new Map();
 
@@ -510,11 +511,38 @@ function renderInspector() {
       row.append(details);
     }
     renderAttempts(row,a);
+    if (["failed", "interrupted"].includes(a.status)) renderRecovery(row, a);
     aside.append(row);
   }
   aside.scrollTop = scroll;
 }
 const svgNS = "http://www.w3.org/2000/svg";
+function renderRecovery(container, activation) {
+  const id = state.id, identity = JSON.stringify([id, activation.key]);
+  const cached = recoveryInspections.get(identity) ?? {};
+  const inspect = button(cached.loading ? "Сканирование состояния…" : cached.value ? "Обновить инспекцию" : "Проверить состояние для восстановления", async () => {
+    recoveryInspections.set(identity, { ...cached, loading: true, error: null }); renderInspector();
+    try {
+      const value = await api(`recovery?id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}`);
+      recoveryInspections.set(identity, { value });
+    } catch (error) { recoveryInspections.set(identity, { ...cached, error: error.message }); }
+    if (state.id === id) renderInspector();
+  }, "child-button");
+  inspect.disabled = !!cached.loading; container.append(inspect);
+  if (cached.error) container.append(el("p", "notice", cached.error));
+  if (!cached.value) return;
+  const value = cached.value, details = el("details");
+  details.append(el("summary", "", `Инспекция · попытка ${value.attempt}`), el("p", "muted", `Данные на ${date(value.observedAt)}. Получение снимка не разрешает повтор или принятие результата.`));
+  if (value.attempt !== activation.attempt) details.append(el("p", "notice", "Началась другая попытка. Обнови инспекцию."));
+  const labels = { "run-not-stopped": "Запуск ещё не остановлен либо уже завершён.", cancelled: "Отменённый запуск нельзя восстановить.", "attempt-not-failed": "Эта попытка не завершилась ошибкой.", "structural-checkpoint": "Выбери конкретную операцию внутри этого узла.", "missing-operation": "Параметры операции не были записаны.", "completed-parent": "Результат уже использован завершённым родителем.", "collected-item": "Результат уже включён в сохранённую коллекцию.", "live-processes": "Процессы запуска ещё работают.", "unresolved-groups": "Нужна проверка оставшихся групп процессов." };
+  for (const blocker of value.blockers) details.append(el("p", "notice", labels[blocker.code] ?? blocker.message));
+  if (value.workspace) {
+    details.append(el("p", "", `Проверено записей: ${number(value.workspace.entries)} · байтов: ${number(value.workspace.bytes)}`), el("pre", "", value.workspace.roots.join("\n")),
+      el("p", "muted", "Проверены выбранные рабочие папки и данные Git. Содержимое целей вложенных ссылок и внешние действия требуют отдельных доказательств."));
+  } else details.append(el("p", "muted", "Файлы не сканировались: сначала нужно устранить препятствия выше."));
+  const raw = el("details"); raw.append(el("summary", "", "Checkpoint, файлы и контракт результата"), el("pre", "", JSON.stringify(value, null, 2)));
+  details.append(raw); container.append(details);
+}
 function failureView(failure, runScope = false) {
   const labels = { configuration:"Настройки",resource:"Ресурсы",provider:"Ответ провайдера",output:"Формат результата",process:"Процесс",protocol:"Обмен с worker",cancelled:"Прерывание",interrupted:"Потерян процесс","expression":"Выражение графа","uncertain-effect":"Нужна сверка действий",unknown:"Причина не уточнена" };
   const phases = { setup:"подготовка",execution:"исполнение",output:"приём результата",routing:"выбор перехода",recovery:"восстановление",cleanup:"завершение процессов" };

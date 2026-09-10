@@ -1,9 +1,9 @@
 # Reconciliation of interrupted effects
 
-This work implements the recovery scenario in the project audit. Operation capture
-and worker launch reservations are implemented below. The public inspection/resolution protocol and Git-specific
-resolution paths are still being implemented; their proposed contracts are not
-available service commands yet.
+This work implements the recovery scenario in the project audit. Operation capture,
+worker/group observations and public `run.recovery` inspection are implemented below.
+The mutation protocol for accepting a result or authorizing a retry, including
+Git-specific resolution paths, is still being implemented and is not available yet.
 
 ## Persisted operation observations
 
@@ -102,6 +102,59 @@ create a false blocker. Old records without a group checkpoint do not gain inven
 proof. Processes that deliberately leave the group are outside this check; resolving
 their effects still requires explicit evidence. Group observation is a prerequisite
 for reconciliation, not an accept/retry decision or a complete resolution protocol.
+
+## Explicit recovery inspection
+
+`run.recovery {id,key}` (MCP `run_recovery`) inspects the exact current activation.
+Copy its key from `run.inspect`; a display label is not an identity. Browser failed
+attempts offer **Проверить состояние для восстановления**, with explicit refresh.
+Ordinary graph polling does not scan files or return operation prompts.
+
+The response includes `version`, run ID/plan hash, key/attempt, run status/desired,
+`checkpoint`, `eventSeq`, `observedAt`, the recorded activation (without its worker
+fencing token), output schema, process observations, blockers and `workspace`.
+The checkpoint covers the whole run's current activations and committed collection
+items from one SQLite read snapshot, together with the last event sequence. Answers
+to awaits therefore invalidate it even when no activation or run timestamp changes.
+
+Blockers distinguish a live or unsuitable run, a nonfailed attempt, structural
+container, missing operation data, a completed ancestor, a committed collection
+item, live execution processes and unresolved process groups. Child scope matching
+includes the exact parent visit and map index/parallel child ID; a sibling's result
+does not seal the selected child. A stopped failed/interrupted attempt can be
+inspected while operator pause remains in force.
+
+When blockers exist, `workspace` is null and no file tree is scanned. Otherwise the
+inspection hashes the run workspace, actual operation cwd/source/target, recorded
+managed worktrees and integration sources. Git administration directories and a
+linked worktree's common directory are included, without running Git commands.
+Broken administrative pointers fail the read rather than becoming a missing repo.
+
+`workspace` names its canonical roots and exclusions and returns an aggregate digest,
+entry/byte counts, leaf symlink paths and special-file paths. The digest includes
+names, file bytes/sizes, type/mode and symlink targets. It is a content observation,
+not a snapshot of timestamps, ownership, ACLs, extended attributes or outside state.
+Files stream through SHA-256; before/after inode/size/time checks reject observed
+replacement or modification during a read. Directories check their entry names.
+Files open with no-follow/nonblocking flags, avoiding a substituted symlink/FIFO.
+Overlapping roots are read once. Root symlinks resolve explicitly; nested symlinks
+are recorded without reading their target contents, and sockets/FIFOs are not opened.
+
+The journal, its WAL/SHM and this run's resources are excluded. Explicitly selected
+managed worktree roots remain included even when beneath the run directory. Replacing
+an excluded resource with a symlink does not exclude unrelated target data. Exclusions
+are returned so their scope can be reviewed; this is not a complete artifact manifest
+or a diff between inspections. There is no automatic preset or disk snapshot save.
+
+After scanning, controller observation and the journal checkpoint are checked again.
+A changed checkpoint or newly live process invalidates the inspection. Filesystem
+reads are not an atomic transaction with SQLite or other editors: the future decision
+and execution admission must recheck these facts. Unknown external effects and link
+targets still need explicit evidence. Repeated inspection does not rerun work, rewrite
+attempts, or alter usage. Read `run.attempts` for per-attempt accounting.
+
+This command supplies evidence only. Empty blockers and a valid output schema do not
+authorize accepting an output, retrying writes or overriding artifact/criteria bindings.
 
 ## Resolution contract being implemented
 

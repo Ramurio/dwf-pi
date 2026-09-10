@@ -12,7 +12,7 @@
 | Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Реализовано и проверено: await, run.waits/resolve, JSON-форма, idempotency, pause/resume, SIGKILL и worktree reattach; см. outcomes-and-waits.md |
 | Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Реализовано: controller.snapshot + projectRun, включая browser list и watch; проверка процессов отдельно от heartbeat, см. observation.md |
 | Usage | Учёт каждого ответа, cache/reasoning, попытки, dedup, отмена/ошибки, раскрытие сумм | Backend/API/UI реализованы; 65 targeted tests и браузерный fixture, см. usage.md. Общая приёмка с будущим recovery остаётся обязательной |
-| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, output repair, collect, safe retry, HTTP observations и provider retry policy реализованы; для reconciliation добавлены запись операций, резервирование workers и проверка оставшихся process groups. Протокол решений остаётся в работе. См. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md, retry-policy.md, provider-responses.md и reconciliation.md |
+| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, output repair, collect, safe retry, HTTP observations и provider retry policy реализованы; для reconciliation добавлены запись операций, workers/groups и публичная инспекция checkpoint/файлов. Протокол решений остаётся в работе. См. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md, retry-policy.md, provider-responses.md и reconciliation.md |
 | Артефакты | Snapshot/digest, версии критериев, применимость checks/reviews, diff | Не начато |
 | Интеграция | Отдельный integration workspace, проверки объединения, контроль target head | Не начато |
 | Authoring | Рецепты в обычный граф, агрегация коллекций, schemas и dataflow diagnostics | Не начато |
@@ -457,3 +457,44 @@ syntax и skill validator прошли. Предыдущий полный наб
 старых запусков не считаются автоматически проверенными. Полный протокол решений
 accept/retry, включая Git/checkpoint актуальность и evidence, остаётся обязательным;
 общий goal и остальные строки этого плана сохраняются.
+
+### Публичная инспекция перед восстановлением
+
+Добавлена run.recovery (CLI/MCP/browser). Она связывает точную попытку и frozen plan
+с checkpoint всего текущего run: activations, collections и event sequence читаются
+в одной транзакции. Последний event необходим, например, для ответа на await,
+который не меняет activation или updatedAt запуска. Состояние проверяется повторно
+после сканирования файлов; concurrent pause или другой переход инвалидирует снимок.
+
+Инспекция объясняет live owner/workers/groups, structural/nonfailed/legacy записи,
+завершённого предка и сохранённый item коллекции. При препятствиях дерево файлов
+не сканируется. Неиспользованная неудачная попытка доступна для инспекции при
+сохранённой операторской паузе. Контракт результата берётся из frozen agent либо
+формы результата check/worktree/integrate; это ещё не проверка принятого результата.
+
+Отдельный digest учитывает имена, байты, размеры, типы/режимы и вложенные symlinks
+в названных workspace roots и Git administration/common directory. Потоковое чтение
+проверяет обнаруживаемое изменение файлов; корни канонизируются, перекрытия читаются
+один раз. Journal/WAL/SHM и run resources исключены, явно выбранные worktrees внутри
+run directory включены. Подмена исключённого ресурса symlink не скрывает посторонние
+артефакты. Broken Git pointers отвергаются; вложенные ссылки и special files не
+открываются. Это content observation, не атомарный snapshot всех filesystem attributes
+и не доказательство внешних effects. Точные ограничения записаны в reconciliation.md.
+
+Browser по явной кнопке показывает blockers, roots/объём и checkpoint/контракт,
+позволяет обновить снимок. Native QA: настоящий failed check без inference,
+15→40 байт после изменения артефакта, новый workspace digest при прежнем checkpoint,
+попытка осталась первой и запуск остался failed. Консоль без ошибок, сервер,
+вкладка и временный каталог очищены. Старые snapshots в browser помечены временем;
+чтение не разрешает повтор и не принимает output.
+
+Протокол immutable accept/retry decisions, Git-specific восстановление,
+проверка artifact/criteria bindings при применении и все остальные строки общего
+плана остаются обязательными. Этот этап завершает инспекцию, а не reconciliation.
+
+Итоговый полный параллельный набор после всех изменений: **335/335**, 75,2 секунды,
+`/tmp/dynamicwf-recovery-inspection-complete-20260910.log`. Отдельно **21/21**
+recovery/MCP/browser tests и **8/8** итоговых inspection cases, включая concurrent
+pause, await event без изменения run timestamp, symlink exclusions и Git pointers.
+Typecheck, browser syntax, diff check и skill validator прошли. Контракт описывает
+границы content digest и необходимость повторной проверки перед будущим применением.
