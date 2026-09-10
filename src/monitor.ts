@@ -171,7 +171,7 @@ export class MonitorLog {
   private records = new Map<string, string>();
   update(run: RunRecord, records: readonly ActivationRecord[], presentation = projectRun(run, records)): string[] {
     const lines: string[] = [];
-    const state = `${run.status}/${run.desired}/${presentation.liveness.state}/${JSON.stringify(run.failure ?? null)}`;
+    const state = `${run.status}/${run.desired}/${presentation.liveness.state}/${presentation.liveness.unresolvedGroupProcesses}/${JSON.stringify(run.failure ?? null)}`;
     if (!this.state) lines.push(`${terminalText(run.plan.workflow.name)} · ${terminalText(run.id)}`);
     if (state !== this.state) {
       lines.push(`Run: ${presentation.statusLabel.toUpperCase()}${runError(run) ? ` — ${terminalText(runError(run))}` : ""} · ${tokenSummary(records)}`);

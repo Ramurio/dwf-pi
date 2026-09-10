@@ -309,6 +309,23 @@ function renderHeader() {
     failurePanel.append(failureView(r.failure,true));
     if (r.error) { const details = el("details"); details.append(el("summary", "", "Техническая ошибка"), el("pre", "", r.error)); failurePanel.append(details); }
   }
+  const groupsPanel = $("process-groups"), groups = r.unresolvedGroups ?? [];
+  groupsPanel.hidden = !groups.length;
+  groupsPanel.replaceChildren();
+  if (groups.length) {
+    groupsPanel.append(el("strong", "", "После worker остались процессы — нужна проверка"),
+      el("p", "", "Повторный запуск заблокирован. Совпадение номера группы ещё не подтверждает принадлежность процессов; отмена не завершает их автоматически по этому номеру."));
+    for (const group of groups) {
+      const detail = el("details");
+      detail.append(el("summary", "", `Группа ${group.groupPid} · попытка ${group.attempt} · процессов: ${group.processes.length}`));
+      detail.append(el("pre", "", group.processes.map(p => `PID ${p.pid} · родитель ${p.parentPid} · состояние ${p.state}`).join("\n")));
+      for (const graph of r.graphs) {
+        const node = graph.nodes.find(n => n.activations.some(a => a.key === group.key));
+        if (node) { detail.append(button(`Открыть задачу: ${node.id}`, () => { setTab("graph"); selectNode(graph.id, node.id); }, "child-button")); break; }
+      }
+      groupsPanel.append(detail);
+    }
+  }
   const outcome = $("task-outcome");
   outcome.hidden = !r.taskOutcome;
   outcome.replaceChildren();

@@ -12,7 +12,7 @@
 | Ожидания | Узел ожидания, сохраняемая причина/схема ответа, разрешение через service/UI, recovery | Реализовано и проверено: await, run.waits/resolve, JSON-форма, idempotency, pause/resume, SIGKILL и worktree reattach; см. outcomes-and-waits.md |
 | Наблюдение | Одна проекция outcome/liveness для CLI/MCP/watch/browser | Реализовано: controller.snapshot + projectRun, включая browser list и watch; проверка процессов отдельно от heartbeat, см. observation.md |
 | Usage | Учёт каждого ответа, cache/reasoning, попытки, dedup, отмена/ошибки, раскрытие сумм | Backend/API/UI реализованы; 65 targeted tests и браузерный fixture, см. usage.md. Общая приёмка с будущим recovery остаётся обязательной |
-| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, output repair, collect, safe retry, HTTP observations и provider retry policy реализованы; для reconciliation добавлены запись операций и резервирование workers, протокол решений остаётся в работе. См. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md, retry-policy.md, provider-responses.md и reconciliation.md |
+| Восстановление | Типы ошибок, безопасные policies retry/collect, исправление формата, reconciliation | История attempts, typed failures, output repair, collect, safe retry, HTTP observations и provider retry policy реализованы; для reconciliation добавлены запись операций, резервирование workers и проверка оставшихся process groups. Протокол решений остаётся в работе. См. attempt-history.md, execution-failures.md, output-repair.md, collection-policy.md, retry-policy.md, provider-responses.md и reconciliation.md |
 | Артефакты | Snapshot/digest, версии критериев, применимость checks/reviews, diff | Не начато |
 | Интеграция | Отдельный integration workspace, проверки объединения, контроль target head | Не начато |
 | Authoring | Рецепты в обычный граф, агрегация коллекций, schemas и dataflow diagnostics | Не начато |
@@ -420,3 +420,40 @@ accept/retry остаются обязательными, как и осталь
 validator прошли. Отдельная проверка process admission/parent death: **12/12**,
 4,9 секунды, `/tmp/dynamicwf-reservation-parent-gap.log`. Browser markup не менялся
 этим этапом; общая liveness-проекция проверена на настоящих reserved workers.
+
+### Проверка оставшихся process groups
+
+PID checkpoint до передачи запроса сохраняет workerGroupPid/pending. Завершение
+worker проверяет отсутствие активных членов группы; оставшийся процесс даёт
+uncertain-effect/cleanup, не позволяя принять ответ или перезаписать группу следующей
+Git-командой. Pending group также запрещает замену попытки, успешный run finish,
+освобождение owner и восстановительный запуск. Новые попытки архивируют и очищают
+прежнюю group provenance только после подтверждения пустой группы.
+
+Controller после смерти wrapper показывает numeric PID/PPID/state в unresolvedGroups
+с ownership=unverified. Номер группы мог быть переиспользован; кандидаты не получают
+автоматический сигнал по одному этому номеру. После их исчезновения fenced update
+по worker token/key/group фиксирует worker.group_empty, без повторных событий на poll.
+Zombie не активен; наблюдавшийся macOS ?Es остаётся потенциально активным.
+Нормально завершённые пустые группы больше не опрашиваются по старому номеру.
+
+Одна liveness-проекция для CLI/MCP/browser показывает «Проверка процессов» и отдельно
+считает кандидатов. Browser раскрывает PID и переход к задаче, сохраняет смысл
+запрошенной отмены. Native QA использует настоящий detached check с оставшимся
+фоновым процессом, проверяет отображение и отмену без сигнала непроверенной группе.
+После явной остановки принадлежащего стенду потомка browser показал «Отменён»,
+убрал список групп и подтвердил отсутствие процессов. Консоль без ошибок; оба
+проверочных сервера, потомки, временные каталоги и вкладки очищены.
+
+Проверены successful wrapper response с живым потомком, SIGKILL wrapper/supervisor,
+запрет повторного owner и attempt, отказ stale observation, состояние API/browser,
+отмена, освобождение после завершения, повторные polls и переиспользованный номер
+группы с посторонним процессом. Итоговый полный параллельный набор: **327/327**,
+75,4 секунды, `/tmp/dynamicwf-groups-full-final-20260910.log`. Typecheck, browser
+syntax и skill validator прошли. Предыдущий полный набор до усиления случая reuse:
+**326/326**, `/tmp/dynamicwf-groups-full-20260910.log`.
+
+Контракт: reconciliation.md. Процессы, покинувшие группу, и неизвестная история
+старых запусков не считаются автоматически проверенными. Полный протокол решений
+accept/retry, включая Git/checkpoint актуальность и evidence, остаётся обязательным;
+общий goal и остальные строки этого плана сохраняются.

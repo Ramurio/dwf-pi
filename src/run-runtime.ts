@@ -5,6 +5,7 @@ import { Cause, Effect, Exit, Option } from "effect";
 import { executionFailure, failureRecord } from "./execution-failure.js";
 import { parseOutputRepairProgress } from "./output-repair.js";
 import type { OperationRecord } from "./operation-record.js";
+import { groupMembers } from "./process-groups.js";
 import { retryProgress, retryRemaining, RetryNotReady, permitsRetry } from "./retry-policy.js";
 import type { ExecutionPlan, FrozenAgent, PiWorkerRequest } from "./execution-types.js";
 import type { Json, Node } from "./graph.js";
@@ -208,7 +209,7 @@ export class JournalRuntime implements WorkflowRuntime {
         const result = await runPiProcess(request, {
           signal, identity: workerToken,
           onStarting: workerToken => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid: null, workerToken, workerKind: "pi", workerLaunch: "reserved", cwd: request.cwd, model: { ...config.model }, thinking: config.thinking }),
-          onStarted: workerPid => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid, workerLaunch: "started" }),
+          onStarted: workerPid => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid, workerLaunch: "started", workerGroupPid: workerPid, workerGroupState: "pending" }),
           onEvent: event => {
             if (event.type === "usage.report") {
               if (typeof event.reportId !== "string" || typeof event.stopReason !== "string") throw new Error("Invalid worker usage identity");
@@ -248,7 +249,7 @@ export class JournalRuntime implements WorkflowRuntime {
         return await runCheckProcess(node.command, node.args, cwd, {
           signal, identity: workerToken,
           onStarting: workerToken => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid: null, workerToken, workerKind: "check", workerLaunch: "reserved", cwd }),
-          onStarted: workerPid => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid, workerLaunch: "started" }),
+          onStarted: workerPid => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid, workerLaunch: "started", workerGroupPid: workerPid, workerGroupState: "pending" }),
         });
       } finally { this.clearPid(key); }
     });
@@ -266,7 +267,7 @@ export class JournalRuntime implements WorkflowRuntime {
     return {
       signal,
       onStarting: workerToken => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid: null, workerToken, workerKind: "check", workerLaunch: "reserved" }),
-      onStarted: workerPid => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid, workerLaunch: "started" }),
+      onStarted: workerPid => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid, workerLaunch: "started", workerGroupPid: workerPid, workerGroupState: "pending" }),
       onFinished: () => this.clearPid(key),
     };
   }
@@ -310,7 +311,13 @@ export class JournalRuntime implements WorkflowRuntime {
   }
   private clearPid(key: string): void {
     if (this.store.get(this.run.id).ownerToken === this.token && this.store.getActivation(this.run.id, key)?.status === "running") {
-      this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid: null, workerLaunch: "settled" });
+      const metadata = this.store.getActivation(this.run.id, key)!.metadata;
+      if (metadata.workerGroupState === "pending" && typeof metadata.workerGroupPid === "number") {
+        const remaining = groupMembers(metadata.workerGroupPid);
+        if (remaining.length) throw executionFailure("uncertain-effect", "cleanup", "unknown", `Worker process group ${metadata.workerGroupPid} still has ${remaining.length} live process(es)`);
+      }
+      this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid: null, workerLaunch: "settled",
+        ...(metadata.workerGroupState === "pending" ? { workerGroupState: "empty" } : {}) });
     }
   }
   private checkReviewInput(node: Node, config: FrozenAgent, input: Json): void {

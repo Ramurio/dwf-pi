@@ -54,7 +54,7 @@ try {
   const run = store.get(runId);
   if (run.ownerToken === owner) {
     const activations = store.listActivations(runId);
-    if (activations.some(item => item.ownerToken === owner && typeof item.metadata.workerPid === "number")) {
+    if (activations.some(item => item.ownerToken === owner && (typeof item.metadata.workerPid === "number" || item.metadata.workerGroupState === "pending"))) {
       // A cleanup failure cannot become proof that external effects stopped.
       // Leave ownership for the controller to reconcile after observing death.
       store.appendEvent(runId, owner, "run.cleanup_uncertain", { error: "A recorded worker has not confirmed exit" });

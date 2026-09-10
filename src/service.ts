@@ -293,7 +293,7 @@ export function publicRunSummary(run: RunRecord) {
   };
 }
 function publicObservation(observed: ReturnType<RunController["snapshot"]>) {
-  return { ...publicRunSummary(observed.run), supervisorAlive: observed.supervisorAlive, workersAlive: observed.workersAlive, presentation: observed.presentation };
+  return { ...publicRunSummary(observed.run), supervisorAlive: observed.supervisorAlive, workersAlive: observed.workersAlive, unresolvedGroups: observed.unresolvedGroups, presentation: observed.presentation };
 }
 function publicActivation(record: ActivationRecord) {
   const { ownerToken: _, metadata, ...fields } = record;

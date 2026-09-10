@@ -164,6 +164,7 @@ export async function startGraphServer(
           ),
           supervisorAlive: observed.supervisorAlive,
           workersAlive: observed.workersAlive,
+          unresolvedGroups: observed.unresolvedGroups,
         });
         return;
       }

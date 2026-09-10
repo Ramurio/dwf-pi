@@ -64,11 +64,44 @@ matching process are not themselves evidence of a live worker. Legacy journals d
 not gain missing identities. The inventory is shared within one observation when
 several missing-PID reservations or a supervisor reservation need it.
 
-This closes the launch-before-PID tracking gap for new managed workers. It does
-**not** yet resolve orphan process groups after a wrapper is killed, escaped
-descendants, or external filesystem changes. Those remain required before exposing
-the full resolution protocol. Normal recorded-process observation must not be
-presented as proof that all outside effects have settled.
+This closes the launch-before-PID tracking gap for new managed workers. Process
+groups have the additional checks below. Escaped descendants and external effects
+still require inspection; recorded-process observation must not be presented as
+proof that all outside effects have settled.
+
+## Remaining process groups
+
+Before sending the request, the PID checkpoint also records `workerGroupPid` and
+`workerGroupState:"pending"`. Managed wrappers are detached process group leaders.
+Once the process client finishes waiting, the runtime checks OS group membership
+before clearing the worker metadata or accepting its output. A nonempty group
+produces an `uncertain-effect` failure in `cleanup`; the original group checkpoint
+remains. Another Git command cannot overwrite it with a new reservation. Successful completion,
+attempt replacement and owner release reject a pending group.
+
+When the supervisor and recorded wrapper are gone, controller observation checks
+that group number. Live members are exposed as `unresolvedGroups` in run status,
+inspect and browser snapshots: activation key/attempt, group PID, numeric process
+and parent IDs, OS state, and `ownership:"unverified"`. The shared presentation
+reports `unresolved-groups`, including after an otherwise terminal run. Nonterminal
+execution without a live supervisor is labelled as requiring process inspection, preserving pause
+or cancellation intent. The browser explains the condition and links to the task.
+
+The group number may have been reused since the checkpoint. These are candidates,
+not certified owned descendants; cancellation does not signal a group merely from
+this numeric match. An authorized actor can inspect their actual provenance and
+settle the relevant processes. Once an OS read finds no non-zombie members, the
+controller records `worker.group_empty` and clears the pending observation before
+releasing the dead owner. The update compares the original worker token/group/key,
+so a stale observation cannot clear a newer command. Repeated reads add no duplicate
+empty events. Observation errors remain errors; an unknown OS state is treated as
+potentially active, including macOS `?Es`.
+
+A group verified empty is not polled indefinitely, so its later reuse does not
+create a false blocker. Old records without a group checkpoint do not gain invented
+proof. Processes that deliberately leave the group are outside this check; resolving
+their effects still requires explicit evidence. Group observation is a prerequisite
+for reconciliation, not an accept/retry decision or a complete resolution protocol.
 
 ## Resolution contract being implemented
 

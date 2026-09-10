@@ -37,7 +37,7 @@ async function waitRun(controller: RunController, id: string, condition: (run: R
   for (;;) {
     latest = controller.observe(id).run;
     if (condition(latest)) return latest;
-    if (["failed", "cancelled", "interrupted"].includes(latest.status)) assert.fail(`Unexpected run state: ${latest.status}: ${latest.error}`);
+    if (["failed", "cancelled", "interrupted"].includes(latest.status)) assert.fail(`Unexpected run state: ${latest.status}: ${latest.error}\n${JSON.stringify(controller.store.listActivations(id).filter(a => a.error).map(a => ({node:a.context.nodeId,error:a.error,failure:a.metadata.failure,group:a.metadata.workerGroupPid})))}`);
     if (Date.now() > deadline) assert.fail(`Run wait expired: ${latest.status}: ${latest.error}`);
     await sleep(40);
   }

@@ -224,6 +224,7 @@ export class RunStore {
     return this.transaction(() => {
       const run = this.get(id);
       if (!(initialOnly ? ["queued"] : ["queued", "interrupted"]).includes(run.status) || run.desired !== "running" || run.ownerToken !== null) throw new Error(`Run is not launchable: ${id} (${run.status}/${run.desired})`);
+      if (this.hasPendingWorkerGroups(id)) throw executionFailure("uncertain-effect", "recovery", "unknown", "Worker process groups have not been verified empty");
       const token = randomUUID();
       const now = Date.now();
       this.database.prepare("UPDATE workflow_runs SET status='running',owner_token=?,supervisor_pid=NULL,heartbeat_at=?,updated_at=?,error=NULL WHERE id=?")
@@ -311,6 +312,7 @@ export class RunStore {
   markInterrupted(id: string, token: string, error: string): void {
     this.transaction(() => {
       this.owned(id, token);
+      if (this.hasPendingWorkerGroups(id)) throw executionFailure("uncertain-effect", "recovery", "unknown", "Worker process groups have not been verified empty");
       const failure = executionFailure("interrupted","execution","unknown",error).failure;
       this.database.prepare("UPDATE workflow_activations SET status='interrupted',error=?,finished_at=?,metadata=json_set(metadata,'$.failure',json(?)) WHERE run_id=? AND status='running'").run(error, Date.now(), JSON.stringify(failure), id);
       this.database.prepare("INSERT INTO workflow_run_failures(run_id,failure) VALUES(?,?) ON CONFLICT(run_id) DO UPDATE SET failure=excluded.failure").run(id,JSON.stringify(failure));
@@ -322,6 +324,7 @@ export class RunStore {
     this.transaction(() => {
       const run = this.owned(id, token);
       if (outcome.status === "succeeded" && run.desired !== "running") throw new Error(`Cannot succeed while ${run.desired} is requested`);
+      if (outcome.status === "succeeded" && this.hasPendingWorkerGroups(id)) throw executionFailure("uncertain-effect", "cleanup", "unknown", "Worker process groups have not been verified empty");
       for (const row of this.database.prepare("SELECT activation_key,metadata FROM workflow_activations WHERE run_id=? AND json_extract(metadata,'$.retry.status')='scheduled'").all(id)) {
         const metadata = JSON.parse(String(row.metadata)), progress = parseRetryProgress(metadata.retry);
         if (!progress) continue;
@@ -358,6 +361,7 @@ export class RunStore {
       const key = activationKey(context);
       const old = this.getActivation(id, key);
       if (old && (old.kind !== options.kind || old.sideEffect !== options.sideEffect)) throw new Error(`Activation definition changed: ${key}`);
+      if (old?.metadata.workerGroupState === "pending") throw executionFailure("uncertain-effect", "recovery", "unknown", "Prior worker process group has not been verified empty");
       if (old?.status === "succeeded") return old;
       if (old?.status === "running") throw new Error(`Activation is already running: ${key}`);
       const decision = this.plannedRetry(run,old), allowed = !!decision;
@@ -368,6 +372,7 @@ export class RunStore {
         .run(id, key, old.attempt, JSON.stringify(allowed ? {...old,metadata:{...old.metadata,retry:retryProgress(decision!,"admitted")}} : old));
       const { failure: _previousFailure, failureCauses: _previousCauses, outputRepair: _previousRepair, retry: _previousRetry,
         operation: _operation, sessionFile: _session, workerPid: _pid, workerToken: _worker, workerKind: _workerKind, workerLaunch: _workerLaunch,
+        workerGroupPid: _groupPid, workerGroupState: _groupState,
         cwd: _cwd, model: _model, thinking: _thinking, ...metadata } = old?.metadata ?? {};
       const now = Date.now();
       if (run.status === "waiting") {
@@ -597,6 +602,8 @@ export class RunStore {
   setActivationMetadata(id: string, token: string, key: string, metadata: ActivationMetadata): void {
     this.transaction(() => {
       const record = this.runningActivation(id, token, key);
+      if (metadata.workerLaunch === "reserved" && record.metadata.workerGroupState === "pending") throw executionFailure("uncertain-effect", "cleanup", "unknown", "Prior worker process group has not been verified empty");
+      if (metadata.workerGroupState === "pending" && (!Number.isSafeInteger(metadata.workerGroupPid) || (metadata.workerGroupPid as number) <= 0 || metadata.workerGroupPid !== metadata.workerPid)) throw new Error("Invalid worker process group checkpoint");
       if(Object.hasOwn(metadata,"operation")){
         const operation=parseOperation(metadata.operation);
         if(!operation || operation.kind!==record.kind)throw new Error("Invalid operation observation for activation");
@@ -607,6 +614,20 @@ export class RunStore {
   }
   appendEvent(id: string, token: string, type: string, payload: Json): void {
     this.transaction(() => { this.owned(id, token); this.event(id, type, payload); });
+  }
+  private hasPendingWorkerGroups(id: string): boolean {
+    return !!this.database.prepare("SELECT 1 FROM workflow_activations WHERE run_id=? AND json_extract(metadata,'$.workerGroupState')='pending' LIMIT 1").get(id);
+  }
+  /** Controller supplies an OS observation; fences prevent clearing a newer group. */
+  observeWorkerGroupEmpty(id: string, key: string, workerToken: string, groupPid: number): boolean {
+    return this.transaction(() => {
+      const record = this.getActivation(id, key);
+      if (!record || record.metadata.workerToken !== workerToken || record.metadata.workerGroupPid !== groupPid || record.metadata.workerGroupState !== "pending") return false;
+      const metadata = { ...record.metadata, workerPid: null, workerLaunch: "settled", workerGroupState: "empty" };
+      this.database.prepare("UPDATE workflow_activations SET metadata=? WHERE run_id=? AND activation_key=?").run(JSON.stringify(metadata), id, key);
+      this.event(id, "worker.group_empty", { key, attempt: record.attempt, groupPid });
+      return true;
+    });
   }
   collection(id: string, key: string, itemId: string): CollectionRecord | undefined {
     const row = this.database.prepare("SELECT * FROM workflow_collections WHERE run_id=? AND activation_key=? AND item_id=?").get(id,key,itemId);

@@ -10,6 +10,9 @@ import type { Json } from "./graph.js";
 import { assertJson } from "./output-schema.js";
 import { RunStore, type RunRecord, type PreparedStart, type ActivationRecord } from "./run-store.js";
 import { projectRun } from "./observation.js";
+import { groupMembers, processGroups, type GroupProcess } from "./process-groups.js";
+
+export interface UnresolvedWorkerGroup { key: string; attempt: number; groupPid: number; ownership: "unverified"; processes: GroupProcess[] }
 
 const supervisorPath = fileURLToPath(new URL("./supervisor.ts", import.meta.url));
 function commandLine(pid: number): string | undefined {
@@ -71,6 +74,7 @@ export class RunController {
     const observed = this.observe(id), activations = this.store.listActivations(id);
     const presentation = projectRun(observed.run, activations, {
       supervisorAlive: observed.supervisorAlive, workersAlive: observed.workersAlive, observedAt: Date.now(),
+      unresolvedGroupProcesses: observed.unresolvedGroups.reduce((sum, group) => sum + group.processes.length, 0),
       launchPending: observed.run.ownerToken !== null && observed.run.supervisorPid === null && !observed.supervisorAlive,
     });
     return { ...observed, activations, presentation };
@@ -132,12 +136,21 @@ export class RunController {
       throw error;
     }
   }
-  observe(id: string): { run: RunRecord; supervisorAlive: boolean; workersAlive: number } {
+  observe(id: string): { run: RunRecord; supervisorAlive: boolean; workersAlive: number; unresolvedGroups: UnresolvedWorkerGroup[] } {
     let run = this.store.get(id);
     let processes: string[] | undefined;
     const inventory = () => processes ??= processInventory();
     let supervisorAlive = run.ownerToken !== null && matchesProcess(run.supervisorPid, `--owner ${run.ownerToken}`, supervisorPath);
-    const workersAlive = liveWorkerPids(this.store.listActivations(id), inventory).length;
+    const activations = this.store.listActivations(id), workerPids = liveWorkerPids(activations, inventory);
+    const workersAlive = workerPids.length, unresolvedGroups: UnresolvedWorkerGroup[] = [], emptyGroups: ActivationRecord[] = [];
+    let groups: GroupProcess[] | undefined;
+    for (const activation of activations) {
+      const metadata = activation.metadata;
+      if (metadata.workerGroupState !== "pending" || typeof metadata.workerGroupPid !== "number" || typeof metadata.workerToken !== "string" || workerPids.includes(metadata.workerGroupPid)) continue;
+      const members = groupMembers(metadata.workerGroupPid, groups ??= processGroups());
+      if (members.length) unresolvedGroups.push({ key: activation.key, attempt: activation.attempt, groupPid: metadata.workerGroupPid, ownership: "unverified", processes: members });
+      else emptyGroups.push(activation);
+    }
     if (!supervisorAlive && run.ownerToken && run.supervisorPid === null) {
       // Cover the small reserve/spawn/attach window without treating a fresh
       // reservation as proof of either a live process or a failed launch.
@@ -147,15 +160,16 @@ export class RunController {
         catch (error) { if (this.store.get(id).ownerToken === run.ownerToken) throw error; return this.observe(id); }
         run = this.store.get(id); supervisorAlive = true;
       }
-      else if (Date.now() - run.updatedAt < 5_000) return { run, supervisorAlive: false, workersAlive };
+      else if (Date.now() - run.updatedAt < 5_000) return { run, supervisorAlive: false, workersAlive, unresolvedGroups };
     }
-    if (run.ownerToken && !supervisorAlive && workersAlive === 0) {
+    if (!supervisorAlive) for (const activation of emptyGroups) this.store.observeWorkerGroupEmpty(id, activation.key, activation.metadata.workerToken as string, activation.metadata.workerGroupPid as number);
+    if (run.ownerToken && !supervisorAlive && workersAlive === 0 && unresolvedGroups.length === 0) {
       try { this.store.markInterrupted(id, run.ownerToken, "Supervisor and recorded workers are no longer alive"); }
       catch (error) { if (this.store.get(id).ownerToken === run.ownerToken) throw error; return this.observe(id); }
       run = this.store.get(id);
       if (run.desired === "cancelled") run = this.store.requestControl(id, "cancel");
     }
-    return { run, supervisorAlive, workersAlive };
+    return { run, supervisorAlive, workersAlive, unresolvedGroups };
   }
   async control(id: string, command: "pause" | "resume" | "cancel"): Promise<RunRecord> {
     const observed = this.observe(id);
