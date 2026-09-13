@@ -1,0 +1,1390 @@
+{
+  "id": "research-trio",
+  "expectedRevision": 1,
+  "operations": [
+    {
+      "op": "addGraph",
+      "graphId": "researcher-1"
+    },
+    {
+      "op": "addNode",
+      "graphId": "researcher-1",
+      "node": {
+        "id": "investigate",
+        "kind": "agent",
+        "role": "researcher",
+        "task": {
+          "op": "ref",
+          "path": [
+            "input",
+            "assignment"
+          ]
+        },
+        "input": {
+          "op": "ref",
+          "path": [
+            "input"
+          ]
+        },
+        "config": {
+          "model": {
+            "provider": "REPLACE_WITH_CATALOG_PROVIDER",
+            "id": "REPLACE_WITH_R1_MODEL_ID"
+          },
+          "thinking": "high",
+          "tools": [
+            "read",
+            "grep",
+            "find",
+            "ls"
+          ],
+          "skills": [],
+          "session": "fresh",
+          "permission": "read-only",
+          "outputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision",
+              "summary",
+              "findings",
+              "evidence",
+              "uncertainties"
+            ],
+            "properties": {
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "inconclusive"
+                ]
+              },
+              "summary": {
+                "type": "string"
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "claim",
+                    "basis"
+                  ],
+                  "properties": {
+                    "claim": {
+                      "type": "string"
+                    },
+                    "basis": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "source",
+                    "excerpt"
+                  ],
+                  "properties": {
+                    "source": {
+                      "type": "string"
+                    },
+                    "excerpt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "uncertainties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "researcher-1",
+      "node": {
+        "id": "done",
+        "kind": "end",
+        "value": {
+          "op": "ref",
+          "path": [
+            "nodes",
+            "investigate"
+          ]
+        }
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "researcher-1",
+      "edge": {
+        "from": "investigate",
+        "to": "done"
+      }
+    },
+    {
+      "op": "addGraph",
+      "graphId": "researcher-2"
+    },
+    {
+      "op": "addNode",
+      "graphId": "researcher-2",
+      "node": {
+        "id": "investigate",
+        "kind": "agent",
+        "role": "researcher",
+        "task": {
+          "op": "ref",
+          "path": [
+            "input",
+            "assignment"
+          ]
+        },
+        "input": {
+          "op": "ref",
+          "path": [
+            "input"
+          ]
+        },
+        "config": {
+          "model": {
+            "provider": "REPLACE_WITH_CATALOG_PROVIDER",
+            "id": "REPLACE_WITH_R2_MODEL_ID"
+          },
+          "thinking": "high",
+          "tools": [
+            "read",
+            "grep",
+            "find",
+            "ls"
+          ],
+          "skills": [],
+          "session": "fresh",
+          "permission": "read-only",
+          "outputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision",
+              "summary",
+              "findings",
+              "evidence",
+              "uncertainties"
+            ],
+            "properties": {
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "inconclusive"
+                ]
+              },
+              "summary": {
+                "type": "string"
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "claim",
+                    "basis"
+                  ],
+                  "properties": {
+                    "claim": {
+                      "type": "string"
+                    },
+                    "basis": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "source",
+                    "excerpt"
+                  ],
+                  "properties": {
+                    "source": {
+                      "type": "string"
+                    },
+                    "excerpt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "uncertainties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "researcher-2",
+      "node": {
+        "id": "done",
+        "kind": "end",
+        "value": {
+          "op": "ref",
+          "path": [
+            "nodes",
+            "investigate"
+          ]
+        }
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "researcher-2",
+      "edge": {
+        "from": "investigate",
+        "to": "done"
+      }
+    },
+    {
+      "op": "addGraph",
+      "graphId": "researcher-3"
+    },
+    {
+      "op": "addNode",
+      "graphId": "researcher-3",
+      "node": {
+        "id": "investigate",
+        "kind": "agent",
+        "role": "researcher",
+        "task": {
+          "op": "ref",
+          "path": [
+            "input",
+            "assignment"
+          ]
+        },
+        "input": {
+          "op": "ref",
+          "path": [
+            "input"
+          ]
+        },
+        "config": {
+          "model": {
+            "provider": "REPLACE_WITH_CATALOG_PROVIDER",
+            "id": "REPLACE_WITH_R3_MODEL_ID"
+          },
+          "thinking": "high",
+          "tools": [
+            "read",
+            "grep",
+            "find",
+            "ls"
+          ],
+          "skills": [],
+          "session": "fresh",
+          "permission": "read-only",
+          "outputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision",
+              "summary",
+              "findings",
+              "evidence",
+              "uncertainties"
+            ],
+            "properties": {
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "inconclusive"
+                ]
+              },
+              "summary": {
+                "type": "string"
+              },
+              "findings": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "claim",
+                    "basis"
+                  ],
+                  "properties": {
+                    "claim": {
+                      "type": "string"
+                    },
+                    "basis": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "source",
+                    "excerpt"
+                  ],
+                  "properties": {
+                    "source": {
+                      "type": "string"
+                    },
+                    "excerpt": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "uncertainties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "researcher-3",
+      "node": {
+        "id": "done",
+        "kind": "end",
+        "value": {
+          "op": "ref",
+          "path": [
+            "nodes",
+            "investigate"
+          ]
+        }
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "researcher-3",
+      "edge": {
+        "from": "investigate",
+        "to": "done"
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "research",
+        "kind": "parallel",
+        "failurePolicy": "collect",
+        "children": [
+          {
+            "id": "r1",
+            "graphId": "researcher-1",
+            "input": {
+              "op": "object",
+              "fields": {
+                "question": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "question"
+                  ]
+                },
+                "criteria": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "criteria"
+                  ]
+                },
+                "sources": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "sources"
+                  ]
+                },
+                "assignment": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "r1",
+                    "assignment"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "r2",
+            "graphId": "researcher-2",
+            "input": {
+              "op": "object",
+              "fields": {
+                "question": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "question"
+                  ]
+                },
+                "criteria": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "criteria"
+                  ]
+                },
+                "sources": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "sources"
+                  ]
+                },
+                "assignment": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "r2",
+                    "assignment"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "r3",
+            "graphId": "researcher-3",
+            "input": {
+              "op": "object",
+              "fields": {
+                "question": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "question"
+                  ]
+                },
+                "criteria": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "criteria"
+                  ]
+                },
+                "sources": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "sources"
+                  ]
+                },
+                "assignment": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "r3",
+                    "assignment"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "aggregate",
+        "kind": "agent",
+        "role": "synthesizer",
+        "task": {
+          "op": "ref",
+          "path": [
+            "input",
+            "synthesis",
+            "assignment"
+          ]
+        },
+        "input": {
+          "op": "object",
+          "fields": {
+            "question": {
+              "op": "ref",
+              "path": [
+                "input",
+                "question"
+              ]
+            },
+            "criteria": {
+              "op": "ref",
+              "path": [
+                "input",
+                "criteria"
+              ]
+            },
+            "assignment": {
+              "op": "ref",
+              "path": [
+                "input",
+                "synthesis",
+                "assignment"
+              ]
+            },
+            "research": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "research"
+              ]
+            }
+          }
+        },
+        "config": {
+          "model": {
+            "provider": "REPLACE_WITH_CATALOG_PROVIDER",
+            "id": "REPLACE_WITH_SYNTHESIZER_MODEL_ID"
+          },
+          "thinking": "high",
+          "tools": [
+            "read",
+            "grep",
+            "find",
+            "ls"
+          ],
+          "skills": [],
+          "session": "fresh",
+          "permission": "read-only",
+          "outputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision",
+              "summary",
+              "reason",
+              "evidence",
+              "disagreements",
+              "uncertainties"
+            ],
+            "properties": {
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "accepted",
+                  "inconclusive"
+                ]
+              },
+              "summary": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "disagreements": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "topic",
+                    "positions"
+                  ],
+                  "properties": {
+                    "topic": {
+                      "type": "string"
+                    },
+                    "positions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              },
+              "uncertainties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "accepted",
+        "kind": "finish",
+        "decision": "accepted",
+        "reason": {
+          "op": "ref",
+          "path": [
+            "nodes",
+            "aggregate",
+            "reason"
+          ]
+        },
+        "evidence": {
+          "op": "array",
+          "items": [
+            {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "research"
+              ]
+            },
+            {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "aggregate"
+              ]
+            }
+          ]
+        },
+        "value": {
+          "op": "object",
+          "fields": {
+            "accepted": {
+              "op": "literal",
+              "value": true
+            },
+            "decision": {
+              "op": "literal",
+              "value": "accepted"
+            },
+            "reason": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "aggregate",
+                "reason"
+              ]
+            },
+            "reports": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "research"
+              ]
+            },
+            "synthesis": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "aggregate"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "inconclusive",
+        "kind": "finish",
+        "decision": "inconclusive",
+        "reason": {
+          "op": "select",
+          "when": {
+            "op": "all",
+            "items": [
+              {
+                "op": "eq",
+                "left": {
+                  "op": "ref",
+                  "path": [
+                    "nodes",
+                    "research",
+                    "r1",
+                    "status"
+                  ]
+                },
+                "right": {
+                  "op": "literal",
+                  "value": "succeeded"
+                }
+              },
+              {
+                "op": "eq",
+                "left": {
+                  "op": "ref",
+                  "path": [
+                    "nodes",
+                    "research",
+                    "r2",
+                    "status"
+                  ]
+                },
+                "right": {
+                  "op": "literal",
+                  "value": "succeeded"
+                }
+              },
+              {
+                "op": "eq",
+                "left": {
+                  "op": "ref",
+                  "path": [
+                    "nodes",
+                    "research",
+                    "r3",
+                    "status"
+                  ]
+                },
+                "right": {
+                  "op": "literal",
+                  "value": "succeeded"
+                }
+              }
+            ]
+          },
+          "then": {
+            "op": "select",
+            "when": {
+              "op": "all",
+              "items": [
+                {
+                  "op": "select",
+                  "when": {
+                    "op": "eq",
+                    "left": {
+                      "op": "ref",
+                      "path": [
+                        "nodes",
+                        "research",
+                        "r1",
+                        "status"
+                      ]
+                    },
+                    "right": {
+                      "op": "literal",
+                      "value": "succeeded"
+                    }
+                  },
+                  "then": {
+                    "op": "eq",
+                    "left": {
+                      "op": "ref",
+                      "path": [
+                        "nodes",
+                        "research",
+                        "r1",
+                        "value",
+                        "decision"
+                      ]
+                    },
+                    "right": {
+                      "op": "literal",
+                      "value": "complete"
+                    }
+                  },
+                  "otherwise": {
+                    "op": "literal",
+                    "value": false
+                  }
+                },
+                {
+                  "op": "select",
+                  "when": {
+                    "op": "eq",
+                    "left": {
+                      "op": "ref",
+                      "path": [
+                        "nodes",
+                        "research",
+                        "r2",
+                        "status"
+                      ]
+                    },
+                    "right": {
+                      "op": "literal",
+                      "value": "succeeded"
+                    }
+                  },
+                  "then": {
+                    "op": "eq",
+                    "left": {
+                      "op": "ref",
+                      "path": [
+                        "nodes",
+                        "research",
+                        "r2",
+                        "value",
+                        "decision"
+                      ]
+                    },
+                    "right": {
+                      "op": "literal",
+                      "value": "complete"
+                    }
+                  },
+                  "otherwise": {
+                    "op": "literal",
+                    "value": false
+                  }
+                },
+                {
+                  "op": "select",
+                  "when": {
+                    "op": "eq",
+                    "left": {
+                      "op": "ref",
+                      "path": [
+                        "nodes",
+                        "research",
+                        "r3",
+                        "status"
+                      ]
+                    },
+                    "right": {
+                      "op": "literal",
+                      "value": "succeeded"
+                    }
+                  },
+                  "then": {
+                    "op": "eq",
+                    "left": {
+                      "op": "ref",
+                      "path": [
+                        "nodes",
+                        "research",
+                        "r3",
+                        "value",
+                        "decision"
+                      ]
+                    },
+                    "right": {
+                      "op": "literal",
+                      "value": "complete"
+                    }
+                  },
+                  "otherwise": {
+                    "op": "literal",
+                    "value": false
+                  }
+                }
+              ]
+            },
+            "then": {
+              "op": "select",
+              "when": {
+                "op": "eq",
+                "left": {
+                  "op": "ref",
+                  "path": [
+                    "nodes",
+                    "aggregate",
+                    "decision"
+                  ]
+                },
+                "right": {
+                  "op": "literal",
+                  "value": "accepted"
+                }
+              },
+              "then": {
+                "op": "literal",
+                "value": "Graph policy excluded acceptance: the synthesizer verdict is not finish authority."
+              },
+              "otherwise": {
+                "op": "ref",
+                "path": [
+                  "nodes",
+                  "aggregate",
+                  "reason"
+                ]
+              }
+            },
+            "otherwise": {
+              "op": "literal",
+              "value": "At least one researcher reported inconclusive; acceptance is excluded."
+            }
+          },
+          "otherwise": {
+            "op": "literal",
+            "value": "At least one research branch failed; collected envelopes are preserved and acceptance is excluded."
+          }
+        },
+        "evidence": {
+          "op": "array",
+          "items": [
+            {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "research"
+              ]
+            },
+            {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "aggregate"
+              ]
+            }
+          ]
+        },
+        "value": {
+          "op": "object",
+          "fields": {
+            "accepted": {
+              "op": "literal",
+              "value": false
+            },
+            "decision": {
+              "op": "literal",
+              "value": "inconclusive"
+            },
+            "reason": {
+              "op": "select",
+              "when": {
+                "op": "all",
+                "items": [
+                  {
+                    "op": "eq",
+                    "left": {
+                      "op": "ref",
+                      "path": [
+                        "nodes",
+                        "research",
+                        "r1",
+                        "status"
+                      ]
+                    },
+                    "right": {
+                      "op": "literal",
+                      "value": "succeeded"
+                    }
+                  },
+                  {
+                    "op": "eq",
+                    "left": {
+                      "op": "ref",
+                      "path": [
+                        "nodes",
+                        "research",
+                        "r2",
+                        "status"
+                      ]
+                    },
+                    "right": {
+                      "op": "literal",
+                      "value": "succeeded"
+                    }
+                  },
+                  {
+                    "op": "eq",
+                    "left": {
+                      "op": "ref",
+                      "path": [
+                        "nodes",
+                        "research",
+                        "r3",
+                        "status"
+                      ]
+                    },
+                    "right": {
+                      "op": "literal",
+                      "value": "succeeded"
+                    }
+                  }
+                ]
+              },
+              "then": {
+                "op": "select",
+                "when": {
+                  "op": "all",
+                  "items": [
+                    {
+                      "op": "select",
+                      "when": {
+                        "op": "eq",
+                        "left": {
+                          "op": "ref",
+                          "path": [
+                            "nodes",
+                            "research",
+                            "r1",
+                            "status"
+                          ]
+                        },
+                        "right": {
+                          "op": "literal",
+                          "value": "succeeded"
+                        }
+                      },
+                      "then": {
+                        "op": "eq",
+                        "left": {
+                          "op": "ref",
+                          "path": [
+                            "nodes",
+                            "research",
+                            "r1",
+                            "value",
+                            "decision"
+                          ]
+                        },
+                        "right": {
+                          "op": "literal",
+                          "value": "complete"
+                        }
+                      },
+                      "otherwise": {
+                        "op": "literal",
+                        "value": false
+                      }
+                    },
+                    {
+                      "op": "select",
+                      "when": {
+                        "op": "eq",
+                        "left": {
+                          "op": "ref",
+                          "path": [
+                            "nodes",
+                            "research",
+                            "r2",
+                            "status"
+                          ]
+                        },
+                        "right": {
+                          "op": "literal",
+                          "value": "succeeded"
+                        }
+                      },
+                      "then": {
+                        "op": "eq",
+                        "left": {
+                          "op": "ref",
+                          "path": [
+                            "nodes",
+                            "research",
+                            "r2",
+                            "value",
+                            "decision"
+                          ]
+                        },
+                        "right": {
+                          "op": "literal",
+                          "value": "complete"
+                        }
+                      },
+                      "otherwise": {
+                        "op": "literal",
+                        "value": false
+                      }
+                    },
+                    {
+                      "op": "select",
+                      "when": {
+                        "op": "eq",
+                        "left": {
+                          "op": "ref",
+                          "path": [
+                            "nodes",
+                            "research",
+                            "r3",
+                            "status"
+                          ]
+                        },
+                        "right": {
+                          "op": "literal",
+                          "value": "succeeded"
+                        }
+                      },
+                      "then": {
+                        "op": "eq",
+                        "left": {
+                          "op": "ref",
+                          "path": [
+                            "nodes",
+                            "research",
+                            "r3",
+                            "value",
+                            "decision"
+                          ]
+                        },
+                        "right": {
+                          "op": "literal",
+                          "value": "complete"
+                        }
+                      },
+                      "otherwise": {
+                        "op": "literal",
+                        "value": false
+                      }
+                    }
+                  ]
+                },
+                "then": {
+                  "op": "select",
+                  "when": {
+                    "op": "eq",
+                    "left": {
+                      "op": "ref",
+                      "path": [
+                        "nodes",
+                        "aggregate",
+                        "decision"
+                      ]
+                    },
+                    "right": {
+                      "op": "literal",
+                      "value": "accepted"
+                    }
+                  },
+                  "then": {
+                    "op": "literal",
+                    "value": "Graph policy excluded acceptance: the synthesizer verdict is not finish authority."
+                  },
+                  "otherwise": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "aggregate",
+                      "reason"
+                    ]
+                  }
+                },
+                "otherwise": {
+                  "op": "literal",
+                  "value": "At least one researcher reported inconclusive; acceptance is excluded."
+                }
+              },
+              "otherwise": {
+                "op": "literal",
+                "value": "At least one research branch failed; collected envelopes are preserved and acceptance is excluded."
+              }
+            },
+            "reports": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "research"
+              ]
+            },
+            "synthesis": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "aggregate"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "main",
+      "edge": {
+        "from": "research",
+        "to": "aggregate"
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "main",
+      "edge": {
+        "from": "aggregate",
+        "to": "accepted",
+        "when": {
+          "op": "all",
+          "items": [
+            {
+              "op": "select",
+              "when": {
+                "op": "eq",
+                "left": {
+                  "op": "ref",
+                  "path": [
+                    "nodes",
+                    "research",
+                    "r1",
+                    "status"
+                  ]
+                },
+                "right": {
+                  "op": "literal",
+                  "value": "succeeded"
+                }
+              },
+              "then": {
+                "op": "eq",
+                "left": {
+                  "op": "ref",
+                  "path": [
+                    "nodes",
+                    "research",
+                    "r1",
+                    "value",
+                    "decision"
+                  ]
+                },
+                "right": {
+                  "op": "literal",
+                  "value": "complete"
+                }
+              },
+              "otherwise": {
+                "op": "literal",
+                "value": false
+              }
+            },
+            {
+              "op": "select",
+              "when": {
+                "op": "eq",
+                "left": {
+                  "op": "ref",
+                  "path": [
+                    "nodes",
+                    "research",
+                    "r2",
+                    "status"
+                  ]
+                },
+                "right": {
+                  "op": "literal",
+                  "value": "succeeded"
+                }
+              },
+              "then": {
+                "op": "eq",
+                "left": {
+                  "op": "ref",
+                  "path": [
+                    "nodes",
+                    "research",
+                    "r2",
+                    "value",
+                    "decision"
+                  ]
+                },
+                "right": {
+                  "op": "literal",
+                  "value": "complete"
+                }
+              },
+              "otherwise": {
+                "op": "literal",
+                "value": false
+              }
+            },
+            {
+              "op": "select",
+              "when": {
+                "op": "eq",
+                "left": {
+                  "op": "ref",
+                  "path": [
+                    "nodes",
+                    "research",
+                    "r3",
+                    "status"
+                  ]
+                },
+                "right": {
+                  "op": "literal",
+                  "value": "succeeded"
+                }
+              },
+              "then": {
+                "op": "eq",
+                "left": {
+                  "op": "ref",
+                  "path": [
+                    "nodes",
+                    "research",
+                    "r3",
+                    "value",
+                    "decision"
+                  ]
+                },
+                "right": {
+                  "op": "literal",
+                  "value": "complete"
+                }
+              },
+              "otherwise": {
+                "op": "literal",
+                "value": false
+              }
+            },
+            {
+              "op": "eq",
+              "left": {
+                "op": "ref",
+                "path": [
+                  "nodes",
+                  "aggregate",
+                  "decision"
+                ]
+              },
+              "right": {
+                "op": "literal",
+                "value": "accepted"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "main",
+      "edge": {
+        "from": "aggregate",
+        "to": "inconclusive"
+      }
+    }
+  ]
+}

@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, writeFile, chmod, rm, symlink } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, chmod, rm, symlink, cp, lstat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { prepareExecutionPlan, verifyExecutionPlan, type AvailableExecutionModel } from "../src/execution-plan.js";
 import { createOutputValidator, defaultOutputSchema } from "../src/output-schema.js";
 import type { AgentConfig } from "../src/catalog.js";
@@ -140,6 +141,39 @@ test("skills snapshot full directory, binary and executable files survives origi
     assert.deepEqual(verifyExecutionPlan(original), original);
   } finally { await rm(cwd, { recursive: true, force: true }); }
 });
+test("physical copy of the shipped skill snapshots referenced resources and stays frozen after the source is removed", async () => {
+  const cwd = await mkdtemp(join(tmpdir(), "dwf-shipped-skill-"));
+  const source = fileURLToPath(new URL("../skills/dynamic-workflows", import.meta.url));
+  const required = [
+    "SKILL.md", "references/authoring.md", "references/operations.md", "references/recovery.md",
+    "references/continuation.md", "references/providers.md", "references/usage.md",
+    "recipes/research-trio/README.md", "recipes/research-trio/create.json",
+    "recipes/research-trio/patch.json", "recipes/research-trio/input.json",
+  ];
+  try {
+    const skillDir = join(cwd, "dynamic-workflows");
+    await cp(source, skillDir, { recursive: true });
+    assert.equal((await lstat(skillDir)).isSymbolicLink(), false);
+    const captured = Object.fromEntries(await Promise.all(required.map(async path => [path, await readFile(join(skillDir, path))])));
+    const original = await prepareExecutionPlan(workflow({ skills: ["dynamic-workflows"] }), { ...options, cwd });
+    const snapshot = original.agents.main!.work!.skills[0]!;
+    assert.equal(snapshot.name, "dynamic-workflows");
+    const files = new Map(snapshot.files.map(file => [file.path, file]));
+    for (const path of required) {
+      const frozen = files.get(path);
+      assert.ok(frozen, path);
+      assert.equal(frozen.base64, captured[path]!.toString("base64"));
+    }
+    JSON.parse(Buffer.from(files.get("recipes/research-trio/create.json")!.base64, "base64").toString("utf8"));
+    JSON.parse(Buffer.from(files.get("recipes/research-trio/patch.json")!.base64, "base64").toString("utf8"));
+    JSON.parse(Buffer.from(files.get("recipes/research-trio/input.json")!.base64, "base64").toString("utf8"));
+    await writeFile(join(skillDir, "SKILL.md"), "---\nname: dynamic-workflows\ndescription: changed after freeze\n---\nchanged");
+    await rm(join(skillDir, "references"), { recursive: true });
+    await rm(join(skillDir, "recipes"), { recursive: true });
+    assert.deepEqual(verifyExecutionPlan(original), original);
+    for (const path of required) assert.equal(files.get(path)!.base64, captured[path]!.toString("base64"));
+  } finally { await rm(cwd, { recursive: true, force: true }); }
+});
 test("skills reject symlink resources, credential files and absent skill entry", async () => {
   const cwd = await mkdtemp(join(tmpdir(), "dwf-plan-"));
   try {
@@ -148,6 +182,9 @@ test("skills reject symlink resources, credential files and absent skill entry",
     await symlink(join(cwd, "skill", "SKILL.md"), join(cwd, "skill", "linked"));
     await assert.rejects(prepareExecutionPlan(workflow({ skills: ["skill"] }), { ...options, cwd }), /Symlink/);
     await rm(join(cwd, "skill", "linked"));
+    await symlink(join(cwd, "skill"), join(cwd, "skill-root-link"));
+    await assert.rejects(prepareExecutionPlan(workflow({ skills: ["skill-root-link"] }), { ...options, cwd }), /Symlink/);
+    await rm(join(cwd, "skill-root-link"));
     await writeFile(join(cwd, "skill", ".env"), "TEST_SECRET=not-a-real-secret");
     await assert.rejects(prepareExecutionPlan(workflow({ skills: ["skill"] }), { ...options, cwd }), /Credential/);
     await rm(join(cwd, "skill", ".env"));

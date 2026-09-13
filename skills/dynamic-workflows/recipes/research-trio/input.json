@@ -1,0 +1,26 @@
+{
+  "question": "Using only the supplied local sources, what does this workspace currently guarantee about independent parallel research, collect envelopes, and task acceptance?",
+  "criteria": [
+    "Cite inspected local files; do not invent web sources or catalog model availability.",
+    "Distinguish observed contracts from inference.",
+    "Return inconclusive when the supplied materials are insufficient for a complete answer."
+  ],
+  "sources": {
+    "paths": [
+      "REPLACE_WITH_LOCAL_SOURCE_PATH"
+    ],
+    "notes": "Researchers have read, grep, find and ls only. There is no web tool. Replace the path list with files that actually exist in the prepare cwd, or add materials you pass in this input."
+  },
+  "r1": {
+    "assignment": "R1_ONLY_ASSIGNMENT: Investigate isolation of independent research branches — what each branch receives as input, how fresh sessions are separated, and whether a sibling's output or assignment can appear in another branch."
+  },
+  "r2": {
+    "assignment": "R2_ONLY_ASSIGNMENT: Investigate collect envelopes — succeeded/failed shape, when value may be read, and which control failures (cancellation, cleanup, uncertain-effect) do not become branch data."
+  },
+  "r3": {
+    "assignment": "R3_ONLY_ASSIGNMENT: Investigate task acceptance — root finish/taskOutcome versus technical succeeded, and whether a synthesizer verdict can accept a failed or inconclusive research branch."
+  },
+  "synthesis": {
+    "assignment": "SYNTH_ONLY_ASSIGNMENT: Combine the three named collect envelopes. Preserve disagreements, uncertainties and failed envelopes. Decision accepted is only appropriate when every envelope succeeded and every report decision is complete; otherwise inconclusive with a nonempty reason. Your verdict is evidence for the graph, not authority to bypass its finish guards."
+  }
+}

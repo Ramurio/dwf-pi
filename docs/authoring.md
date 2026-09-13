@@ -5,40 +5,45 @@
 оркестрации агент не пишет.
 
 ```ts
-createDraft({ id: 'repair', name: 'Implement and review' })
-// revision: 1, entryGraph: 'main', пустой main с entry: 'start'
+createDraft({ id: 'research-trio', name: 'Three independent researchers and a synthesizer' })
+// revision: 1, entryGraph: 'main' уже создан; addGraph только для researcher-1/2/3
 
 applyPatch(draft, {
   expectedRevision: 1,
   operations: [
-    { op: 'addNode', graphId: 'main', node: {
-      id: 'implement', kind: 'agent', role: 'implementer',
-      task: { op: 'ref', path: ['input', 'task'] }
-    } },
-    { op: 'addNode', graphId: 'main', node: {
-      id: 'review', kind: 'agent', role: 'reviewer',
-      task: { op: 'literal', value: 'Review the supplied artifact revision' },
-      input: { op: 'ref', path: ['nodes', 'implement'] }
-    } },
-    { op: 'addNode', graphId: 'main', node: {
-      id: 'done', kind: 'end', value: { op: 'ref', path: ['nodes', 'review'] }
-    } },
-    { op: 'connect', graphId: 'main', edge: { from: 'implement', to: 'review' } },
-    { op: 'connect', graphId: 'main', edge: {
-      from: 'review', to: 'done', when: {
-        op: 'eq', left: { op: 'ref', path: ['nodes', 'review', 'decision'] },
-        right: { op: 'literal', value: 'approve' }
+    { op: 'addGraph', graphId: 'researcher-1' },
+    { op: 'addNode', graphId: 'researcher-1', node: {
+      id: 'investigate', kind: 'agent', role: 'researcher',
+      task: { op: 'ref', path: ['input', 'assignment'] },
+      input: { op: 'ref', path: ['input'] },
+      config: {
+        session: 'fresh', permission: 'read-only',
+        tools: ['read', 'grep', 'find', 'ls'], skills: []
+        // model.provider, model.id и thinking — из текущего catalog.models
       }
     } },
-    { op: 'connect', graphId: 'main', edge: { from: 'review', to: 'implement' } }
+    { op: 'addNode', graphId: 'main', node: {
+      id: 'research', kind: 'parallel', failurePolicy: 'collect',
+      children: [
+        { id: 'r1', graphId: 'researcher-1', input: { op: 'object', fields: {
+          question: { op: 'ref', path: ['input', 'question'] },
+          criteria: { op: 'ref', path: ['input', 'criteria'] },
+          sources: { op: 'ref', path: ['input', 'sources'] },
+          assignment: { op: 'ref', path: ['input', 'r1', 'assignment'] }
+        } } }
+        // r2, r3, synthesizer, finish accepted/inconclusive — в полном источнике
+      ]
+    } }
   ]
 })
-// { workflow: { ... revision: 2 }, validation: { valid: true, issues: [] } }
 ```
 
-Это иллюстрация data API, не отдельный способ запуска. В примере любой
-не-approve возвращается к исполнителю. Другую политику для inconclusive можно
-выразить отдельным conditional edge к исследованию/верификации.
+Это короткий фрагмент in-process data API, не полный рабочий цикл и не
+compile-ready/approval workflow: нет feedback-контракта, нет `artifactRevision`,
+нет корневого `finish`. Исполняемый источник — JSON authoring-запросы
+[research-trio](../skills/dynamic-workflows/recipes/research-trio/) в установленном
+skill (`create.json`, `patch.json`, `input.json` и `README.md`). Не развивайте здесь
+отдельный implementation/review workflow.
 
 Перед запуском проверьте `catalog.models` на effective capabilities и при необходимости
 задайте `config.requirements`. Снапшоты `config.skills` включают файлы выбранного skill,
