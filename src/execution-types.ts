@@ -3,8 +3,10 @@ import type { ExecutionFailureRecord } from "./execution-failure.js";
 import type { AgentConfig } from "./catalog.js";
 import type { Json, WorkflowDefinition } from "./graph.js";
 import type { TokenUsage } from "./usage.js";
-
-export const runtimeVersion = "dynamicwf-runtime-v7";
+import type { AdapterIdentityRecord } from "./adapter-identity.js";
+import type { AgentRequirements, FrozenCapabilities, ReasoningSnapshot } from "./capabilities.js";
+import { runtimeVersion, type RuntimeVersion } from "./compiler-versions.js";
+export { runtimeVersion };
 export interface SkillFileSnapshot { path: string; base64: string; executable: boolean }
 export interface SkillSnapshot { name: string; hash: string; files: SkillFileSnapshot[] }
 export interface FrozenAgent {
@@ -18,10 +20,15 @@ export interface FrozenAgent {
   outputSchema: Record<string, unknown>;
   /** Required since v4; absent in v1–v3 means disabled. */
   outputRepair?: NonNullable<AgentConfig["outputRepair"]>;
+  /** Required since v8; absent in v1–v7 means no frozen capability snapshot. */
+  requirements?: AgentRequirements;
+  capabilities?: FrozenCapabilities;
+  adapterIdentity?: AdapterIdentityRecord | null;
+  reasoning?: ReasoningSnapshot;
 }
 export interface ExecutionPlan {
   version: 1;
-  runtimeVersion: "dynamicwf-runtime-v1" | "dynamicwf-runtime-v2" | "dynamicwf-runtime-v3" | "dynamicwf-runtime-v4" | "dynamicwf-runtime-v5" | "dynamicwf-runtime-v6" | typeof runtimeVersion;
+  runtimeVersion: RuntimeVersion;
   compilerVersion: string;
   workflow: WorkflowDefinition;
   source: string;

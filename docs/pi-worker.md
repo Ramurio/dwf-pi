@@ -1,5 +1,7 @@
 # Isolated pi invocation
 
+Worker `read` results that contain images are wrapped before they enter the SDK transcript. Text-only or unknown-image routes return a recoverable tool error. Trusted request observations distinguish local not-dispatched failures from observed HTTP and abort.
+
 `src/pi-worker.ts` executes one graph agent invocation through the pinned, actual pi SDK. `src/pi-worker-process.ts` is the child entry point: one JSON `PiWorkerRequest` on stdin through EOF, NDJSON `ready`, curated `event`, then exactly one `result` or `error` on stdout. It accepts extra command-line identity metadata without interpreting it. Provider errors are not copied into the public protocol because they can contain request data or credentials.
 
 The worker uses pi's internal `ModelRuntime` for authentication; no credentials travel in the workflow request or result. It requires the exact authenticated provider/model from the frozen configuration. After session creation it verifies model, thinking and tool allowlist: unsupported thinking levels fail instead of silently accepting pi's clamp. Tests inject a `ModelRuntime` with a deterministic transport; the session, tool loop, event lifecycle and persistence remain real pi.

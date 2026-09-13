@@ -13,11 +13,15 @@ import { RunStore, type RunRecord, type PreparedStart, type ActivationRecord } f
 import { projectRun } from "./observation.js";
 import { groupMembers, processGroups, type GroupProcess } from "./process-groups.js";
 import { observeRecoveryFiles, recoveryGitDirectories } from "./recovery-files.js";
-import { recoveryBlockers, recoveryCheckpoint, recoveryOutputContract, recoveryRoots } from "./recovery-inspection.js";
+import { continuationGitBlocker, inspectUncertainWriterGit, recoveryBlockers, recoveryCheckpoint, recoveryOutputContract, recoveryRoots } from "./recovery-inspection.js";
 import { isDeepStrictEqual } from "node:util";
 import { parseOperation } from "./operation-record.js";
 import { GitWorkspaces, parseWorkspaceSources } from "./workspaces.js";
 import { parseReconciliationRequest, sameReconciliation, validateReconciledOutput } from "./reconciliation.js";
+import {
+  ancestrySet, canonicalContinuationRequest, continuationKind, continuationWriterBlockers, digestJson, matchReuseBindings, resolveReuseBinding, sourceActivationSchema, unknownWriterActivations,
+  type ContinuationBlocker, type ContinuationRequest,
+} from "./lineage.js";
 
 export interface UnresolvedWorkerGroup { key: string; attempt: number; groupPid: number; ownership: "unverified"; processes: GroupProcess[] }
 
@@ -108,7 +112,72 @@ export class RunController {
     await this.launch(id, true);
     return this.store.get(id);
   }
+  private async observeContinuationWorkspace(id: string) {
+    const state = this.store.recoveryState(id);
+    const roots = state.activations.length ? [...new Set(state.activations.flatMap(activation => recoveryRoots(state.run, activation)))] : [state.run.cwd];
+    const gitDirectories = (await Promise.all(roots.map(recoveryGitDirectories))).flat();
+    const journal = await realpath(this.filename);
+    return observeRecoveryFiles([...roots, ...gitDirectories], [...new Set([this.filename, journal])].flatMap(path => [path, path + "-wal", path + "-shm"]).concat(this.directory(id), join(dirname(this.filename), "runs")));
+  }
+  private continuationWriterStarted(id: string): boolean {
+    return this.store.listActivations(id).some(activation => activation.sideEffect);
+  }
+  private continuationLaunchable(id: string, initialOnly: boolean): boolean {
+    const run = this.store.get(id);
+    if (this.store.fence(id)) return false;
+    return (initialOnly ? ["queued"] : ["queued", "interrupted"]).includes(run.status) && run.desired === "running" && run.ownerToken === null;
+  }
+  private async continuationGitBlockers(id: string): Promise<ContinuationBlocker[]> {
+    const activations = this.store.listActivations(id);
+    const git = new GitWorkspaces(id, this.directory(id));
+    const blockers: ContinuationBlocker[] = [];
+    for (const record of unknownWriterActivations(activations)) {
+      if (!parseOperation(record.metadata.operation)) {
+        blockers.push({ code: "missing-operation", key: record.key, message: "Missing operation evidence stops continuation; inspect the original attempt instead of inventing an output." });
+        continue;
+      }
+      try { await inspectUncertainWriterGit(git, record, activations); }
+      catch (error) { blockers.push(continuationGitBlocker(record, error)); }
+    }
+    return blockers;
+  }
+  private async assertContinuationWorkspace(id: string): Promise<void> {
+    const receipt = this.store.receiptForTarget(id);
+    if (!receipt || this.continuationWriterStarted(id)) return;
+    const gitBlockers = await this.continuationGitBlockers(receipt.sourceRunId);
+    if (gitBlockers.length) throw new Error(`Continuation is blocked: ${gitBlockers.map(item => item.code).join(", ")}`);
+    const observed = await this.observeContinuationWorkspace(receipt.sourceRunId);
+    if (observed.digest !== receipt.workspaceDigest) throw new Error("Workspace files changed after continuation inspection");
+  }
+  private originalProducer(runId: string, activation: ActivationRecord) {
+    let currentRunId = runId, current = activation;
+    const seen = new Set<string>();
+    while (current.kind === "reuse") {
+      const identity = `${currentRunId}:${current.key}:${current.attempt}`;
+      if (seen.has(identity)) throw new Error("Reuse producer cycle");
+      seen.add(identity);
+      const run = this.store.get(currentRunId);
+      const node = run.plan.workflow.graphs[current.context.graphId]?.nodes.find(item => item.id === current.context.nodeId);
+      const bindingId = node?.kind === "reuse" ? node.bindingId : undefined;
+      const stored = bindingId ? this.store.reusedBinding(currentRunId, bindingId) : undefined;
+      const meta = current.metadata.reused;
+      const producerRunId = stored?.producerRunId ?? (meta && typeof meta === "object" && !Array.isArray(meta) && typeof meta.producerRunId === "string" ? meta.producerRunId : "");
+      const producerKey = stored?.producerKey ?? (meta && typeof meta === "object" && !Array.isArray(meta) && typeof meta.producerKey === "string" ? meta.producerKey : "");
+      const producerAttempt = stored?.producerAttempt ?? (meta && typeof meta === "object" && !Array.isArray(meta) && typeof meta.producerAttempt === "number" ? meta.producerAttempt : 0);
+      if (!producerRunId || !producerKey || producerAttempt < 1) throw new Error("Reuse producer identity is missing");
+      const producerAct = this.store.getActivation(producerRunId, producerKey);
+      if (!producerAct || producerAct.status !== "succeeded" || producerAct.attempt !== producerAttempt || producerAct.output === undefined) {
+        throw new Error("Original producer output is missing or not succeeded");
+      }
+      if (current.output !== undefined && !isDeepStrictEqual(current.output, producerAct.output)) throw new Error("Reuse node output does not match original producer");
+      currentRunId = producerRunId; current = producerAct;
+    }
+    const producerRun = this.store.get(currentRunId);
+    const schema = recoveryOutputContract(producerRun, current) ?? producerRun.plan.agents[current.context.graphId]?.[current.context.nodeId]?.outputSchema ?? null;
+    return { runId: currentRunId, key: current.key, attempt: current.attempt, graphId: current.context.graphId, nodeId: current.context.nodeId, output: current.output!, schema };
+  }
   private async launch(id: string, initialOnly = false): Promise<void> {
+    if (this.continuationLaunchable(id, initialOnly)) await this.assertContinuationWorkspace(id);
     let token: string;
     try { token = this.store.reserveLaunch(id, initialOnly).token; }
     catch (error) {
@@ -179,6 +248,7 @@ export class RunController {
     return { run, supervisorAlive, workersAlive, unresolvedGroups };
   }
   async control(id: string, command: "pause" | "resume" | "cancel"): Promise<RunRecord> {
+    if (command === "resume") await this.assertContinuationWorkspace(id);
     const observed = this.observe(id);
     let run = this.store.requestControl(id, command);
     if (command === "cancel" && !observed.supervisorAlive) {
@@ -245,7 +315,12 @@ export class RunController {
         const allocating = selected.metadata.workspacePhase === "allocating" && !state.activations.some(a => a.key !== selected.key && operation.childScope.every((part, index) => a.context.scope[index] === part));
         const workspace = request.action === "retry" && allocating
           ? (await git.inspectAllocationRecovery(operation.source, selected.key, selected.metadata.workspace)).allocation
-          : await git.inspectWorktree(operation.source, selected.key, selected.metadata.workspace, request.action === "accept");
+          : await git.inspectWorktree(operation.source, selected.key, selected.metadata.workspace, request.action === "accept" || selected.metadata.workspacePhase === "complete");
+        if (selected.metadata.workspacePhase === "complete") {
+          const recorded = selected.metadata.workspace as Record<string, Json>;
+          if (typeof recorded.head !== "string") throw new Error("Recorded completed workspace head is missing");
+          if (!("head" in workspace) || workspace.head !== recorded.head) throw new Error("Workspace head changed after recorded completion");
+        }
         if (request.action === "accept") {
           const completed = state.activations.find(a => ["end", "finish"].includes(a.kind) && a.status === "succeeded" && isDeepStrictEqual(a.context.scope, operation.childScope));
           const result = Object.hasOwn(operation, "childResult") ? operation.childResult! : completed?.output;
@@ -262,4 +337,115 @@ export class RunController {
     }
     return this.store.recordReconciliation(request, inspection.workspace!);
   }
+  /** Inspect a stopped run for continuation. Inspection authorizes nothing. */
+  async continuationInspect(id: string) {
+    const observed = this.observe(id), state = this.store.recoveryState(id);
+    const fence = this.store.fence(id);
+    const blockers: ContinuationBlocker[] = [];
+    if (observed.supervisorAlive || observed.workersAlive) blockers.push({ code: "live-processes", message: "Execution processes are still alive." });
+    if (observed.unresolvedGroups.length) blockers.push({ code: "unresolved-groups", message: "Process groups require inspection before continuation." });
+    if (observed.run.ownerToken) blockers.push({ code: "live-owner", message: "Source still has an execution owner or pending launch reservation." });
+    if (fence) blockers.push({ code: "successor-admitted", message: `Source already has an admitted continuation: ${fence.successorRunId}` });
+    const checkpoint = recoveryCheckpoint(state.run, state.activations, state.collections, state.eventSeq);
+    let workspace: Awaited<ReturnType<typeof observeRecoveryFiles>> | null = null;
+    if (!blockers.length) {
+      workspace = await this.observeContinuationWorkspace(id);
+      const current = this.observe(id), final = this.store.recoveryState(id);
+      if (current.supervisorAlive || current.workersAlive || current.unresolvedGroups.length || current.run.ownerToken ||
+        recoveryCheckpoint(final.run, final.activations, final.collections, final.eventSeq) !== checkpoint) {
+        throw new Error("Run changed during continuation inspection; inspect again");
+      }
+    }
+    blockers.push(...await this.continuationGitBlockers(id));
+    const membership = this.store.membership(id);
+    const task = membership ? this.store.task(membership.taskId) : null;
+    const members = membership ? this.store.taskMembers(membership.taskId) : [];
+    const reusable = state.activations.filter(record => record.status === "succeeded" && record.output !== undefined).map(record => {
+      const reused = record.metadata.reused;
+      const producer = reused && typeof reused === "object" && !Array.isArray(reused) && typeof reused.producerRunId === "string"
+        ? { runId: String(reused.producerRunId), key: String(reused.producerKey), attempt: Number(reused.producerAttempt), graphId: String(reused.producerGraphId ?? record.context.graphId), nodeId: String(reused.producerNodeId ?? record.context.nodeId) }
+        : { runId: id, key: record.key, attempt: record.attempt, graphId: record.context.graphId, nodeId: record.context.nodeId };
+      const sourceSchema = sourceActivationSchema(state.run, record) ?? recoveryOutputContract(state.run, record);
+      let producerSchema: Record<string, unknown> | null = record.kind === "reuse" ? null : sourceSchema;
+      if (record.kind === "reuse") {
+        try { producerSchema = this.originalProducer(id, record).schema; }
+        catch { producerSchema = null; }
+      }
+      return {
+        key: record.key, attempt: record.attempt, graphId: record.context.graphId, nodeId: record.context.nodeId, kind: record.kind,
+        outputDigest: digestJson(record.output),
+        schemaDigest: sourceSchema ? digestJson(sourceSchema) : null,
+        producerSchemaDigest: producerSchema ? digestJson(producerSchema) : null,
+        producer, artifactRevision: outputField(record.output, "artifactRevision"), acceptanceCriteriaRevision: outputField(record.output, "acceptanceCriteriaRevision"),
+      };
+    });
+    return {
+      version: 1 as const, runId: id, planHash: state.run.plan.hash, checkpoint, status: state.run.status, desired: state.run.desired,
+      eventSeq: state.eventSeq, observedAt: Date.now(), blockers, workspace,
+      workflow: { id: state.run.plan.workflow.id, name: state.run.plan.workflow.name, revision: state.run.plan.workflow.revision },
+      preparedId: state.run.preparedId ?? null,
+      lineage: membership && task ? { taskId: task.id, rootRunId: task.rootRunId, creationKind: task.creationKind, members, successorRunId: fence?.successorRunId ?? null, launchedWithTask: membership.launchedWithTask } : null,
+      reusable,
+      writerEffects: state.activations.filter(record => record.sideEffect && record.status !== "succeeded").map(record => ({
+        key: record.key, attempt: record.attempt, kind: record.kind, operation: Boolean(record.metadata.operation),
+        effects: record.metadata.failure && typeof record.metadata.failure === "object" && !Array.isArray(record.metadata.failure) ? record.metadata.failure.effects ?? "unknown" : "unknown",
+      })),
+      processes: { supervisorAlive: observed.supervisorAlive, workersAlive: observed.workersAlive, unresolvedGroups: observed.unresolvedGroups, launchPending: observed.run.ownerToken !== null && observed.run.supervisorPid === null && !observed.supervisorAlive },
+      facts: "Machine-verified facts are checkpoint, plan hash, output identity and filesystem digest. Actor evidence is attestation, not proof of no outside effects.",
+    };
+  }
+  async continuePrepared(request: ContinuationRequest, plan: ExecutionPlan, cwd: string): Promise<RunRecord> {
+    const start = { preparedId: request.preparedId, idempotencyKey: request.idempotencyKey, operation: continuationKind };
+    const canonical = canonicalContinuationRequest(request);
+    const existing = this.store.findStart(start, request.input, canonical);
+    if (existing) return this.completeStart(existing.id);
+    const verified = verifyExecutionPlan(plan);
+    if (preparedExecutionId(verified.hash, cwd) !== request.preparedId) throw new Error("Prepared start identity mismatch");
+    const workspace = await executionWorkspace(cwd);
+    if (workspace !== cwd) throw new Error("Prepared workspace now resolves to a different directory; prepare again");
+    const inspect = async () => {
+      const result = await this.continuationInspect(request.source.runId);
+      if (result.blockers.length) throw new Error(`Continuation is blocked: ${result.blockers.map(item => item.code).join(", ")}`);
+      if (result.checkpoint !== request.source.checkpoint || result.planHash !== request.source.planHash) throw new Error("Source checkpoint or plan changed; inspect again");
+      if (!result.workspace || result.workspace.digest !== request.workspaceDigest) throw new Error("Continuation workspace digest missing or changed; inspect again");
+      return result;
+    };
+    const existingAfterRace = (error: unknown) => {
+      const again = this.store.findStart(start, request.input, canonical);
+      if (again) return again;
+      throw error;
+    };
+    let inspection;
+    try { inspection = await inspect(); }
+    catch (error) { return this.completeStart(existingAfterRace(error).id); }
+    const writerBlockers = continuationWriterBlockers(this.store.listActivations(request.source.runId), request.dispositions);
+    if (writerBlockers.length) throw new Error(`Continuation is blocked: ${writerBlockers.map(item => item.code).join(", ")}`);
+    const gitBlockers = await this.continuationGitBlockers(request.source.runId);
+    if (gitBlockers.length) throw new Error(`Continuation is blocked: ${gitBlockers.map(item => item.code).join(", ")}`);
+    const pairs = matchReuseBindings(verified, request.reuse);
+    const sourceMember = this.store.membership(request.source.runId);
+    const members = sourceMember ? this.store.taskMembers(sourceMember.taskId) : [];
+    const ancestors = members.length ? ancestrySet(members, request.source.runId) : new Set([request.source.runId]);
+    const reused = pairs.map(({ target, binding }) => {
+      if (!ancestors.has(binding.sourceRunId)) throw new Error(`Reuse source is not an allowed ancestor: ${binding.bindingId}`);
+      const sourceRun = this.store.get(binding.sourceRunId);
+      const sourceActivation = this.store.getActivation(binding.sourceRunId, binding.activationKey);
+      if (!sourceActivation) throw new Error(`Missing reuse source activation: ${binding.bindingId}`);
+      const producer = this.originalProducer(binding.sourceRunId, sourceActivation);
+      return resolveReuseBinding({ binding, target, sourceRun, sourceActivation, sourcePlanHash: sourceRun.plan.hash, input: request.input, producer });
+    });
+    try { inspection = await inspect(); }
+    catch (error) { return this.completeStart(existingAfterRace(error).id); }
+    const paused = inspection.desired === "paused" || inspection.status === "paused";
+    let run;
+    try {
+      run = this.store.createContinuation({
+        id: `run-${randomUUID()}`, plan: verified, cwd: workspace, start, request, reused, paused,
+      });
+    } catch (error) { run = existingAfterRace(error); }
+    return this.completeStart(run.id);
+  }
+}
+function outputField(value: Json | undefined, field: string): string | undefined {
+  return value && typeof value === "object" && !Array.isArray(value) && typeof value[field] === "string" ? value[field] : undefined;
 }

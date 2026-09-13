@@ -22,4 +22,5 @@ export interface WorkflowRuntime {
   check(context: RuntimeContext, node: Extract<Node, { kind: "check" }>): Effect.Effect<Json, Error>;
   finish(context: RuntimeContext, node: Extract<Node, { kind: "finish" }>, reason: Json, evidence: Json, value: Json): Effect.Effect<Json, Error>;
   wait(context: RuntimeContext, node: Extract<Node, { kind: "await" }>, reason: Json, input: Json): Effect.Effect<Json, Error>;
+  reuse(context: RuntimeContext, node: Extract<Node, { kind: "reuse" }>): Effect.Effect<Json, Error>;
 }

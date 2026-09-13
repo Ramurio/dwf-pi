@@ -67,6 +67,7 @@ function recorder(agent?: WorkflowRuntime["agent"], check?: WorkflowRuntime["che
     check: check ?? (() => Effect.fail(new Error("Unexpected check node"))),
     finish: (_context, _node, _reason, _evidence, value) => Effect.succeed(value),
     wait: () => Effect.fail(new Error("Unexpected await node")),
+    reuse: () => Effect.fail(new Error("Unexpected reuse node")),
   };
   return { runtime, steps };
 }
@@ -209,6 +210,24 @@ test("canonical source and hash are stable; code-looking strings and prototype k
   assert.equal(Object.hasOwn(globalThis, "compromised"), false);
 });
 
+test("reuse nodes compile on v9, call runtime.reuse without agents, and are rejected by v8", async (t) => {
+  const workflow = definition({ main: { entry: "prior", nodes: [
+    { id: "prior", kind: "reuse", bindingId: "planner", outputSchema: { type: "object", properties: { result: {} }, required: ["result"], additionalProperties: false } },
+    { id: "done", kind: "end", value: ref("nodes", "prior") },
+  ], edges: [{ from: "prior", to: "done" }] } });
+  assert.throws(() => compileWorkflow(workflow, "dynamicwf-effect-v8"), /reuse nodes require compiler v9/);
+  const compiled = await load(t, workflow);
+  let reuseCalls = 0;
+  const r = recorder();
+  r.runtime.reuse = (_context, node) => {
+    reuseCalls++;
+    assert.equal(node.bindingId, "planner");
+    return Effect.succeed({ result: "frozen-output" });
+  };
+  assert.deepEqual(await Effect.runPromise(compiled.run(r.runtime, null)), { result: "frozen-output" });
+  assert.equal(reuseCalls, 1);
+  assert.equal(r.steps.length, 2);
+});
 test("invalid graphs fail compilation and non-string agent task fails without invoking runtime.agent", async (t) => {
   assert.throws(() => compileWorkflow({}), /schemaVersion|entryGraph|graphs/);
   const workflow = definition({ main: { entry: "work", nodes: [

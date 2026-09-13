@@ -47,6 +47,7 @@ function runtime(results: Record<Perspective, Vote>, onCall?: (perspective: Pers
     finish: (_context, _node, _reason, _evidence, value) => Effect.succeed(value),
     route: (context, edges, scope) => Effect.try(() => chooseEdge(context.nodeId, edges, scope)),
     wait: () => Effect.fail(new Error("Unexpected await node")),
+    reuse: () => Effect.fail(new Error("Unexpected reuse node")),
     step(_context, work) { return Effect.suspend(work); },
     agent(_context, _node, task, input) {
       return Effect.sync(() => {

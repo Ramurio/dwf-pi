@@ -27,6 +27,7 @@ export type Node = { id: string } & (
   | { kind: "map"; graphId: string; items: Expr; concurrency?: number; failurePolicy?: "fail-fast" | "collect" }
   | { kind: "parallel"; children: { id: string; graphId: string; input: Expr }[]; concurrency?: number; failurePolicy?: "fail-fast" | "collect" }
   | { kind: "check"; command: string; args: string[]; cwd?: string; retryPolicy?: RetryPolicy }
+  | { kind: "reuse"; bindingId: string; outputSchema: Record<string, unknown> }
 );
 export interface Edge { from: string; to: string; when?: Expr }
 export interface Graph { entry: string; nodes: Node[]; edges: Edge[] }
@@ -63,6 +64,7 @@ const definitions = {
     node("map", { graphId: id, items: expr, concurrency: Type.Optional(positiveInt), failurePolicy: Type.Optional(Type.Enum(["fail-fast", "collect"])) }),
     node("parallel", { children: Type.Array(Type.Object({ id, graphId: id, input: expr }, closed), { minItems: 1 }), concurrency: Type.Optional(positiveInt), failurePolicy: Type.Optional(Type.Enum(["fail-fast", "collect"])) }),
     node("check", { command: Type.String({ minLength: 1, pattern: "^[^\\u0000]+$" }), args: Type.Array(Type.String({ pattern: "^[^\\u0000]*$" })), cwd: Type.Optional(Type.String({ minLength: 1, pattern: "^[^\\u0000]+$" })), retryPolicy: Type.Optional(RetryPolicySchema) }),
+    node("reuse", { bindingId: id, outputSchema: Type.Record(Type.String(), Type.Unknown()) }),
   ]),
   Graph: Type.Object({ entry: id, nodes: Type.Array(Type.Ref("Node"), { minItems: 1 }), edges: Type.Array(Type.Object({ from: id, to: id, when: Type.Optional(expr) }, closed)) }, closed),
   Workflow: Type.Object({ schemaVersion: Type.Literal(1), id, name: Type.String({ minLength: 1 }), revision: positiveInt, entryGraph: id, graphs: Type.Record(id, Type.Ref("Graph"), { minProperties: 1, additionalProperties: false }) }, closed),
@@ -136,6 +138,10 @@ export function validateWorkflow(value: unknown): ValidationResult {
         try { createOutputValidator(item.responseSchema); }
         catch (error) { add(`${path}.responseSchema`, error instanceof Error ? error.message : "Invalid response schema"); }
       }
+      if (item.kind === "reuse") {
+        try { createOutputValidator(item.outputSchema); }
+        catch (error) { add(`${path}.outputSchema`, error instanceof Error ? error.message : "Invalid reuse output schema"); }
+      }
     }
     for (const target of refs) if (!graphIds.has(target)) add(base, `Referenced graph does not exist: ${target}`);
     const next = new Map<string, Set<string>>();
@@ -176,6 +182,14 @@ export function validateWorkflow(value: unknown): ValidationResult {
   for (const graphId of graphIds) visit(graphId, []);
   const reachableGraphs = walk([value.entryGraph], dependencies);
   for (const graphId of graphIds) if (!reachableGraphs.has(graphId)) add(`$.graphs.${graphId}`, "Graph is not referenced from entryGraph");
+  const bindingIds = new Set<string>();
+  for (const [graphId, graph] of Object.entries(value.graphs)) {
+    for (const [i, item] of graph.nodes.entries()) {
+      if (item.kind !== "reuse") continue;
+      if (bindingIds.has(item.bindingId)) add(`$.graphs.${graphId}.nodes[${i}].bindingId`, `Duplicate reuse binding: ${item.bindingId}`);
+      bindingIds.add(item.bindingId);
+    }
+  }
   return issues.length ? { valid: false, issues } : { valid: true, issues: [] };
 }
 function walk(starts: string[], adjacency: Map<string, Set<string>>): Set<string> {
@@ -200,6 +214,7 @@ function expressions(node: Node): Expr[] {
     case "map": return [node.items];
     case "parallel": return node.children.map((child) => child.input);
     case "check": return [];
+    case "reuse": return [];
   }
 }
 function inspectExpr(expr: Expr, nodes: Map<string, Node>, path: string, add: (path: string, message: string) => void): void {

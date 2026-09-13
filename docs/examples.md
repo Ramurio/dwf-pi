@@ -1,5 +1,10 @@
 # Four-perspective reviewer council
 
+This remains a small, complete authoring example. Do not add continuation, reuse or
+capability-requirement ceremony here. For a later revision of a real task, inspect
+with `run.continuation.inspect` and create a successor through `run.continue` instead
+of copying saved JSON into a new unrelated start.
+
 The files in `examples/` are authoring requests and run input, not scheduler code:
 
 - `council.create.json` creates the draft `review-council`.

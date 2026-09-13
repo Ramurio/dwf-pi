@@ -18,6 +18,16 @@ test("authoring validates await contracts and all finish expression roots before
   assert.throws(() => applyPatch(draft(), { expectedRevision: 1, operations: [add({ ...wait, responseSchema: { type: "string" } })] }), /object/);
 });
 
+test("authoring accepts reuse nodes with strict output schemas", () => {
+  const reuse: Node = { id: "prior", kind: "reuse", bindingId: "planner", outputSchema: { type: "object", properties: { result: {} }, required: ["result"], additionalProperties: false } };
+  const result = applyPatch(draft(), { expectedRevision: 1, operations: [
+    { op: "addNode", graphId: "main", node: reuse },
+    { op: "addNode", graphId: "main", node: { id: "done", kind: "end", value: { op: "ref", path: ["nodes", "prior"] } } },
+    { op: "connect", graphId: "main", edge: { from: "prior", to: "done" } },
+  ] });
+  assert.equal(result.validation.valid, true);
+  assert.throws(() => applyPatch(draft(), { expectedRevision: 1, operations: [{ op: "addNode", graphId: "main", node: { ...reuse, outputSchema: { type: "string" } } }] }), /object/);
+});
 test("builds a review loop entirely through graph operations and reports readiness", () => {
   let workflow = draft();
   assert.equal(workflow.revision, 1);

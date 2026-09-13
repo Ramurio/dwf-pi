@@ -1,6 +1,6 @@
 # Model discovery and local diagnosis
 
-`catalog.models` (`catalog_models` over MCP) returns `{ models, issues }`. Each model has concrete `provider`, `id` and supported pi `thinkingLevels`. Default discovery uses local cached authenticated catalogs and does not start inference or refresh model catalogs over the network. `{ "refresh": true }` explicitly refreshes the authenticated Grok catalog. Subscription labels such as Heavy are not substitutes for actual model IDs. Inspect `issues`, especially stale or missing Grok catalog data.
+`catalog.models` (`catalog_models` over MCP) returns `{ models, issues }`. Each model has concrete `provider`, `id`, supported pi `thinkingLevels`, and separate raw vs effective input/tool-result capabilities. Missing modality metadata is `unknown`, not an empty denial. Default discovery uses local cached authenticated catalogs and does not start inference or refresh model catalogs over the network. `{ "refresh": true }` explicitly refreshes the authenticated Grok catalog. Subscription labels such as Heavy are not substitutes for actual model IDs. Inspect `issues`, especially stale or missing Grok catalog data.
 
 `system.doctor` (`system_doctor` over MCP) accepts optional `{ "cwd": "..." }`, relative to the service working directory or absolute. It returns the selected `cwd` and persistent `store`, individual checks, safe model IDs/catalog issues, and separate prerequisite readiness flags:
 

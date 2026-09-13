@@ -7,9 +7,21 @@ import { compileWorkflow, compilerVersion, type CompilerVersion } from "./compil
 import { assertParallelWriterIsolation } from "./workspaces.js";
 import { runtimeVersion, type ExecutionPlan, type FrozenAgent, type SkillSnapshot } from "./execution-types.js";
 import { assertJson, createOutputValidator, defaultOutputSchema } from "./output-schema.js";
+import { isCompatiblePlanPair, supportsFrozenCapabilities, supportsOutputRepair } from "./compiler-versions.js";
+import { parseAdapterIdentity } from "./adapter-identity.js";
+import {
+  noneAdapterCapabilities, parseAgentRequirements, parseFrozenCapabilities, parseReasoningSnapshot,
+  requirementsSatisfied, type FrozenCapabilities,
+} from "./capabilities.js";
 
 type Thinking = FrozenAgent["thinking"];
-export interface AvailableExecutionModel { provider: string; id: string; thinkingLevels: readonly Thinking[] }
+export interface AvailableExecutionModel {
+  provider: string;
+  id: string;
+  thinkingLevels: readonly Thinking[];
+  capabilities?: FrozenCapabilities;
+  adapterIdentity?: import("./adapter-identity.js").AdapterIdentityRecord | null;
+}
 export interface PrepareExecutionOptions {
   cwd: string;
   defaultModel?: { provider: string; id: string };
@@ -45,11 +57,19 @@ export async function prepareExecutionPlan(workflow: unknown, options: PrepareEx
       const skills: SkillSnapshot[] = [];
       for (const path of config.skills ?? []) skills.push(await snapshotSkill(path, options.cwd));
       if (new Set(skills.map((skill) => skill.name)).size !== skills.length) throw new Error(`Duplicate skill names at ${graphId}/${node.id}`);
+      const capabilities = structuredClone(model.capabilities ?? noneAdapterCapabilities());
+      const requirements = structuredClone(config.requirements ?? {});
+      if (!requirementsSatisfied(requirements, capabilities)) {
+        throw new Error(`Unsupported or unknown required image capability for ${model.provider}/${model.id}`);
+      }
       agents[graphId]![node.id] = {
         model: { provider: model.provider, id: model.id }, thinking,
         systemPrompt: config.systemPrompt!, tools: [...config.tools!], skills,
         session: config.session!, permission: config.permission!, outputSchema,
         outputRepair: structuredClone(config.outputRepair!),
+        requirements, capabilities,
+        adapterIdentity: model.adapterIdentity === undefined ? null : structuredClone(model.adapterIdentity),
+        reasoning: { available: [...model.thinkingLevels], requested: requestedThinking, resolved: thinking },
       };
     }
   }
@@ -70,14 +90,7 @@ export function verifyExecutionPlan(value: unknown): ExecutionPlan {
   assertJson(value);
   const plan = object(value, "execution plan");
   keys(plan, ["version", "runtimeVersion", "compilerVersion", "workflow", "source", "sourceHash", "agents", "hash"], "execution plan");
-  const compatible = plan.runtimeVersion === runtimeVersion && plan.compilerVersion === compilerVersion ||
-    plan.runtimeVersion === "dynamicwf-runtime-v6" && plan.compilerVersion === "dynamicwf-effect-v6" ||
-    plan.runtimeVersion === "dynamicwf-runtime-v5" && plan.compilerVersion === "dynamicwf-effect-v5" ||
-    plan.runtimeVersion === "dynamicwf-runtime-v4" && plan.compilerVersion === "dynamicwf-effect-v4" ||
-    plan.runtimeVersion === "dynamicwf-runtime-v3" && plan.compilerVersion === "dynamicwf-effect-v3" ||
-    plan.runtimeVersion === "dynamicwf-runtime-v2" && plan.compilerVersion === "dynamicwf-effect-v2" ||
-    plan.runtimeVersion === "dynamicwf-runtime-v1" && plan.compilerVersion === "dynamicwf-effect-v1";
-  if (plan.version !== 1 || !compatible) throw new Error("Unsupported execution plan/compiler/runtime version");
+  if (plan.version !== 1 || typeof plan.runtimeVersion !== "string" || typeof plan.compilerVersion !== "string" || !isCompatiblePlanPair(plan.runtimeVersion, plan.compilerVersion)) throw new Error("Unsupported execution plan/compiler/runtime version");
   const compiled = compileWorkflow(plan.workflow, plan.compilerVersion as CompilerVersion);
   if (plan.source !== compiled.source || plan.sourceHash !== compiled.hash) throw new Error("Execution plan compiled source or source hash mismatch");
   const agents = object(plan.agents, "agents");
@@ -85,7 +98,7 @@ export function verifyExecutionPlan(value: unknown): ExecutionPlan {
   for (const [graphId, graph] of Object.entries(compiled.workflow.graphs)) {
     const configs = object(agents[graphId], `agents.${graphId}`);
     keys(configs, graph.nodes.filter((node) => node.kind === "agent").map((node) => node.id), `agents.${graphId}`);
-    for (const [nodeId, value] of Object.entries(configs)) verifyAgent(value, `${graphId}/${nodeId}`, ["dynamicwf-runtime-v4", "dynamicwf-runtime-v5", "dynamicwf-runtime-v6", "dynamicwf-runtime-v7"].includes(String(plan.runtimeVersion)));
+    for (const [nodeId, value] of Object.entries(configs)) verifyAgent(value, `${graphId}/${nodeId}`, String(plan.runtimeVersion));
   }
   assertParallelWriterIsolation(compiled.workflow, agents as ExecutionPlan["agents"]);
   const { hash, ...data } = plan;
@@ -93,12 +106,20 @@ export function verifyExecutionPlan(value: unknown): ExecutionPlan {
   return freeze(structuredClone(plan)) as unknown as ExecutionPlan;
 }
 
-function verifyAgent(value: unknown, location: string, supportsRepair: boolean): void {
+function verifyAgent(value: unknown, location: string, runtime: string): void {
   const agent = object(value, location);
-  keys(agent, ["model", "thinking", "systemPrompt", "tools", "skills", "session", "permission", "outputSchema", ...(supportsRepair ? ["outputRepair"] : [])], location);
+  const frozen = supportsFrozenCapabilities(runtime);
+  const repair = supportsOutputRepair(runtime);
+  keys(agent, ["model", "thinking", "systemPrompt", "tools", "skills", "session", "permission", "outputSchema", ...(repair ? ["outputRepair"] : []), ...(frozen ? ["requirements", "capabilities", "adapterIdentity", "reasoning"] : [])], location);
   if (!Array.isArray(agent.skills)) throw new Error(`${location}: skills must be an array`);
+  if (frozen) {
+    if (!parseAgentRequirements(agent.requirements)) throw new Error(`${location}: invalid requirements`);
+    if (!parseFrozenCapabilities(agent.capabilities)) throw new Error(`${location}: invalid capabilities`);
+    if (agent.adapterIdentity !== null && !parseAdapterIdentity(agent.adapterIdentity)) throw new Error(`${location}: invalid adapter identity`);
+    if (!parseReasoningSnapshot(agent.reasoning)) throw new Error(`${location}: invalid reasoning snapshot`);
+  }
   // Reuse config validation with all frozen values supplied; role defaults cannot alter the snapshot.
-  const { skills, ...config } = agent;
+  const { skills, capabilities: _capabilities, adapterIdentity: _adapter, reasoning: _reasoning, ...config } = agent;
   resolveAgentConfig("general", { ...config, skills: [] } as AgentConfig);
   for (const key of ["model", "thinking", "systemPrompt", "tools", "session", "permission", "outputSchema"]) if (agent[key] === undefined) throw new Error(`${location}: missing ${key}`);
   createOutputValidator(object(agent.outputSchema, `${location}.outputSchema`));

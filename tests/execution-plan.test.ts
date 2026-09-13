@@ -32,7 +32,7 @@ function rehash<T extends { hash: string }>(value: T): T { const { hash: _, ...d
 test("output repair is explicit, closed and frozen; policy changes invalidate the plan hash", async () => {
   const original = workflow({ outputRepair: { mode: "submit-only", maxRounds: 3 } });
   const plan = await prepareExecutionPlan(original, options);
-  assert.equal(plan.runtimeVersion, "dynamicwf-runtime-v7");
+  assert.equal(plan.runtimeVersion, "dynamicwf-runtime-v9");
   assert.deepEqual(plan.agents.main!.work!.outputRepair, { mode: "submit-only", maxRounds: 3 });
   assert.ok(Object.isFrozen(plan.agents.main!.work!.outputRepair));
   const changed = structuredClone(plan); changed.agents.main!.work!.outputRepair = { mode: "disabled" };
@@ -61,6 +61,28 @@ test("golden v3 plan retains its exact source, hash and absent repair policy; ol
   assert.throws(() => verifyExecutionPlan(rehash(definition)), /requires compiler v4/);
 });
 
+test("golden v7 plan retains its exact source, hash and original agent keys without frozen capabilities", async () => {
+  const saved = JSON.parse(await readFile(new URL("./fixtures/legacy-v7-plan.json", import.meta.url), "utf8"));
+  const plan = verifyExecutionPlan(saved);
+  assert.equal(plan.hash, "cb0e10a004ada73cda3a09257365b79a35b40e39d579223cdfe2c3f5b8301c1a");
+  assert.equal(plan.runtimeVersion, "dynamicwf-runtime-v7");
+  assert.equal(plan.compilerVersion, "dynamicwf-effect-v7");
+  assert.equal(plan.source, saved.source);
+  assert.equal(plan.agents.main!.work!.capabilities, undefined);
+  assert.equal(plan.agents.main!.work!.adapterIdentity, undefined);
+  const extra = structuredClone(plan); extra.agents.main!.work!.capabilities = { raw: { input: { state: "unknown", provenance: "x" } }, effective: { input: { state: "unknown", provenance: "x" }, toolResult: { state: "unknown", provenance: "x" }, imageMimeTypes: [], adapterRevision: "none" } };
+  assert.throws(() => verifyExecutionPlan(rehash(extra)), /fields/);
+});
+test("golden v8 plan retains frozen capabilities and original keys without reuse semantics", async () => {
+  const saved = JSON.parse(await readFile(new URL("./fixtures/legacy-v8-plan.json", import.meta.url), "utf8"));
+  const plan = verifyExecutionPlan(saved);
+  assert.equal(plan.hash, "1b3df3fc5bce4d674e5d611ee98b835e21dfb89e832847f10983959f9359948a");
+  assert.equal(plan.runtimeVersion, "dynamicwf-runtime-v8");
+  assert.equal(plan.compilerVersion, "dynamicwf-effect-v8");
+  assert.equal(plan.source, saved.source);
+  assert.ok(plan.agents.main!.work!.capabilities);
+  assert.equal(plan.workflow.graphs.main!.nodes.some(node => node.kind === "reuse"), false);
+});
 test("plan freezes concrete model, role defaults, schema and generated code independently of caller", async () => {
   const original = workflow();
   const plan = await prepareExecutionPlan(original, options);

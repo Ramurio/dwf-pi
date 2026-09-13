@@ -74,6 +74,10 @@ persistent store path. Catalog/schema calls do not create a database.
 | `run.waits` | run `id` | Observed public state and durable wait records |
 | `run.trace` | run `id`, optional `after`, `limit` | Durable routing records, summary, plan hash and exclusive cursor |
 | `run.resolve` | run `id`, `waitId`, `response`, optional `resolvedBy` | Persisted answer and observed state; same-answer retry is idempotent |
+| `run.continuation.inspect` | source run `id` | Checkpoint, lineage, reusable outputs, writer-effect blockers and workspace digest. Authorizes nothing |
+| `run.continue` | `preparedId`, `idempotencyKey`, `source`, `actor`, `reason`, `evidence`, `workspaceDigest`, optional `input`, `reuse`, `dispositions` | New or idempotent continuation run public summary; reports the new run ID immediately |
+| `task.inspect` | task `id` | Linked runs, receipts and reused output identities. Does not launch work |
+| `task.usage` | task `id`, optional `after`, `limit` | Per-run and task SDK totals plus paged reports. Reuse adds no invocation; cost is not a subscription invoice |
 
 Completed summaries include `taskOutcome` independently of technical status/output.
 See [outcomes-and-waits.md](outcomes-and-waits.md) for resolution, pause and recovery.

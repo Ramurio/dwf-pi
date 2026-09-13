@@ -215,6 +215,7 @@ export class GitWorkspaces {
     if (accepted && !progress) throw new Error("Integration original checkpoint was not recorded");
     if (progress) {
       if (branch !== progress.branch) throw new Error("Integration target branch changed");
+      if (progress.phase === "complete" && progress.head !== head) throw new Error("Integration target head changed after recorded completion");
       await this.git(cwd, ["merge-base", "--is-ancestor", progress.originalHead, head], {});
     }
     for (const source of records) {

@@ -37,7 +37,10 @@ handles valid only during that service lifetime; detached start needs a file sto
 ## One key per intended run
 
 Choose and retain a unique `idempotencyKey` **before** sending start. Its namespace
-is the whole selected journal, not a client, draft or project. For example:
+is the whole selected journal, not a client, draft or project. `run.continue` uses
+the same key namespace and compares the full canonical continuation request, not
+only preparedId/input. A start key cannot later bind a continuation, and the reverse
+conflict fails without creating a run. For example:
 
 ```json
 {"preparedId":"prepared-<returned 64 hex characters>","idempotencyKey":"repair-issue-42-attempt-1","input":{"task":"Fix issue 42"}}

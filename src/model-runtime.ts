@@ -2,7 +2,9 @@ import { ExecutionFailure, executionFailure } from "./execution-failure.js";
 import { getAgentDir, ModelRuntime, type CreateModelRuntimeOptions } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import type { AvailableExecutionModel } from "./execution-plan.js";
-import type { XaiProviderOptions } from "./xai-provider.js";
+import type { XaiProviderOptions, SubscriptionProvider } from "./xai-provider.js";
+import { effectiveFromRaw, rawInputCapability, type FrozenCapabilities } from "./capabilities.js";
+import type { AdapterIdentityRecord } from "./adapter-identity.js";
 export interface WorkflowModelRuntimeOptions extends CreateModelRuntimeOptions {
   /** Auto registers only when xai-auth OAuth credentials are configured; false disables integration. */
   grok?: false | XaiProviderOptions;
@@ -35,6 +37,19 @@ export interface WorkflowCatalogOptions extends WorkflowModelRuntimeOptions {
   /** Explicit authenticated Grok network refresh; never enabled by startup/default discovery. */
   refresh?: boolean;
 }
+
+function catalogModel(model: { provider: string; id: string; input?: readonly string[]; reasoning?: boolean; inputProvenance?: string }, adapter: AdapterIdentityRecord | null): AvailableExecutionModel {
+  const provenance = typeof model.inputProvenance === "string" ? model.inputProvenance : Array.isArray(model.input) ? "model.input" : undefined;
+  const raw = rawInputCapability(Array.isArray(model.input) ? [...model.input] : undefined, provenance);
+  const capabilities: FrozenCapabilities = model.provider === "xai-auth"
+    ? effectiveFromRaw(raw, adapter, "xai-auth")
+    : effectiveFromRaw(raw, null, "native");
+  return {
+    provider: model.provider, id: model.id, thinkingLevels: getSupportedThinkingLevels(model as never),
+    capabilities, adapterIdentity: model.provider === "xai-auth" ? adapter : null,
+  };
+}
+
 export async function discoverWorkflowCatalog(options: WorkflowCatalogOptions = {}): Promise<{ models: AvailableExecutionModel[]; issues: string[] }> {
   const { refresh, ...runtimeOptions } = options;
   const issues: string[] = [];
@@ -44,11 +59,12 @@ export async function discoverWorkflowCatalog(options: WorkflowCatalogOptions = 
     if (result.aborted) issues.push("Grok authenticated catalog refresh cancelled");
     else if (result.errors.size) issues.push("Grok authenticated catalog refresh failed");
   }
-  const subscription = runtime.getRegisteredNativeProvider("xai-auth") as { catalogSource?: () => string } | undefined;
+  const subscription = runtime.getRegisteredNativeProvider("xai-auth") as (SubscriptionProvider & { adapterIdentity?: () => AdapterIdentityRecord }) | undefined;
   if (subscription?.catalogSource?.() === "curated-fallback") issues.push("Grok subscription has no authenticated catalog; explicitly refresh the model catalog");
   else if (subscription?.catalogSource?.() === "stale-cache") issues.push("Grok model IDs come from a stale authenticated cache; refresh to verify current account access");
   if (runtime.getError()) throw new Error("Authenticated pi model catalog discovery failed");
-  return { models: runtime.getAvailableSnapshot().map(model => ({ provider: model.provider, id: model.id, thinkingLevels: getSupportedThinkingLevels(model) })), issues };
+  const adapter = subscription?.adapterIdentity?.() ?? null;
+  return { models: runtime.getAvailableSnapshot().map(model => catalogModel(model as { provider: string; id: string; input?: readonly string[]; reasoning?: boolean; inputProvenance?: string }, model.provider === "xai-auth" ? adapter : null)), issues };
 }
 /** Authenticated, cache-only catalog for graph authoring and service discovery. */
 export async function discoverWorkflowModels(options: WorkflowModelRuntimeOptions = {}): Promise<AvailableExecutionModel[]> {

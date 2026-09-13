@@ -2,6 +2,8 @@ import type { ActivationRecord, RunRecord } from "./run-store.js";
 import type { CollectionRecord } from "./collection.js";
 import { parseOperation } from "./operation-record.js";
 import { recoveryDigest } from "./recovery-files.js";
+import { GitWorkspaces, parseWorkspaceSources } from "./workspaces.js";
+import type { ContinuationBlocker } from "./lineage.js";
 
 export interface RecoveryBlocker { code: string; message: string; key?: string; itemId?: string }
 const prefix = (path: readonly string[], start: readonly string[]) => start.length <= path.length && start.every((part, index) => path[index] === part);
@@ -58,4 +60,52 @@ export function recoveryOutputContract(run: RunRecord, activation: ActivationRec
   if (activation.kind === "worktree") return { type: "object", required: ["result", "workspace"], additionalProperties: false, properties: { result: {}, workspace } };
   if (activation.kind === "integrate") return { type: "object", required: ["workspace", "merged"], additionalProperties: false, properties: { workspace, merged: { type: "array", items: { type: "string" } } } };
   return null;
+}
+
+/** Read-only Git/operation evidence used by recovery and continuation. Never recovers, retries or mutates Git. */
+export async function inspectUncertainWriterGit(
+  git: GitWorkspaces,
+  activation: ActivationRecord,
+  activations: readonly ActivationRecord[],
+): Promise<void> {
+  const operation = parseOperation(activation.metadata.operation);
+  if (!operation) throw new Error("The actual operation was not recorded; historical inputs or paths cannot be reconstructed as evidence.");
+  if (operation.kind === "worktree") {
+    if (activation.metadata.workspace === undefined) throw new Error("No owned workspace allocation was recorded");
+    const allocating = activation.metadata.workspacePhase === "allocating"
+      && !activations.some(item => item.key !== activation.key && operation.childScope.every((part, index) => item.context.scope[index] === part));
+    if (allocating) {
+      const inspected = await git.inspectAllocationRecovery(operation.source, activation.key, activation.metadata.workspace);
+      if (inspected.mode !== "reattach") throw new Error("Missing child workspace is not attached at its recorded allocation");
+    } else {
+      await git.inspectWorktree(
+        operation.source,
+        activation.key,
+        activation.metadata.workspace,
+        activation.metadata.workspacePhase === "complete",
+      );
+    }
+    return;
+  }
+  if (operation.kind === "integrate") {
+    const owned = activations
+      .filter(item => item.kind === "worktree" && item.status === "succeeded" && item.output !== undefined)
+      .flatMap(item => parseWorkspaceSources([item.output!]));
+    await git.inspectIntegration(operation.target, operation.sources, owned, operation.progress, false);
+  }
+}
+
+export function continuationGitBlocker(activation: ActivationRecord, error: unknown): ContinuationBlocker {
+  const message = error instanceof Error ? error.message : String(error);
+  const errno = (error as NodeJS.ErrnoException).code;
+  if (activation.kind === "integrate" || /integration/i.test(message)) {
+    return { code: "invalid-integration", key: activation.key, message };
+  }
+  if (/unlocked allocation|registration requires inspection/i.test(message)) {
+    return { code: "locked-registration", key: activation.key, message };
+  }
+  if (errno === "ENOENT" || /no owned workspace|missing child workspace|not attached|no such file|cannot identify the exact owned/i.test(message)) {
+    return { code: "missing-child-workspace", key: activation.key, message };
+  }
+  return { code: "unresolved-worktree-ownership", key: activation.key, message };
 }

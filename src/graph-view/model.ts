@@ -5,6 +5,7 @@ import type { ActivationRecord, RunRecord, WaitRecord, RunStore } from "../run-s
 import { activationUsage, summarizeUsage } from "../usage.js";
 import { activationPath, type WorkerActivity } from "../monitor.js";
 import { activationState, projectRun } from "../observation.js";
+import { publicLineage } from "../lineage.js";
 
 /** Read-only projection: no owner tokens, prompts, credentials, session paths or raw logs. */
 export function graphSnapshot(
@@ -22,6 +23,7 @@ export function graphSnapshot(
     planHash: run.plan.hash,
     workflowRevision: run.plan.workflow.revision,
     preparedId: run.preparedId ?? null,
+    lineage: run.lineage ? publicLineage(run.lineage) : null,
     status: run.status,
     desired: run.desired,
     createdAt: run.createdAt,
@@ -63,8 +65,9 @@ export function graphSnapshot(
           failurePolicy: node.kind === "map" || node.kind === "parallel" ? node.failurePolicy ?? "fail-fast" : null,
           retryPolicy: node.kind === "agent" || node.kind === "check" ? node.retryPolicy ?? null : null,
           role: node.kind === "agent" ? node.role : null,
+          bindingId: node.kind === "reuse" ? node.bindingId : null,
           status,
-          model: config?.model ?? null,
+          model: node.kind === "reuse" ? null : config?.model ?? null,
           thinking: config?.thinking ?? null,
           children:
             node.kind === "parallel"
@@ -95,6 +98,7 @@ export function graphSnapshot(
             outputRepair: parseOutputRepairProgress(a.metadata.outputRepair),
             collectionSummary: a.metadata.collectionSummary ?? null,
             retry: parseRetryProgress(a.metadata.retry),
+            reused: parseReused(a),
             result: resultSummary(a),
             findings: findings(a),
           })),
@@ -127,6 +131,21 @@ function resultSummary(a: ActivationRecord): string | null {
   return bits.join(" · ") || null;
 }
 
+function parseReused(a: ActivationRecord) {
+  const reused = a.metadata.reused;
+  if (!reused || typeof reused !== "object" || Array.isArray(reused)) return a.kind === "reuse" ? { invocation: false } : null;
+  return {
+    bindingId: typeof reused.bindingId === "string" ? reused.bindingId : null,
+    sourceRunId: typeof reused.sourceRunId === "string" ? reused.sourceRunId : null,
+    sourceKey: typeof reused.sourceKey === "string" ? reused.sourceKey : null,
+    sourceAttempt: typeof reused.sourceAttempt === "number" ? reused.sourceAttempt : null,
+    outputDigest: typeof reused.outputDigest === "string" ? reused.outputDigest : null,
+    producerRunId: typeof reused.producerRunId === "string" ? reused.producerRunId : null,
+    producerKey: typeof reused.producerKey === "string" ? reused.producerKey : null,
+    producerAttempt: typeof reused.producerAttempt === "number" ? reused.producerAttempt : null,
+    invocation: reused.invocation === true,
+  };
+}
 function findings(a: ActivationRecord): string[] {
   const output = a.output;
   if (

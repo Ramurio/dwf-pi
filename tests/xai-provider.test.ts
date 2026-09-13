@@ -26,7 +26,13 @@ async function fixture(t: TestContext, id = "grok-test-entitled") {
 test("unsupported adapter package identity/version fails before helper import", async t => {
   const directory = await mkdtemp(join(tmpdir(), "dynamicwf-xai-version-")); t.after(() => rm(directory, { recursive: true, force: true }));
   await writeFile(join(directory, "package.json"), JSON.stringify({ name: "unrelated", version: "1.5.2" }));
-  await assert.rejects(createXaiSubscriptionProvider({ agentDirectory: directory, packageRoot: directory }), /identity\/version/);
+  await assert.rejects(createXaiSubscriptionProvider({ agentDirectory: directory, packageRoot: directory }), (error: unknown) => {
+    assert.ok(error instanceof ExecutionFailure);
+    assert.equal(error.failure.diagnostic?.subcode, "adapter-content-mismatch");
+    assert.equal(error.failure.diagnostic?.dispatch, "not-dispatched");
+    assert.doesNotMatch(error.failure.message, /unrelated|identity\/version|ENOENT/);
+    return true;
+  });
 });
 
 test("cache-only authenticated provider lists actual cached IDs without loading transport or touching fetch", { skip: !installed }, async t => {
@@ -38,7 +44,12 @@ test("cache-only authenticated provider lists actual cached IDs without loading 
   assert.deepEqual(runtime.getAvailableSnapshot().filter(m => m.provider === "xai-auth").map(m => m.id), [f.id]);
   assert.equal(globalThis.fetch, before);
   const models = await discoverWorkflowModels(f.options);
-  assert.deepEqual(models.filter(m => m.provider === "xai-auth"), [{ provider: "xai-auth", id: f.id, thinkingLevels: ["off", "minimal", "low", "medium", "high"] }]);
+  const grok = models.filter(m => m.provider === "xai-auth");
+  assert.equal(grok.length, 1); assert.equal(grok[0]!.id, f.id);
+  assert.deepEqual(grok[0]!.thinkingLevels, ["off", "minimal", "low", "medium", "high"]);
+  assert.equal(grok[0]!.capabilities?.raw.input.state, "unsupported");
+  assert.equal(grok[0]!.capabilities?.effective.input.state, "unsupported");
+  assert.equal(grok[0]!.adapterIdentity?.packageVersion, "1.5.2");
 });
 
 test("missing authenticated catalog never advertises curated fallback as account entitlement", { skip: !installed }, async t => {
@@ -155,10 +166,16 @@ test("missing optional Grok adapter preserves native Codex discovery but explici
   const options = { ...f.options, refreshOnCreate: true, grok: { ...f.options.grok, packageRoot: join(f.directory, "absent-adapter") } };
   const { discoverWorkflowCatalog } = await import("../src/model-runtime.js");
   const catalog = await discoverWorkflowCatalog(options);
-  assert.equal(catalog.issues.length, 1); assert.match(catalog.issues[0]!, /missing or unreadable/);
+  assert.equal(catalog.issues.length, 1); assert.match(catalog.issues[0]!, /reviewed pi-xai-oauth 1\.5\.2/);
+  assert.doesNotMatch(catalog.issues[0]!, /absent-adapter|ENOENT|missing or unreadable/);
   assert.ok(catalog.models.some(model => model.provider === "openai-codex"));
   assert.ok(catalog.models.every(model => model.provider !== "xai-auth"));
-  await assert.rejects(createWorkflowModelRuntime({ ...options, requiredProvider: "xai-auth" }), /missing or unreadable/);
+  await assert.rejects(createWorkflowModelRuntime({ ...options, requiredProvider: "xai-auth" }), (error: unknown) => {
+    assert.ok(error instanceof ExecutionFailure);
+    assert.equal(error.failure.diagnostic?.subcode, "adapter-content-mismatch");
+    assert.doesNotMatch(error.failure.message, /absent-adapter|ENOENT/);
+    return true;
+  });
   assert.ok(await createWorkflowModelRuntime({ ...options, requiredProvider: "openai-codex" }));
 });
 

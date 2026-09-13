@@ -390,6 +390,9 @@ h1 {
 .outcome.failure { border-color: #deb4b4; background: #fff7f7; }
 .failure-detail { overflow-wrap: anywhere; }
 .outcome.rejected, .outcome.inconclusive, .outcome.waiting, .wait-card { border-color: #d4b779; background: #fffaf0; }
+.outcome.lineage { border-color: #9bb4d4; background: #f5f9ff; }
+.usage-scope { display: flex; gap: 8px; margin: 0 0 12px; }
+.child-button.selected { border-color: var(--teal); color: var(--teal); }
 .outcome p, .wait-card p { margin: 8px 0; }
 .outcome pre, .wait-card pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 .wait-card textarea { display: block; box-sizing: border-box; width: 100%; margin: 12px 0; padding: 12px; font: inherit; }

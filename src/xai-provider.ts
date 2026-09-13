@@ -1,13 +1,20 @@
-import { executionFailure } from "./execution-failure.js";
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { createJiti } from "jiti";
 import { lazyStream, type Api, type AssistantMessageEventStream, type Model, type Provider, type SimpleStreamOptions } from "@earendil-works/pi-ai";
+import { getAgentDir, resizeImage as nativeResizeImage, type ResizedImage } from "@earendil-works/pi-coding-agent";
 import { xaiProvider } from "@earendil-works/pi-ai/providers/xai";
+import { inspectReviewedAdapter, readInstalledSdkIdentity, xaiAdapterVersion, type AdapterIdentityRecord, type SdkIdentity } from "./adapter-identity.js";
+import { effectiveFromRaw, rawInputCapability } from "./capabilities.js";
+import { assertContextImagesAllowed } from "./image-boundary.js";
+import {
+  currentRequestObservation, localDiagnostic, markFetchAttempted, markHttpObserved,
+  recordSentReasoning,
+} from "./request-observation.js";
+import { observeProviderResponse } from "./provider-response.js";
 
-export const xaiAdapterVersion = "1.5.2";
+export { xaiAdapterVersion };
 export const xaiSubscriptionBaseUrl = "https://cli-chat-proxy.grok.com/v1";
-type CatalogModel = Model<Api> & { apiBackend?: string; inputProvenance?: string };
+type CatalogModel = Model<Api> & { apiBackend?: string; inputProvenance?: string; input?: ("text" | "image")[] };
 interface Metadata {
   expandXaiCatalogWithAliases(models: CatalogModel[]): CatalogModel[];
   setXaiRuntimeModels(models: CatalogModel[]): void;
@@ -22,11 +29,26 @@ export interface XaiProviderOptions {
   cachePath?: string;
   /** Explicit test/network boundary; cache-only initialization never calls this. */
   catalogFetch?: typeof fetch;
+  /** Test instrumentation for SDK identity drift after provider initialization. */
+  sdkIdentity?: () => SdkIdentity;
 }
-export interface SubscriptionProvider extends Provider { catalogSource(): string; transportLoaded(): boolean }
+export interface ResizeObservation {
+  wasResized: boolean;
+  originalWidth: number;
+  originalHeight: number;
+  width: number;
+  height: number;
+  mimeType: string;
+  inputBytes: number;
+  outputChars: number;
+}
+export interface SubscriptionProvider extends Provider {
+  catalogSource(): string;
+  transportLoaded(): boolean;
+  adapterIdentity(): AdapterIdentityRecord;
+  resizeObservations(): readonly ResizeObservation[];
+}
 
-// Reviewed transport temporarily wraps global fetch. Serialize transport lifetimes
-// across provider instances in this process; parallel workflow workers use processes.
 let transportTail: Promise<void> = Promise.resolve();
 async function acquireTransport(signal?: AbortSignal): Promise<() => void> {
   let release!: () => void;
@@ -45,23 +67,35 @@ async function acquireTransport(signal?: AbortSignal): Promise<() => void> {
   return release;
 }
 
+function bindResizeImage(observations: ResizeObservation[]): typeof nativeResizeImage {
+  return async (inputBytes: Uint8Array, mimeType: string, options?: { maxWidth?: number; maxHeight?: number; maxBytes?: number; jpegQuality?: number }): Promise<ResizedImage | null> => {
+    const resized = await nativeResizeImage(inputBytes, mimeType, options);
+    if (resized) {
+      observations.push({
+        wasResized: resized.wasResized, originalWidth: resized.originalWidth, originalHeight: resized.originalHeight,
+        width: resized.width, height: resized.height, mimeType: resized.mimeType,
+        inputBytes: inputBytes.byteLength, outputChars: resized.data.length,
+      });
+    } else {
+      const observation = currentRequestObservation();
+      localDiagnostic(observation, { subcode: "image-compaction-failed", code: "resource", dispatch: "not-dispatched" });
+    }
+    return resized;
+  };
+}
+
 /** Only vetted helper modules are loaded, never the package's extension entry point. */
 export async function createXaiSubscriptionProvider(options: XaiProviderOptions): Promise<SubscriptionProvider> {
   const packageRoot = options.packageRoot ?? join(options.agentDirectory, "npm/node_modules/pi-xai-oauth");
-  let manifest: { name?: string; version?: string };
-  try { manifest = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")); }
-  catch { throw executionFailure("configuration","setup","not-started","Grok subscription adapter is missing or unreadable; pi-xai-oauth 1.5.2 is required"); }
-  if (!["pi-xai-oauth", "@blockedpath/pi-xai-oauth"].includes(manifest.name ?? "") || manifest.version !== xaiAdapterVersion) throw executionFailure("configuration","setup","not-started","Unsupported Grok adapter identity/version; pi-xai-oauth 1.5.2 is required");
+  const readSdk = options.sdkIdentity ?? readInstalledSdkIdentity;
+  const identity = await inspectReviewedAdapter(packageRoot, undefined, readSdk());
+  const resizeObservations: ResizeObservation[] = [];
   const compat = await import("@earendil-works/pi-ai/compat");
   const virtualModules: Record<string, unknown> = {
     "@earendil-works/pi-ai": compat,
     "@earendil-works/pi-ai/compat": compat,
-    // Text-only workflows have no image input transport. Fail rather than silently
-    // pretend the older package's image-resize ABI was verified against pi 0.85.
-    "@earendil-works/pi-coding-agent": { getAgentDir: () => options.agentDirectory, resizeImage: () => { throw new Error("Grok bridge image conversion is not supported"); } },
+    "@earendil-works/pi-coding-agent": { getAgentDir: () => options.agentDirectory || getAgentDir(), resizeImage: bindResizeImage(resizeObservations) },
   };
-  // Disable Node's global module cache. Pin ./models in this loader's virtual
-  // module map so catalog/payload/transport share only this provider's state.
   const metadataLoader = createJiti(join(packageRoot, "package.json"), { moduleCache: false, interopDefault: true, virtualModules });
   const metadata = await metadataLoader.import<Metadata>(join(packageRoot, "extensions/xai/models.ts"));
   const loader = createJiti(join(packageRoot, "package.json"), { moduleCache: false, interopDefault: true, virtualModules: { ...virtualModules, "./models": metadata } });
@@ -75,7 +109,9 @@ export async function createXaiSubscriptionProvider(options: XaiProviderOptions)
     id: "xai-auth", name: "xAI (SuperGrok subscription)", baseUrl: xaiSubscriptionBaseUrl,
     auth: { oauth: nativeOAuth }, getModels: () => current,
     catalogSource: () => source, transportLoaded: () => transport !== undefined,
+    adapterIdentity: () => identity, resizeObservations: () => resizeObservations,
     async refreshModels(context) {
+      await inspectReviewedAdapter(packageRoot, undefined, readSdk());
       if (context.credential?.type !== "oauth") {
         await context.publish({ update: () => { current = []; source = "unavailable"; metadata.setXaiRuntimeModels([]); } });
         return;
@@ -92,33 +128,67 @@ export async function createXaiSubscriptionProvider(options: XaiProviderOptions)
       const entitled = selected.source === "curated-fallback" ? [] : metadata.expandXaiCatalogWithAliases(selected.models);
       await context.publish({ update: () => {
         source = selected.source;
-        current = entitled.map(({ apiBackend: _, inputProvenance: __, ...model }) => ({ ...model, provider: "xai-auth", api: "xai-responses", baseUrl: xaiSubscriptionBaseUrl }));
+        current = entitled.map(({ apiBackend: _, ...model }) => ({ ...model, provider: "xai-auth", api: "xai-responses", baseUrl: xaiSubscriptionBaseUrl }));
         metadata.setXaiRuntimeModels(entitled);
       } });
     },
     streamSimple(model, context, streamOptions) {
       return lazyStream(model, async () => {
+        const observation = currentRequestObservation();
+        await inspectReviewedAdapter(packageRoot, observation, readSdk());
         if (!current.some(candidate => candidate.id === model.id)) throw new Error("Grok model is absent from the authenticated catalog");
-        if (context.messages.some(message => Array.isArray(message.content) && message.content.some(part => part.type === "image"))) throw new Error("Grok bridge currently supports text-only workflow inputs");
+        const catalogModel = current.find(candidate => candidate.id === model.id) as CatalogModel | undefined;
+        const raw = rawInputCapability(catalogModel?.input, catalogModel?.inputProvenance);
+        const effective = effectiveFromRaw(raw, identity, "xai-auth");
+        const admittedImages = await assertContextImagesAllowed(context.messages, effective.effective.input, observation);
         return (async function* () {
           const release = await acquireTransport(streamOptions?.signal);
           try {
+        if (observation && observation.dispatch === "unknown") observation.dispatch = "not-dispatched";
+        await inspectReviewedAdapter(packageRoot, observation, readSdk());
         transport ??= loader.import<Transport>(join(packageRoot, "extensions/xai/responses.ts"));
         const loaded = await transport;
         let sentReasoning: string | undefined;
         const upstreamFetch = streamOptions?.fetch ?? globalThis.fetch;
+        const upstreamOnPayload = streamOptions?.onPayload;
         const events = loaded.streamSimpleXaiResponses(model, context, { ...streamOptions, maxRetries: 0,
+          onPayload: async (payload, payloadModel) => {
+            const next = await upstreamOnPayload?.(payload, payloadModel);
+            return next === undefined ? payload : next;
+          },
           fetch: async (input, init) => {
+            markFetchAttempted(observation);
             if (typeof init?.body === "string") {
-              try { const body = JSON.parse(init.body); sentReasoning = typeof body.reasoning?.effort === "string" ? body.reasoning.effort : model.reasoning ? undefined : "off"; } catch { /* transport owns payload validation */ }
+              try {
+                const body = JSON.parse(init.body);
+                sentReasoning = typeof body.reasoning?.effort === "string" ? body.reasoning.effort : model.reasoning ? undefined : "off";
+                recordSentReasoning(observation, sentReasoning);
+              } catch { /* transport owns payload validation */ }
             }
-            return upstreamFetch(input, init);
+            try {
+              const result = await upstreamFetch(input, init);
+              markHttpObserved(observation, observeProviderResponse(result.status, result.headers.get("retry-after")));
+              return result;
+            } catch (error) {
+              markFetchAttempted(observation);
+              throw error;
+            }
           },
         });
+          try {
           for await (const event of events) {
             const message = event.type === "done" ? event.message : event.type === "error" ? event.error : undefined;
             if (message && message.providerThinkingLevel === undefined && sentReasoning !== undefined) message.providerThinkingLevel = sentReasoning;
+            if (event.type === "error" && admittedImages.length && observation && observation.dispatch === "not-dispatched" && !observation.diagnosticSubcode) {
+              localDiagnostic(observation, { subcode: "image-compaction-failed", code: "resource", dispatch: "not-dispatched" });
+            }
             yield event;
+          }
+          } catch (error) {
+            if (admittedImages.length && observation && observation.dispatch === "not-dispatched" && !observation.diagnosticSubcode) {
+              localDiagnostic(observation, { subcode: "image-compaction-failed", code: "resource", dispatch: "not-dispatched" });
+            }
+            throw error;
           }
           } finally { release(); }
         })();

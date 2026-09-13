@@ -108,6 +108,9 @@ for reconciliation, not an accept/retry decision or a complete resolution protoc
 ## Explicit recovery inspection
 
 `run.recovery {id,key}` (MCP `run_recovery`) inspects the exact current activation.
+Inspection itself authorizes nothing. Explicit `run.reconcile` is available and
+separately governed. A revised graph for the same user task uses `run.continue`,
+not an automatic replacement and not a silent replay of the failed writer.
 Copy its key from `run.inspect`; a display label is not an identity. Browser failed
 attempts offer **Проверить состояние для восстановления**, with explicit refresh.
 Ordinary graph polling does not scan files or return operation prompts.
@@ -267,6 +270,15 @@ and every source HEAD included in the target ancestry. Git inspection disables
 optional locks so status does not refresh the index between content observations.
 It never commits or merges as part of an acceptance decision.
 
+If completion already recorded a concrete head (`workspacePhase:"complete"` or
+integration progress `phase:"complete"`), recovery requires that exact head to
+remain current for both accept and retry. An additional commit cannot be adopted
+by re-inspecting files and attaching the old child result. A completed worktree
+must also remain clean for retry: new uncommitted content cannot enter a new parent
+commit underneath already completed child checkpoints. Rejection leaves those
+changes untouched. Earlier committing/merging observations still require inspection
+of the actual effect because the final head was not yet recorded.
+
 A verified existing worktree can retry allocation/commit gaps by reattaching and
 replaying completed children before ordinary commit admission. Integration retry
 checks a clean settled target and unchanged owned sources; earlier committed merges
@@ -320,8 +332,40 @@ decodes UTF-8 only after collecting all chunks, and rejects invalid encoding bef
 dispatch. A Cyrillic character split between chunks cannot change the stored decision
 or break its identical redelivery. CLI/MCP remain available for direct structured requests.
 
-Still required: the full allocation/commit and multi-source integration crash matrix,
-and evidence-preserving handling of malformed partial registrations. Missing worktree
+The named allocation/commit and multi-source integration boundaries are covered by
+the real supervisor crash matrix below. Still required: evidence-preserving handling
+of malformed partial registrations. Missing worktree
 files after admitted child work require explicit artifact repair and fresh inspection.
 Isolated integration workspaces and versioned artifact proofs remain separate
 requirements of the overall implementation plan.
+
+## Real supervisor crash matrix
+
+`tests/git-recovery-crash.test.ts` launches the normal supervisor as a separate
+detached process with a test-only preload. The preload kills that supervisor with
+SIGKILL at the specified boundary; it does not manufacture a failed activation or
+add a production fault switch. Git commands and child checks are real, all repositories
+are temporary, and no model is invoked. Process death/empty groups are observed
+before any resolution. Ordinary resume is first shown to refuse implicit replay.
+
+| Killed after | Durable observation | Actual Git state | Verified continuation |
+| --- | --- | --- | --- |
+| Allocation intent | Allocating, exact path/branch/base | No worktree yet | Retry restores allocation, child executes once |
+| `git worktree add` | Allocating, no admitted child | Worktree exists at base | Retry reattaches, child executes once |
+| `git add` | Committing, child result saved | Child changes staged, HEAD still base | Retry commits once without repeating the child |
+| `git commit` | Committing, final head not recorded | New commit already exists | Accept verifies real head/result without another commit |
+| Worktree completion metadata | Complete head saved, activation not completed | Clean committed worktree | Accept or explicit retry preserves the exact commit and child checkpoints |
+| First source merge | Merging first source | Only first source committed | Accept-all rejected; retry adds only the remaining merge |
+| Second source merge | Merging second source, final head not recorded | Both sources committed | Accept verifies both source ancestries and does not merge again |
+| Integration completion metadata | Complete head saved, activation not completed | Both sources committed | Accept or explicit retry preserves the exact head and completed children |
+
+The two complete-head boundaries also inject an extra commit and verify that both
+actions reject it without rewriting Git or recording a decision. The fixture retains
+that extra commit under a separate reference before its explicit repair. A dirty
+completed worktree similarly refuses retry while preserving the added file.
+
+Ten scenarios verify original attempt/operation archival, one-use decisions,
+unchanged child invocation counts and actual Git commit counts. A partially merged
+retry records the head at the start of its own attempt as `originalHead`/output base;
+the interrupted attempt keeps the earlier original head in history. It does not
+claim earlier merges were rolled back or performed again.

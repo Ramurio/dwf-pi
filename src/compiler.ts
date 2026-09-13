@@ -1,8 +1,11 @@
 import { createHash } from "node:crypto";
 import { parseWorkflow, type Graph, type Node, type WorkflowDefinition } from "./graph.js";
-
-export const compilerVersion = "dynamicwf-effect-v7";
-export type CompilerVersion = "dynamicwf-effect-v1" | "dynamicwf-effect-v2" | "dynamicwf-effect-v3" | "dynamicwf-effect-v4" | "dynamicwf-effect-v5" | "dynamicwf-effect-v6" | typeof compilerVersion;
+import {
+  compilerVersion, isCompilerVersion, supportsFailurePolicy, supportsFinishAwait,
+  supportsFrozenCapabilities, supportsGeneratedRouting, supportsOutputRepair, supportsProviderRetry,
+  supportsRetryPolicy, supportsReuseNodes, type CompilerVersion,
+} from "./compiler-versions.js";
+export { compilerVersion, type CompilerVersion };
 export interface CompiledWorkflow {
   readonly source: string;
   /** SHA-256 of generated UTF-8 source, including compiler version. */
@@ -23,12 +26,14 @@ function quote(value: string): string { return JSON.stringify(value); }
 /** Compile validated graph structure into TypeScript + Effect control flow, without evaluating author text. */
 export function compileWorkflow(value: unknown, version: CompilerVersion = compilerVersion): CompiledWorkflow {
   const workflow = parseWorkflow(value);
-  if (!["dynamicwf-effect-v1", "dynamicwf-effect-v2", "dynamicwf-effect-v3", "dynamicwf-effect-v4", "dynamicwf-effect-v5", "dynamicwf-effect-v6", compilerVersion].includes(version)) throw new Error("Unsupported compiler version");
-  if (!["dynamicwf-effect-v4", "dynamicwf-effect-v5", "dynamicwf-effect-v6", "dynamicwf-effect-v7"].includes(version) && Object.values(workflow.graphs).some(g => g.nodes.some(n => n.kind === "agent" && n.config?.outputRepair !== undefined))) throw new Error("outputRepair requires compiler v4");
-  if (!["dynamicwf-effect-v5", "dynamicwf-effect-v6", "dynamicwf-effect-v7"].includes(version) && Object.values(workflow.graphs).some(g => g.nodes.some(n => (n.kind === "map" || n.kind === "parallel") && n.failurePolicy !== undefined))) throw new Error("failurePolicy requires compiler v5");
-  if (!["dynamicwf-effect-v6", "dynamicwf-effect-v7"].includes(version) && Object.values(workflow.graphs).some(g => g.nodes.some(n => (n.kind === "agent" || n.kind === "check") && n.retryPolicy !== undefined))) throw new Error("retryPolicy requires compiler v6");
-  if (version !== compilerVersion && Object.values(workflow.graphs).some(g => g.nodes.some(n => (n.kind === "agent" || n.kind === "check") && n.retryPolicy?.provider !== undefined))) throw new Error("Provider retry options require compiler v7");
-  if (version === "dynamicwf-effect-v1" && Object.values(workflow.graphs).some(g => g.nodes.some(n => n.kind === "finish" || n.kind === "await"))) throw new Error("finish/await require compiler v2");
+  if (!isCompilerVersion(version)) throw new Error("Unsupported compiler version");
+  if (!supportsOutputRepair(version) && Object.values(workflow.graphs).some(g => g.nodes.some(n => n.kind === "agent" && n.config?.outputRepair !== undefined))) throw new Error("outputRepair requires compiler v4");
+  if (!supportsFailurePolicy(version) && Object.values(workflow.graphs).some(g => g.nodes.some(n => (n.kind === "map" || n.kind === "parallel") && n.failurePolicy !== undefined))) throw new Error("failurePolicy requires compiler v5");
+  if (!supportsRetryPolicy(version) && Object.values(workflow.graphs).some(g => g.nodes.some(n => (n.kind === "agent" || n.kind === "check") && n.retryPolicy !== undefined))) throw new Error("retryPolicy requires compiler v6");
+  if (!supportsProviderRetry(version) && Object.values(workflow.graphs).some(g => g.nodes.some(n => (n.kind === "agent" || n.kind === "check") && n.retryPolicy?.provider !== undefined))) throw new Error("Provider retry options require compiler v7");
+  if (!supportsFinishAwait(version) && Object.values(workflow.graphs).some(g => g.nodes.some(n => n.kind === "finish" || n.kind === "await"))) throw new Error("finish/await require compiler v2");
+  if (!supportsFrozenCapabilities(version) && Object.values(workflow.graphs).some(g => g.nodes.some(n => n.kind === "agent" && n.config?.requirements !== undefined))) throw new Error("agent requirements require compiler v8");
+  if (!supportsReuseNodes(version) && Object.values(workflow.graphs).some(g => g.nodes.some(n => n.kind === "reuse"))) throw new Error("reuse nodes require compiler v9");
   const graphIds = Object.keys(workflow.graphs).sort();
   const names = new Map(graphIds.map((id, index) => [id, `graph_${index}`]));
   const fn = (id: string): string => {
@@ -84,6 +89,7 @@ function emitNode(graphId: string, node: Node, fn: (id: string) => string, versi
     case "integrate": work = `const sources = yield* attempt(() => evaluate(node.sources, { input, nodes }));
             return yield* runtime.integrate(context, node, sources);`; break;
     case "check": work = "return yield* runtime.check(context, node);"; break;
+    case "reuse": work = "return yield* runtime.reuse(context, node);"; break;
     case "transform": case "end": work = "return yield* attempt(() => evaluate(node.value, { input, nodes }));"; break;
     case "finish": work = `const reason = yield* attempt(() => evaluate(node.reason, { input, nodes }));
             const evidence = yield* attempt(() => evaluate(node.evidence, { input, nodes }));
@@ -120,7 +126,7 @@ ${node.children.map((child, index) => `              () => Effect.gen(function* 
             ${work}
           }));
           nodes[node.id] = result;
-          ${node.kind === "end" || node.kind === "finish" ? "return result;" : ["dynamicwf-effect-v3", "dynamicwf-effect-v4", "dynamicwf-effect-v5", "dynamicwf-effect-v6", "dynamicwf-effect-v7"].includes(version)
+          ${node.kind === "end" || node.kind === "finish" ? "return result;" : supportsGeneratedRouting(version)
             ? 'pc = yield* runtime.route(context, edges, { input, nodes });\n          break;'
             : 'pc = yield* attempt(() => chooseEdge(node.id, edges, { input, nodes }));\n          break;'}
         }`;

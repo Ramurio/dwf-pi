@@ -19,6 +19,7 @@ run(runtime: WorkflowRuntime, input: Json): Effect.Effect<Json, Error>
 - `end`: возвращает вычисленное value как результат graph invocation, без следующей стрелки.
 - `finish`: вычисляет reason/evidence/value, сохраняет решение через `runtime.finish` и завершает invocation.
 - `await`: вычисляет reason/input, вызывает `runtime.wait`; после сохраняемого ответа выбирает обычный edge.
+- `reuse` (compiler v9): возвращает `runtime.reuse` без выражений и без вызова модели. Требует continuation receipt; v1–v8 отвергают этот kind.
 
 Начиная с compiler v3 каждый нетерминальный блок выбирает следующий edge через
 `runtime.route`: решение сохраняется до допуска следующего узла. Подробности —

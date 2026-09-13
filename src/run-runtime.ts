@@ -133,6 +133,24 @@ export class JournalRuntime implements WorkflowRuntime {
       return decision.to!;
     }, catch: errorOf });
   }
+  reuse(context: RuntimeContext, node: Extract<Node, { kind: "reuse" }>): Effect.Effect<Json, Error> {
+    return Effect.try({ try: () => {
+      const binding = this.store.reusedBinding(this.run.id, node.bindingId);
+      if (!binding) throw new Error("Reuse binding is missing from this run's continuation receipt");
+      if (binding.targetGraphId !== context.graphId || binding.targetNodeId !== node.id) throw new Error("Reuse binding does not match this node identity");
+      const value = createOutputValidator(node.outputSchema)(binding.value);
+      this.store.setActivationMetadata(this.run.id, this.token, activationKey(context), {
+        reused: {
+          bindingId: node.bindingId, sourceRunId: binding.sourceRunId, sourceKey: binding.sourceActivationKey,
+          sourceAttempt: binding.sourceAttempt, outputDigest: binding.outputDigest, schemaDigest: binding.schemaDigest,
+          ...(binding.producerSchemaDigest ? { producerSchemaDigest: binding.producerSchemaDigest } : {}),
+          producerRunId: binding.producerRunId, producerKey: binding.producerKey, producerAttempt: binding.producerAttempt,
+          producerGraphId: binding.producerGraphId, producerNodeId: binding.producerNodeId, invocation: false,
+        },
+      });
+      return value;
+    }, catch: errorOf });
+  }
   wait(context: RuntimeContext, node: Extract<Node, { kind: "await" }>, reason: Json, input: Json): Effect.Effect<Json, Error> {
     return processEffect(async signal => {
       if (typeof reason !== "string" || !reason.trim()) throw new Error("Wait reason must evaluate to a nonempty string");
@@ -224,7 +242,8 @@ export class JournalRuntime implements WorkflowRuntime {
           onEvent: event => {
             if (event.type === "usage.report") {
               if (typeof event.reportId !== "string" || typeof event.stopReason !== "string") throw new Error("Invalid worker usage identity");
-              this.store.recordUsage(this.run.id, this.token, key, event.reportId, event.usage, event.stopReason);
+              const observedEffort = typeof event.observedEffort === "string" ? event.observedEffort : undefined;
+              this.store.recordUsage(this.run.id, this.token, key, event.reportId, event.usage, event.stopReason, observedEffort);
             } else if (event.type === "usage.settled") {
               if (typeof event.complete !== "boolean") throw new Error("Invalid worker accounting completion");
               this.store.settleUsage(this.run.id, this.token, key, event.complete);

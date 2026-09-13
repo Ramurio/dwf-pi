@@ -20,6 +20,10 @@ export const AgentConfigSchema = Type.Object({
   permission: Type.Optional(Type.Union([Type.Literal("read-only"), Type.Literal("workspace-write"), Type.Literal("unrestricted")])),
   outputSchema: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
   outputRepair: Type.Optional(OutputRepairSchema),
+  requirements: Type.Optional(Type.Object({
+    inputModalities: Type.Optional(Type.Array(Type.Enum(["text", "image"]), { uniqueItems: true })),
+    toolResultModalities: Type.Optional(Type.Array(Type.Enum(["text", "image"]), { uniqueItems: true })),
+  }, closed)),
 }, closed);
 export type AgentConfig = Static<typeof AgentConfigSchema>;
 export interface RoleDefinition { readonly name: RoleName; readonly description: string; readonly defaults: AgentConfig }

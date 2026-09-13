@@ -3,7 +3,8 @@ import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { RunController } from "../run-controller.js";
 import { collectActivity, type WorkerActivity } from "../monitor.js";
-import { summarizeUsage } from "../usage.js";
+import { summarizeTaskUsage, summarizeUsage } from "../usage.js";
+import { publicReceipt } from "../lineage.js";
 import { publicAttempts } from "../service.js";
 import { graphSnapshot } from "./model.js";
 import type { Json } from "../graph.js";
@@ -54,7 +55,7 @@ export async function startGraphServer(
 ) {
   const files = new Map(
     await Promise.all(
-      ["index.html", "app.js", "layout.js", "usage-pages.js", "style.css"].map(
+      ["index.html", "app.js", "layout.js", "usage-pages.js", "task-scope.js", "style.css"].map(
         async (name) =>
           [name, await readFile(new URL(name, import.meta.url))] as const,
       ),
@@ -136,7 +137,7 @@ export async function startGraphServer(
               const { run, activations, presentation } = controller.snapshot(saved.id);
               return {
                 id: run.id, name: run.plan.workflow.name, status: run.status,
-                taskOutcome: presentation.taskOutcome, presentation,
+                taskOutcome: presentation.taskOutcome, presentation, lineage: run.lineage ?? null,
                 createdAt: run.createdAt, cwd: run.cwd, usage: summarizeUsage(activations),
               };
             }),
@@ -178,6 +179,31 @@ export async function startGraphServer(
         if (!id) throw new Error("Select a run");
         store.get(id);
         json(store.usageReports(id, Number(url.searchParams.get("after") ?? 0), 100));
+        return;
+      }
+      if (name === "task") {
+        const id = url.searchParams.get("id");
+        if (!id) throw new Error("Select a task");
+        const task = store.task(id), members = store.taskMembers(id);
+        json({
+          ...task,
+          members: members.map(member => {
+            const observed = controller.snapshot(member.runId);
+            return { ...member, status: observed.run.status, name: observed.run.plan.workflow.name, presentation: observed.presentation, lineage: observed.run.lineage ?? null };
+          }),
+          receipts: members.flatMap(member => member.receiptId ? [publicReceipt(store.receipt(member.receiptId))] : []),
+        });
+        return;
+      }
+      if (name === "task-usage") {
+        const id = url.searchParams.get("id");
+        if (!id) throw new Error("Select a task");
+        const members = store.taskMembers(id);
+        json({
+          taskId: id,
+          ...summarizeTaskUsage(members.map(member => ({ id: member.runId, records: store.listActivations(member.runId) }))),
+          ...store.taskUsageReports(id, Number(url.searchParams.get("after") ?? 0), 100),
+        });
         return;
       }
       if (name === "recovery") {

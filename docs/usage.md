@@ -43,6 +43,14 @@ Browser имеет такую же страницу числовых отчёт�
 сохраняются; поответные записи и cache breakdown для них не синтезируются.
 Родительские structural outputs не учитываются второй раз.
 
+`task.usage {id}` суммирует отдельные linked runs задачи. Нельзя складывать строки
+отчётов, archived attempts и cumulative metadata одновременно. Повторно использованные
+выходы не добавляют вызов модели и не считаются missing agent reports. Оценка SDK
+не является счетом подписки; неизвестная стоимость не становится нулём. В браузере
+можно переключить «Этот запуск» / «Вся задача»; исходный сбой остаётся видимым рядом
+с активным продолжением. Переключение на unrelated task не сохраняет предыдущие
+task totals; выбор связанного запуска той же задачи сохраняет режим всей задачи.
+
 Проверено: настоящая pi SDK session с offline transport, отчёт во время следующего
 хода, ошибка output schema, cancellation; journal durability, duplicate/conflicting
 delivery, stale owner, rollback при ошибке event insert; CLI service/MCP schema и

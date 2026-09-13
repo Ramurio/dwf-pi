@@ -14,14 +14,15 @@ import { RunController } from "./run-controller.js";
 import type { ActivationRecord, AttemptRecord, RunEvent, RunRecord } from "./run-store.js";
 import { DraftStore } from "./store.js";
 import { PresetLibrary, presetName, presetRevision, presetSummary, type PresetScope } from "./presets.js";
-import { summarizeUsage } from "./usage.js";
+import { summarizeTaskUsage, summarizeUsage } from "./usage.js";
 import { PreparedPlanStore, executionWorkspace } from "./prepared-plans.js";
+import { canonicalContinuationRequest, continuationKind, parseContinuationRequest, publicLineage, publicReceipt } from "./lineage.js";
 
 export const serviceToolNames = [
   "catalog.list", "catalog.describe", "catalog.models", "system.doctor", "workflow.schema", "workflow.create", "workflow.list", "workflow.inspect",
   "workflow.patch", "workflow.validate", "workflow.compile", "workflow.prepare", "run.start", "run.status",
   "run.list", "run.inspect", "run.events", "run.usage", "run.pause", "run.resume", "run.cancel",
-  "preset.save", "preset.list", "preset.inspect", "preset.run", "run.waits", "run.resolve", "run.trace", "workflow.prepared", "run.attempts", "run.collections", "run.retries", "run.recovery", "run.reconcile", "run.reconciliations",
+  "preset.save", "preset.list", "preset.inspect", "preset.run", "run.waits", "run.resolve", "run.trace", "workflow.prepared", "run.attempts", "run.collections", "run.retries", "run.recovery", "run.reconcile", "run.reconciliations", "run.continuation.inspect", "run.continue", "task.inspect", "task.usage",
 ] as const;
 export type ServiceToolName = typeof serviceToolNames[number];
 export type WorkflowServiceOptions = Omit<PrepareExecutionOptions, "cwd"> & { cwd?: string };
@@ -266,6 +267,44 @@ export class WorkflowService {
         }
         throw new Error(`Preset not found: ${name}`);
       }
+      case "run.continuation.inspect": {
+        const input = object(request, ["id"]);
+        return this.getController().continuationInspect(identifier(input.id));
+      }
+      case "run.continue": {
+        const parsed = parseContinuationRequest(request);
+        const start = { preparedId: parsed.preparedId, idempotencyKey: parsed.idempotencyKey, operation: continuationKind };
+        const controller = this.getController();
+        const existing = controller.store.findStart(start, parsed.input, canonicalContinuationRequest(parsed));
+        if (existing) return publicObservation(controller.snapshot((await controller.completeStart(existing.id)).id));
+        const prepared = this.getPlans().get(parsed.preparedId);
+        const run = await controller.continuePrepared(parsed, prepared.plan, prepared.cwd);
+        return publicObservation(controller.snapshot(run.id));
+      }
+      case "task.inspect": {
+        const input = object(request, ["id"]);
+        const controller = this.getController();
+        const task = controller.store.task(identifier(input.id));
+        const members = controller.store.taskMembers(task.id);
+        return {
+          ...task, members: members.map(member => ({ ...member, run: publicObservation(controller.snapshot(member.runId)) })),
+          receipts: members.flatMap(member => member.receiptId ? [publicReceipt(controller.store.receipt(member.receiptId))] : []),
+          facts: "Machine-verified facts are identities, checkpoints, plan hashes and output digests. Actor reason/evidence is attestation.",
+        };
+      }
+      case "task.usage": {
+        const input = object(request, ["id", "after", "limit"]);
+        const controller = this.getController();
+        const task = controller.store.task(identifier(input.id));
+        const members = controller.store.taskMembers(task.id);
+        const after = input.after === undefined ? 0 : cursor(input.after);
+        const limit = input.limit === undefined ? 100 : cursor(input.limit);
+        return {
+          taskId: task.id,
+          ...summarizeTaskUsage(members.map(member => ({ id: member.runId, records: controller.store.listActivations(member.runId) }))),
+          ...controller.store.taskUsageReports(task.id, after, limit),
+        };
+      }
       default: throw new Error(`Unknown tool: ${tool}`);
     }
   }
@@ -299,6 +338,7 @@ export function publicRunSummary(run: RunRecord) {
     ...(run.taskOutcome === undefined ? {} : { taskOutcome: run.taskOutcome }),
     ...(run.failure === undefined ? {} : { failure: run.failure }),
     ...(run.output === undefined ? {} : { output: run.output }), ...(run.error === undefined ? {} : { error: run.error }),
+    ...(run.lineage === undefined ? {} : { lineage: publicLineage(run.lineage) }),
   };
 }
 function publicObservation(observed: ReturnType<RunController["snapshot"]>) {

@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { lstat, mkdir, open } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 import {
-  createAgentSession, DefaultResourceLoader, defineTool, ModelRuntime,
+  createAgentSession, createReadToolDefinition, DefaultResourceLoader, defineTool, ModelRuntime,
   SessionManager, SettingsManager, type AgentSession, type AgentSessionEvent,
 } from "@earendil-works/pi-coding-agent";
 import type { TSchema } from "typebox";
@@ -16,6 +16,13 @@ import { createWorkflowModelRuntime } from "./model-runtime.js";
 import { ExecutionFailure, executionFailure, type ExecutionFailureRecord } from "./execution-failure.js";
 import { parseUsage, sumTokenUsage } from "./usage.js";
 import { observeProviderResponse, type ProviderResponseRecord } from "./provider-response.js";
+import { adapterIdentitiesEqual } from "./adapter-identity.js";
+import { capabilityAllowsImage, effectiveFromRaw, intersectEffectiveCapabilities, rawInputCapability, requirementsSatisfied, type FrozenCapabilities } from "./capabilities.js";
+import { sessionHistoryHasImages, wrapImageProducingTool } from "./image-boundary.js";
+import {
+  createRequestObservation, diagnosticFromObservation, diagnosticMessages,
+  runWithRequestObservation, type TrustedRequestObservation,
+} from "./request-observation.js";
 
 export interface PiWorkerOptions {
   signal?: AbortSignal;
@@ -121,6 +128,22 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
     checkAdmission();
     const model = runtime.getAvailableSnapshot().find(candidate => candidate.provider === config.model.provider && candidate.id === config.model.id);
     if (!model) throw executionFailure("configuration","setup","not-started",`Configured model is not available: ${config.model.provider}/${config.model.id}`);
+    if (config.adapterIdentity) {
+      const current = (runtime.getRegisteredNativeProvider("xai-auth") as { adapterIdentity?: () => import("./adapter-identity.js").AdapterIdentityRecord } | undefined)?.adapterIdentity?.();
+      if (!adapterIdentitiesEqual(config.adapterIdentity, current ?? null)) {
+        throw executionFailure("configuration","setup","not-started", diagnosticMessages["adapter-content-mismatch"], { diagnostic: { subcode: "adapter-content-mismatch", dispatch: "not-dispatched" } });
+      }
+    }
+    const currentCapabilities: FrozenCapabilities = (() => {
+      const modelExtra = model as unknown as { inputProvenance?: string };
+      const provenance = typeof modelExtra.inputProvenance === "string" ? modelExtra.inputProvenance : Array.isArray(model.input) ? "model.input" : undefined;
+      const liveAdapter = config.adapterIdentity ?? (runtime.getRegisteredNativeProvider("xai-auth") as { adapterIdentity?: () => import("./adapter-identity.js").AdapterIdentityRecord } | undefined)?.adapterIdentity?.() ?? null;
+      return effectiveFromRaw(rawInputCapability(model.input, provenance), liveAdapter, config.model.provider === "xai-auth" ? "xai-auth" : "native");
+    })();
+    if (!requirementsSatisfied(config.requirements, currentCapabilities)) {
+      throw executionFailure("configuration","setup","not-started", diagnosticMessages["image-unsupported"], { diagnostic: { subcode: "image-unsupported", dispatch: "not-dispatched" } });
+    }
+    const capabilities = intersectEffectiveCapabilities(config.capabilities, currentCapabilities);
     const settings = SettingsManager.inMemory({ retry: { enabled: false, provider: { maxRetries: 0 } }, compaction: { enabled: false }, enableInstallTelemetry: false, enableAnalytics: false });
     const resourceLoader = new DefaultResourceLoader({
       cwd: request.cwd, agentDir: request.resourceDirectory, settingsManager: settings,
@@ -155,42 +178,57 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
     });
     const sessionManager = request.sessionFile ? SessionManager.open(request.sessionFile, request.sessionDirectory) : SessionManager.create(request.cwd, request.sessionDirectory);
     if (resolve(sessionManager.getCwd()) !== resolve(request.cwd)) throw executionFailure("configuration","setup","not-started","Continued session workspace does not match request");
+    const customTools = [resultTool, ...(config.tools.includes("read") ? [wrapImageProducingTool(createReadToolDefinition(request.cwd, { autoResizeImages: true }), capabilities)] : [])];
     const created = await createAgentSession({ cwd: request.cwd, agentDir: request.resourceDirectory,
       modelRuntime: runtime, model, thinkingLevel: config.thinking, settingsManager: settings, resourceLoader,
-      sessionManager, tools: [...config.tools, "submit_result"], customTools: [resultTool],
+      sessionManager, tools: [...config.tools, "submit_result"], customTools: customTools as never,
     });
     session = created.session;
     checkAdmission();
     if (session.model?.provider !== config.model.provider || session.model.id !== config.model.id || session.thinkingLevel !== config.thinking) throw executionFailure("configuration","setup","not-started","Pi changed configured model or thinking level; requested configuration is unsupported");
+    if (sessionHistoryHasImages(session.messages) && !capabilityAllowsImage(capabilities.effective.input)) {
+      throw executionFailure("configuration","setup","not-started", diagnosticMessages["image-unsupported"], { diagnostic: { subcode: "image-unsupported", dispatch: "not-dispatched" } });
+    }
     const actualTools = session.getActiveToolNames();
     if (actualTools.length !== config.tools.length + 1 || actualTools.some(tool => tool !== "submit_result" && !config.tools.includes(tool as typeof config.tools[number]))) throw executionFailure("configuration","setup","not-started","Pi tool allowlist differs from frozen configuration");
     const initialMessages = session.messages.length;
     let currentResponse: { value: ProviderResponseRecord | undefined } = {value:undefined};
     let failedResponse: ProviderResponseRecord | undefined;
+    let lastObservation: TrustedRequestObservation | undefined;
     const stream = session.agent.streamFunction;
     session.agent.streamFunction = (requestModel, context, streamOptions) => {
       // One response scope per assistant request, including output repair turns.
+      const observation = createRequestObservation();
+      observation.requestedReasoning = config.thinking;
+      lastObservation = observation;
       const response: { value: ProviderResponseRecord | undefined } = {value:undefined};
       currentResponse = response;
       let observedHttp = false;
       const upstreamFetch = options.providerFetch ?? streamOptions?.fetch ?? globalThis.fetch;
       const canObserveFetch = ["openai-codex-responses","openai-responses","openai-completions","xai-responses"].includes(requestModel.api);
-      return stream(requestModel, context, { ...streamOptions, maxRetries: 0,
+      return runWithRequestObservation(observation, () => stream(requestModel, context, { ...streamOptions, maxRetries: 0,
         // The SDK's Codex WebSocket continuation/fallback loop ignores maxRetries.
         ...(requestModel.api === "openai-codex-responses" ? { transport: "sse" as const } : {}),
         ...(canObserveFetch ? { fetch: (async (input, init) => {
+          observation.dispatch = observation.dispatch === "http-observed" ? observation.dispatch : "fetch-attempted";
           const result = await upstreamFetch(input,init);
           observedHttp = true;
           response.value = observeProviderResponse(result.status,result.headers.get("retry-after"));
+          observation.dispatch = "http-observed";
+          if (response.value) observation.providerResponse = response.value;
           return result;
         }) as typeof fetch } : {}),
         onResponse: async (result, model) => {
           // Some SDKs report only successful responses; direct HTTP observes failures too.
           // Preserve Retry-After if an adapter sanitizes headers before this callback.
-          if (!observedHttp) response.value = observeProviderResponse(result.status,Object.entries(result.headers).find(([key])=>key.toLowerCase()==="retry-after")?.[1]);
+          if (!observedHttp) {
+            response.value = observeProviderResponse(result.status,Object.entries(result.headers).find(([key])=>key.toLowerCase()==="retry-after")?.[1]);
+            observation.dispatch = "http-observed";
+            if (response.value) observation.providerResponse = response.value;
+          }
           await streamOptions?.onResponse?.(result,model);
         },
-      });
+      }));
     };
     const previousStop = session.agent.shouldStopAfterTurn;
     session.agent.shouldStopAfterTurn = async (context, signal) => !admission || repairing || submissions > 0 || (await previousStop?.(context, signal) ?? false);
@@ -206,7 +244,9 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
         const reportId = String(++reportIndex);
         if (usage) {
           reports.push(usage);
-          options.onEvent?.({ type: "usage.report", reportId, usage, stopReason: event.message.stopReason });
+          const observedEffort = typeof event.message.providerThinkingLevel === "string" ? event.message.providerThinkingLevel
+            : lastObservation?.sentReasoning ?? (lastObservation?.dispatch === "not-dispatched" || lastObservation?.dispatch === "unknown" ? "unknown" : "unknown");
+          options.onEvent?.({ type: "usage.report", reportId, usage, stopReason: event.message.stopReason, observedEffort });
         } else options.onEvent?.({ type: "usage.unavailable", reportId });
       }
     });
@@ -217,9 +257,28 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
     let repairRound = 0;
     const invalidOutput = (): OutputFailureCause | undefined => outputFailure ?? (submissions !== 1 || output === undefined ? "missing" : undefined);
     const checkProvider = () => {
-      if (session!.messages.slice(initialMessages).some(message => message.role === "assistant" && ["error", "aborted"].includes(message.stopReason))) {
-        throw new ExecutionFailure({version:1,code:"provider",phase,effects,message:"Pi assistant turn failed or was aborted",...(failedResponse?{providerResponse:failedResponse}:{})});
+      const failed = session!.messages.slice(initialMessages).filter((message): message is Extract<typeof message, { role: "assistant" }> => message.role === "assistant" && "stopReason" in message && ["error", "aborted"].includes((message as { stopReason?: string }).stopReason ?? ""));
+      if (!failed.length) return;
+      if (!admission || options.signal?.aborted) throw executionFailure("cancelled",phase,effects,"Pi worker cancelled");
+      const observation = lastObservation;
+      const diagnostic = diagnosticFromObservation(observation);
+      if (observation?.failureCode && observation.diagnosticSubcode) {
+        const providerResponse = observation.failureCode === "provider" ? observation.providerResponse ?? failedResponse : undefined;
+        throw new ExecutionFailure({
+          version: 1, code: observation.failureCode, phase, effects,
+          message: observation.message ?? diagnosticMessages[observation.diagnosticSubcode],
+          ...(providerResponse ? { providerResponse } : {}),
+          ...(diagnostic ? { diagnostic } : {}),
+        });
       }
+      if (failed.some(message => message.stopReason === "aborted") && observation?.dispatch !== "http-observed" && observation?.dispatch !== "fetch-attempted") {
+        throw executionFailure("cancelled",phase,effects,"Pi worker cancelled", { diagnostic: diagnostic ?? { dispatch: "not-dispatched" } });
+      }
+      throw new ExecutionFailure({
+        version: 1, code: "provider", phase, effects, message: "Pi assistant turn failed or was aborted",
+        ...(failedResponse ? { providerResponse: failedResponse } : {}),
+        ...(diagnostic || failedResponse ? { diagnostic: diagnostic ?? { dispatch: failedResponse ? "http-observed" : "unknown" } } : {}),
+      });
     };
     try {
       await session.prompt(`Assigned task:\n${request.task}\n\nWorkflow input (JSON data):\n${JSON.stringify(request.input)}`, { expandPromptTemplates: false });

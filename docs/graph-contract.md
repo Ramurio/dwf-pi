@@ -44,6 +44,7 @@ snapshot до запуска. `parseWorkflow` валидирует, клонир
 | end | `value: Expr` | Результат текущего графа |
 | finish | `decision: accepted/rejected/inconclusive`, `reason: Expr`, `evidence: Expr`, `value: Expr` | Результат графа и отдельное решение о его приёмке |
 | await | `reason: Expr`, `input: Expr`, `responseSchema: object` | Сохраняемый ответ по строгой схеме |
+| reuse | `bindingId`, `outputSchema: object` | Точный снимок уже завершённого выхода; только через `run.continue`, без вызова модели |
 
 Контракты завершения и ожидания, API и восстановление описаны в
 [outcomes-and-waits.md](outcomes-and-waits.md). `finish`, как и `end`, терминален.

@@ -16,6 +16,11 @@ import { parseOperation } from "./operation-record.js";
 import { recoveryBlockers, recoveryCheckpoint } from "./recovery-inspection.js";
 import type { WorkspaceObservation } from "./recovery-files.js";
 import { parseReconciliationRequest, sameReconciliation, validateReconciledOutput, type ReconciliationRecord, type ReconciliationRequest } from "./reconciliation.js";
+import { supportsGeneratedRouting } from "./compiler-versions.js";
+import {
+  canonicalContinuationRequest, canonicalStartRequest, continuationKind, planHasReuse, publicReceipt, sameCanonicalRequest, startKind,
+  type ContinuationReceiptRecord, type ContinuationRequest, type MembershipRole, type PublicReusedBinding, type ReusedOutputRecord, type RunLineage, type TaskMembershipRecord,
+} from "./lineage.js";
 
 export type RunStatus = "queued" | "running" | "waiting" | "pausing" | "paused" | "cancelling" | "cancelled" | "succeeded" | "failed" | "interrupted";
 export type DesiredRunStatus = "running" | "paused" | "cancelled";
@@ -36,9 +41,11 @@ export interface RunRecord {
   error?: string;
   taskOutcome?: TaskOutcome;
   failure?: ExecutionFailureRecord;
+  lineage?: RunLineage;
 }
 export type ActivationStatus = "running" | "succeeded" | "failed" | "interrupted";
-export interface PreparedStart { preparedId: string; idempotencyKey?: string }
+export interface PreparedStart { preparedId: string; idempotencyKey?: string; operation?: "start" | "continue" }
+export type { RunLineage, TaskMembershipRecord, ContinuationReceiptRecord, ReusedOutputRecord } from "./lineage.js";
 export interface ActivationMetadata { workerPid?: number | null; sessionFile?: string; [key: string]: Json | undefined }
 export interface ActivationRecord {
   runId: string;
@@ -64,7 +71,7 @@ export interface WaitRecord {
   id: string; runId: string; key: string; reason: string; input: Json; responseSchema: Record<string, unknown>;
   status: "open" | "resolved"; createdAt: number; resolvedAt: number | null; resolvedBy: string | null; response?: Json;
 }
-export interface UsageRecord { seq: number; runId: string; key: string; attempt: number; reportId: string; usage: TokenUsage; stopReason: string; at: number; source: "pi-sdk" }
+export interface UsageRecord { seq: number; runId: string; key: string; attempt: number; reportId: string; usage: TokenUsage; stopReason: string; at: number; source: "pi-sdk"; observedEffort?: string }
 export type RunOutcome = { status: "succeeded"; output: Json } | { status: "failed"; error: string; failure?: ExecutionFailureRecord } | { status: "cancelled" };
 const terminal = new Set<RunStatus>(["succeeded", "failed", "cancelled"]);
 const active = new Set<RunStatus>(["running", "waiting", "pausing", "paused", "cancelling"]);
@@ -128,7 +135,7 @@ export class RunStore {
       CREATE INDEX IF NOT EXISTS workflow_transitions_cursor ON workflow_transitions(run_id,seq);
       CREATE TABLE IF NOT EXISTS workflow_run_starts (
         run_id TEXT PRIMARY KEY REFERENCES workflow_runs(id), prepared_id TEXT NOT NULL,
-        idempotency_key TEXT UNIQUE
+        idempotency_key TEXT UNIQUE, operation TEXT NOT NULL DEFAULT 'start', canonical_request TEXT
       ) STRICT;
       CREATE TABLE IF NOT EXISTS workflow_activation_history (
         run_id TEXT NOT NULL, activation_key TEXT NOT NULL, attempt INTEGER NOT NULL, record TEXT NOT NULL,
@@ -168,7 +175,55 @@ export class RunStore {
         PRIMARY KEY(run_id,decision_id),
         FOREIGN KEY(run_id,decision_id) REFERENCES workflow_reconciliations(run_id,decision_id)
       ) STRICT;
+      CREATE TABLE IF NOT EXISTS workflow_tasks (
+        id TEXT PRIMARY KEY, root_run_id TEXT NOT NULL REFERENCES workflow_runs(id),
+        created_at INTEGER NOT NULL, creation_kind TEXT NOT NULL
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS workflow_continuation_receipts (
+        id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES workflow_tasks(id),
+        actor TEXT NOT NULL, reason TEXT NOT NULL, evidence TEXT NOT NULL,
+        source_run_id TEXT NOT NULL REFERENCES workflow_runs(id), source_plan_hash TEXT NOT NULL, source_checkpoint TEXT NOT NULL,
+        target_prepared_id TEXT NOT NULL, target_plan_hash TEXT NOT NULL, target_run_id TEXT NOT NULL UNIQUE REFERENCES workflow_runs(id),
+        canonical_request TEXT NOT NULL, workspace_digest TEXT NOT NULL, created_at INTEGER NOT NULL, paused INTEGER NOT NULL, admitted INTEGER NOT NULL DEFAULT 0
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS workflow_task_membership (
+        run_id TEXT PRIMARY KEY REFERENCES workflow_runs(id), task_id TEXT NOT NULL REFERENCES workflow_tasks(id),
+        parent_run_id TEXT REFERENCES workflow_runs(id), role TEXT NOT NULL,
+        receipt_id TEXT REFERENCES workflow_continuation_receipts(id),
+        created_at INTEGER NOT NULL, launched_with_task INTEGER NOT NULL
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS workflow_reused_outputs (
+        binding_id TEXT NOT NULL, receipt_id TEXT NOT NULL REFERENCES workflow_continuation_receipts(id),
+        source_run_id TEXT NOT NULL REFERENCES workflow_runs(id), source_plan_hash TEXT NOT NULL,
+        source_activation_key TEXT NOT NULL, source_attempt INTEGER NOT NULL,
+        source_graph_id TEXT NOT NULL, source_node_id TEXT NOT NULL,
+        output_digest TEXT NOT NULL, schema_digest TEXT NOT NULL, producer_schema_digest TEXT, value TEXT NOT NULL,
+        target_graph_id TEXT NOT NULL, target_node_id TEXT NOT NULL,
+        producer_run_id TEXT NOT NULL REFERENCES workflow_runs(id), producer_key TEXT NOT NULL, producer_attempt INTEGER NOT NULL,
+        producer_graph_id TEXT NOT NULL, producer_node_id TEXT NOT NULL,
+        artifact_revision TEXT, acceptance_criteria_revision TEXT,
+        PRIMARY KEY (receipt_id, binding_id)
+      ) STRICT;
+      CREATE TABLE IF NOT EXISTS workflow_continuation_fences (
+        source_run_id TEXT PRIMARY KEY REFERENCES workflow_runs(id),
+        successor_run_id TEXT NOT NULL UNIQUE REFERENCES workflow_runs(id),
+        receipt_id TEXT NOT NULL UNIQUE REFERENCES workflow_continuation_receipts(id),
+        created_at INTEGER NOT NULL
+      ) STRICT;
     `);
+    this.migrateStartColumns();
+  }
+  private migrateStartColumns(): void {
+    this.transaction(() => {
+      const cols = this.database.prepare("PRAGMA table_info(workflow_run_starts)").all().map(row => String(row.name));
+      if (!cols.includes("operation")) this.database.exec("ALTER TABLE workflow_run_starts ADD COLUMN operation TEXT NOT NULL DEFAULT 'start'");
+      if (!cols.includes("canonical_request")) this.database.exec("ALTER TABLE workflow_run_starts ADD COLUMN canonical_request TEXT");
+      const receipts = this.database.prepare("PRAGMA table_info(workflow_continuation_receipts)").all().map(row => String(row.name));
+      if (receipts.length && !receipts.includes("workspace_digest")) this.database.exec("ALTER TABLE workflow_continuation_receipts ADD COLUMN workspace_digest TEXT NOT NULL DEFAULT ''");
+      if (receipts.length && !receipts.includes("admitted")) this.database.exec("ALTER TABLE workflow_continuation_receipts ADD COLUMN admitted INTEGER NOT NULL DEFAULT 0");
+      const reusedCols = this.database.prepare("PRAGMA table_info(workflow_reused_outputs)").all().map(row => String(row.name));
+      if (reusedCols.length && !reusedCols.includes("producer_schema_digest")) this.database.exec("ALTER TABLE workflow_reused_outputs ADD COLUMN producer_schema_digest TEXT");
+    });
   }
   close(): void { this.database.close(); }
   private transaction<T>(body: () => T, mode: "write" | "read" = "write"): T {
@@ -186,19 +241,31 @@ export class RunStore {
     return run;
   }
   /** Lookup before reading mutable resources or checking cwd. JSON object key order is immaterial. */
-  findStart(start: PreparedStart, input: Json): RunRecord | undefined {
+  findStart(start: PreparedStart, input: Json, canonical?: Json): RunRecord | undefined {
     if (start.idempotencyKey === undefined) return undefined;
     if (!start.idempotencyKey.length || start.idempotencyKey.includes("\0")) throw new Error("Invalid idempotency key");
     assertJson(input);
-    const row = this.database.prepare("SELECT run_id,prepared_id FROM workflow_run_starts WHERE idempotency_key=?").get(start.idempotencyKey);
+    if (canonical !== undefined) assertJson(canonical);
+    const row = this.database.prepare("SELECT run_id,prepared_id,operation,canonical_request FROM workflow_run_starts WHERE idempotency_key=?").get(start.idempotencyKey);
     if (!row) return undefined;
     const run = this.get(String(row.run_id));
-    if (row.prepared_id !== start.preparedId || !isDeepStrictEqual(run.input, JSON.parse(JSON.stringify(input)))) throw new Error("Start idempotency conflict: key is already bound to a different prepared plan or input");
+    const storedOperation = String(row.operation ?? startKind);
+    const requested = start.operation ?? (canonical && (canonical as { kind?: string }).kind === continuationKind ? continuationKind : startKind);
+    if (storedOperation !== requested) throw new Error("Start idempotency conflict: key is already bound to a different operation");
+    if (requested === continuationKind) {
+      if (canonical === undefined || !sameCanonicalRequest(row.canonical_request === null ? null : String(row.canonical_request), canonical)) {
+        throw new Error("Start idempotency conflict: key is already bound to a different continuation request");
+      }
+    } else if (row.prepared_id !== start.preparedId || !isDeepStrictEqual(run.input, JSON.parse(JSON.stringify(input))) ||
+      (row.canonical_request !== null && !sameCanonicalRequest(String(row.canonical_request), canonicalStartRequest(start.preparedId, input)))) {
+      throw new Error("Start idempotency conflict: key is already bound to a different prepared plan or input");
+    }
     return run;
   }
   create(input: { id: string; plan: ExecutionPlan; input: Json; cwd: string; start?: PreparedStart }): RunRecord {
     assertJson(input.input);
     if (input.start && preparedExecutionId(input.plan.hash, input.cwd) !== input.start.preparedId) throw new Error("Prepared start identity mismatch");
+    if (planHasReuse(input.plan.workflow)) throw new Error("Reuse-bearing plan requires a continuation receipt; use run.continue");
     return this.transaction(() => {
       const existing = input.start && this.findStart(input.start, input.input);
       if (existing) return existing;
@@ -207,9 +274,10 @@ export class RunStore {
         VALUES(?,?,?,?,'queued','running',?,?) ON CONFLICT(id) DO NOTHING`)
         .run(input.id, JSON.stringify(input.plan), JSON.stringify(input.input), input.cwd, now, now);
       if (Number(inserted.changes) !== 1) throw new Error(`Run already exists: ${input.id}`);
-      if (input.start) this.database.prepare("INSERT INTO workflow_run_starts(run_id,prepared_id,idempotency_key) VALUES(?,?,?)")
-        .run(input.id, input.start.preparedId, input.start.idempotencyKey ?? null);
+      if (input.start) this.database.prepare("INSERT INTO workflow_run_starts(run_id,prepared_id,idempotency_key,operation,canonical_request) VALUES(?,?,?,?,?)")
+        .run(input.id, input.start.preparedId, input.start.idempotencyKey ?? null, startKind, JSON.stringify(canonicalStartRequest(input.start.preparedId, input.input)));
       this.event(input.id, "run.created", { planHash: input.plan.hash, ...(input.start ? { preparedId: input.start.preparedId } : {}) });
+      this.insertRootTask(input.id, now);
       return this.get(input.id);
     });
   }
@@ -218,7 +286,7 @@ export class RunStore {
       LEFT JOIN workflow_task_outcomes t ON t.run_id=r.id LEFT JOIN workflow_run_starts s ON s.run_id=r.id
       LEFT JOIN workflow_run_failures f ON f.run_id=r.id WHERE r.id = ?`).get(id);
     if (!row) throw new Error(`Run not found: ${id}`);
-    return {
+    const record: RunRecord = {
       id: String(row.id), plan: JSON.parse(String(row.plan)) as ExecutionPlan, input: JSON.parse(String(row.input)) as Json,
       cwd: String(row.cwd), status: row.status as RunStatus, desired: row.desired as DesiredRunStatus,
       ownerToken: row.owner_token === null ? null : String(row.owner_token), supervisorPid: row.supervisor_pid === null ? null : Number(row.supervisor_pid),
@@ -230,6 +298,8 @@ export class RunStore {
       ...(row.status === "succeeded" ? { taskOutcome: row.task_outcome === null
         ? legacyOutcome(JSON.parse(String(row.output))) : JSON.parse(String(row.task_outcome)) as TaskOutcome } : {}),
     };
+    const lineage = this.readLineage(record.id);
+    return lineage ? { ...record, lineage } : record;
   }
   listRuns(): RunRecord[] {
     return this.database.prepare("SELECT id FROM workflow_runs ORDER BY created_at, id").all().map(row => this.get(String(row.id)));
@@ -238,6 +308,7 @@ export class RunStore {
   reserveLaunch(id: string, initialOnly = false): { token: string; run: RunRecord } {
     return this.transaction(() => {
       const run = this.get(id);
+      if (this.fence(id)) throw new Error(`Run was replaced by a continuation and cannot be relaunched: ${id}`);
       if (!(initialOnly ? ["queued"] : ["queued", "interrupted"]).includes(run.status) || run.desired !== "running" || run.ownerToken !== null) throw new Error(`Run is not launchable: ${id} (${run.status}/${run.desired})`);
       if (this.hasPendingWorkerGroups(id)) throw executionFailure("uncertain-effect", "recovery", "unknown", "Worker process groups have not been verified empty");
       const token = randomUUID();
@@ -266,6 +337,7 @@ export class RunStore {
   requestControl(id: string, command: "pause" | "resume" | "cancel"): RunRecord {
     return this.transaction(() => {
       const run = this.get(id);
+      if (command === "resume" && this.fence(id)) throw new Error(`Run was replaced by a continuation and cannot be resumed: ${id}`);
       if (terminal.has(run.status)) return run;
       const desired: DesiredRunStatus = command === "pause" ? "paused" : command === "cancel" ? "cancelled" : "running";
       // Cancellation is monotonic: a late resume/pause cannot revoke it.
@@ -541,7 +613,7 @@ export class RunStore {
       json_extract(a.context,'$.scope') AS scope,json_extract(t.decision,'$.edgeIndex') AS edge_index,
       COUNT(*) AS count,MAX(t.seq) AS last_seq FROM workflow_transitions t JOIN workflow_activations a
       ON a.run_id=t.run_id AND a.activation_key=t.activation_key WHERE t.run_id=? GROUP BY graph_id,scope,edge_index`).all(id);
-    return { supported: ["dynamicwf-effect-v3", "dynamicwf-effect-v4", "dynamicwf-effect-v5", "dynamicwf-effect-v6", "dynamicwf-effect-v7"].includes(run.plan.compilerVersion), count: rows.reduce((n, r) => n + Number(r.count), 0),
+    return { supported: supportsGeneratedRouting(run.plan.compilerVersion), count: rows.reduce((n, r) => n + Number(r.count), 0),
       failed: rows.filter(r => r.edge_index === null).reduce((n, r) => n + Number(r.count), 0),
       lastSeq: rows.reduce((n, r) => Math.max(n, Number(r.last_seq)), 0),
       edges: rows.filter(r => r.edge_index !== null).map(r => ({ graphId: String(r.graph_id), scope: String(r.scope), edgeIndex: Number(r.edge_index), count: Number(r.count) })) };
@@ -692,6 +764,7 @@ export class RunStore {
     return this.transaction(() => {
       const existing = this.reconciliation(id, request.decisionId);
       if (existing) return sameReconciliation(existing, request);
+      if (this.fence(id)) throw new Error("Run was replaced by a continuation and cannot be reconciled");
       const state = this.readRecoveryState(id), selected = state.activations.find(a => a.key === request.key);
       if (!selected || selected.attempt !== request.attempt || recoveryCheckpoint(state.run, state.activations, state.collections, state.eventSeq) !== request.checkpoint) throw new Error("Recovery checkpoint changed; inspect again");
       const blockers = recoveryBlockers(state.run, selected, state.activations, state.collections);
@@ -768,13 +841,14 @@ export class RunStore {
     });
   }
   /** One response is committed independently of output validation. Duplicate delivery is idempotent. */
-  recordUsage(id: string, token: string, key: string, reportId: string, value: unknown, stopReason: string): void {
+  recordUsage(id: string, token: string, key: string, reportId: string, value: unknown, stopReason: string, observedEffort?: string): void {
     const usage = parseUsage(value);
     if (!usage || !/^[1-9][0-9]*$/.test(reportId) || !["pending", "stop", "length", "toolUse", "error", "aborted", "deferred"].includes(stopReason)) throw new Error("Invalid worker usage report");
+    if (observedEffort !== undefined && (typeof observedEffort !== "string" || !observedEffort)) throw new Error("Invalid observed reasoning effort");
     this.transaction(() => {
       const activation = this.runningActivation(id, token, key);
       if (activation.kind !== "agent") throw new Error("Usage belongs to an agent activation");
-      const encoded = JSON.stringify(usage);
+      const encoded = JSON.stringify({ ...usage, ...(observedEffort !== undefined ? { observedEffort } : {}) });
       const old = this.database.prepare("SELECT usage,stop_reason FROM workflow_usage_reports WHERE run_id=? AND activation_key=? AND attempt=? AND report_id=?").get(id, key, activation.attempt, reportId);
       if (old) {
         if (old.usage !== encoded || old.stop_reason !== stopReason) throw new Error("Conflicting worker usage report identity");
@@ -784,7 +858,7 @@ export class RunStore {
       this.database.prepare("INSERT INTO workflow_usage_reports(run_id,activation_key,attempt,report_id,usage,stop_reason,at) VALUES(?,?,?,?,?,?,?)")
         .run(id, key, activation.attempt, reportId, encoded, stopReason, Date.now());
       this.projectUsage(activation);
-      this.event(id, "usage.reported", { key, attempt: activation.attempt, reportId, usage: JSON.parse(encoded) as Json, stopReason, source: "pi-sdk" });
+      this.event(id, "usage.reported", { key, attempt: activation.attempt, reportId, usage: JSON.parse(JSON.stringify(usage)) as Json, stopReason, source: "pi-sdk", ...(observedEffort !== undefined ? { observedEffort } : {}) });
     });
   }
   settleUsage(id: string, token: string, key: string, complete: boolean): void {
@@ -811,9 +885,172 @@ export class RunStore {
   usageReports(id: string, after = 0, limit = 100): { reports: UsageRecord[]; nextAfter: number; hasMore: boolean } {
     if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error("Invalid usage page cursor or limit (1–1000)");
     const rows = this.database.prepare("SELECT * FROM workflow_usage_reports WHERE run_id=? AND seq>? ORDER BY seq LIMIT ?").all(id, after, limit + 1);
-    const reports: UsageRecord[] = rows.slice(0, limit).map(row => ({ seq: Number(row.seq), runId: String(row.run_id), key: String(row.activation_key), attempt: Number(row.attempt),
-      reportId: String(row.report_id), usage: JSON.parse(String(row.usage)) as TokenUsage, stopReason: String(row.stop_reason), at: Number(row.at), source: "pi-sdk" }));
+    const reports: UsageRecord[] = rows.slice(0, limit).map(row => {
+      const raw = JSON.parse(String(row.usage)) as TokenUsage & { observedEffort?: string };
+      const usage = parseUsage(raw);
+      if (!usage) throw new Error("Invalid stored usage report");
+      return { seq: Number(row.seq), runId: String(row.run_id), key: String(row.activation_key), attempt: Number(row.attempt),
+      reportId: String(row.report_id), usage, stopReason: String(row.stop_reason), at: Number(row.at), source: "pi-sdk" as const,
+      ...(typeof raw.observedEffort === "string" ? { observedEffort: raw.observedEffort } : {}) };
+    });
     return { reports, nextAfter: reports.at(-1)?.seq ?? after, hasMore: rows.length > limit };
+  }
+  taskUsageReports(taskId: string, after = 0, limit = 100): { reports: UsageRecord[]; nextAfter: number; hasMore: boolean } {
+    this.task(taskId);
+    if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error("Invalid usage page cursor or limit (1–1000)");
+    const rows = this.database.prepare(`SELECT r.* FROM workflow_usage_reports r JOIN workflow_task_membership m ON m.run_id=r.run_id
+      WHERE m.task_id=? AND r.seq>? ORDER BY r.seq LIMIT ?`).all(taskId, after, limit + 1);
+    const reports: UsageRecord[] = rows.slice(0, limit).map(row => {
+      const raw = JSON.parse(String(row.usage)) as TokenUsage & { observedEffort?: string };
+      const usage = parseUsage(raw);
+      if (!usage) throw new Error("Invalid stored usage report");
+      return { seq: Number(row.seq), runId: String(row.run_id), key: String(row.activation_key), attempt: Number(row.attempt),
+        reportId: String(row.report_id), usage, stopReason: String(row.stop_reason), at: Number(row.at), source: "pi-sdk" as const,
+        ...(typeof raw.observedEffort === "string" ? { observedEffort: raw.observedEffort } : {}) };
+    });
+    return { reports, nextAfter: reports.at(-1)?.seq ?? after, hasMore: rows.length > limit };
+  }
+  private insertRootTask(runId: string, now: number): void {
+    const taskId = `task-${randomUUID()}`;
+    this.database.prepare("INSERT INTO workflow_tasks(id,root_run_id,created_at,creation_kind) VALUES(?,?,?,'start')").run(taskId, runId, now);
+    this.database.prepare("INSERT INTO workflow_task_membership(run_id,task_id,parent_run_id,role,receipt_id,created_at,launched_with_task) VALUES(?,?,NULL,'root',NULL,?,1)")
+      .run(runId, taskId, now);
+  }
+  private readLineage(runId: string): RunLineage | undefined {
+    const member = this.database.prepare("SELECT * FROM workflow_task_membership WHERE run_id=?").get(runId);
+    if (!member) return undefined;
+    const fence = this.database.prepare("SELECT successor_run_id FROM workflow_continuation_fences WHERE source_run_id=?").get(runId);
+    const receiptId = member.receipt_id === null ? null : String(member.receipt_id);
+    const receipt = receiptId ? this.decodeReceipt(receiptId) : undefined;
+    return {
+      taskId: String(member.task_id), role: String(member.role) as MembershipRole,
+      parentRunId: member.parent_run_id === null ? null : String(member.parent_run_id),
+      successorRunId: fence ? String(fence.successor_run_id) : null,
+      launchedWithTask: Number(member.launched_with_task) === 1,
+      ...(receipt ? { receipt: publicReceipt(receipt) } : {}),
+    };
+  }
+  fence(id: string): { successorRunId: string; receiptId: string; createdAt: number } | undefined {
+    const row = this.database.prepare("SELECT * FROM workflow_continuation_fences WHERE source_run_id=?").get(id);
+    return row ? { successorRunId: String(row.successor_run_id), receiptId: String(row.receipt_id), createdAt: Number(row.created_at) } : undefined;
+  }
+  membership(runId: string): TaskMembershipRecord | undefined {
+    const row = this.database.prepare("SELECT * FROM workflow_task_membership WHERE run_id=?").get(runId);
+    return row ? this.decodeMembership(row) : undefined;
+  }
+  task(taskId: string): { id: string; rootRunId: string; createdAt: number; creationKind: string } {
+    const row = this.database.prepare("SELECT * FROM workflow_tasks WHERE id=?").get(taskId);
+    if (!row) throw new Error(`Task not found: ${taskId}`);
+    return { id: String(row.id), rootRunId: String(row.root_run_id), createdAt: Number(row.created_at), creationKind: String(row.creation_kind) };
+  }
+  taskMembers(taskId: string): TaskMembershipRecord[] {
+    this.task(taskId);
+    return this.database.prepare("SELECT * FROM workflow_task_membership WHERE task_id=? ORDER BY created_at, run_id").all(taskId).map(row => this.decodeMembership(row));
+  }
+  receipt(id: string): ContinuationReceiptRecord {
+    return this.decodeReceipt(id);
+  }
+  receiptForTarget(runId: string): ContinuationReceiptRecord | undefined {
+    const row = this.database.prepare("SELECT id FROM workflow_continuation_receipts WHERE target_run_id=?").get(runId);
+    return row ? this.decodeReceipt(String(row.id)) : undefined;
+  }
+  reusedBinding(runId: string, bindingId: string): ReusedOutputRecord | undefined {
+    const receipt = this.receiptForTarget(runId);
+    return receipt?.reused.find(item => item.bindingId === bindingId);
+  }
+  private decodeMembership(row: Record<string, unknown>): TaskMembershipRecord {
+    return {
+      runId: String(row.run_id), taskId: String(row.task_id), parentRunId: row.parent_run_id === null ? null : String(row.parent_run_id),
+      role: String(row.role) as MembershipRole, receiptId: row.receipt_id === null ? null : String(row.receipt_id),
+      createdAt: Number(row.created_at), launchedWithTask: Number(row.launched_with_task) === 1,
+    };
+  }
+  private decodeReceipt(id: string): ContinuationReceiptRecord {
+    const row = this.database.prepare("SELECT * FROM workflow_continuation_receipts WHERE id=?").get(id);
+    if (!row) throw new Error(`Continuation receipt not found: ${id}`);
+    const reused = this.database.prepare("SELECT * FROM workflow_reused_outputs WHERE receipt_id=? ORDER BY binding_id").all(id).map(item => this.decodeReused(item));
+    return {
+      id: String(row.id), taskId: String(row.task_id), actor: String(row.actor), reason: String(row.reason),
+      evidence: JSON.parse(String(row.evidence)) as Json[], sourceRunId: String(row.source_run_id),
+      sourcePlanHash: String(row.source_plan_hash), sourceCheckpoint: String(row.source_checkpoint),
+      targetPreparedId: String(row.target_prepared_id), targetPlanHash: String(row.target_plan_hash),
+      targetRunId: String(row.target_run_id), canonicalRequest: JSON.parse(String(row.canonical_request)) as Json,
+      workspaceDigest: String(row.workspace_digest || (JSON.parse(String(row.canonical_request)) as { workspaceDigest?: string }).workspaceDigest || ""),
+      createdAt: Number(row.created_at), paused: Number(row.paused) === 1, admitted: Number(row.admitted) === 1, reused,
+    };
+  }
+  private decodeReused(row: Record<string, unknown>): ReusedOutputRecord {
+    return {
+      bindingId: String(row.binding_id), receiptId: String(row.receipt_id), sourceRunId: String(row.source_run_id),
+      sourcePlanHash: String(row.source_plan_hash), sourceActivationKey: String(row.source_activation_key),
+      sourceAttempt: Number(row.source_attempt), sourceGraphId: String(row.source_graph_id), sourceNodeId: String(row.source_node_id),
+      outputDigest: String(row.output_digest), schemaDigest: String(row.schema_digest),
+      ...(row.producer_schema_digest ? { producerSchemaDigest: String(row.producer_schema_digest) } : {}),
+      value: JSON.parse(String(row.value)) as Json,
+      targetGraphId: String(row.target_graph_id), targetNodeId: String(row.target_node_id),
+      producerRunId: String(row.producer_run_id), producerKey: String(row.producer_key), producerAttempt: Number(row.producer_attempt),
+      producerGraphId: String(row.producer_graph_id), producerNodeId: String(row.producer_node_id),
+      ...(row.artifact_revision === null ? {} : { artifactRevision: String(row.artifact_revision) }),
+      ...(row.acceptance_criteria_revision === null ? {} : { acceptanceCriteriaRevision: String(row.acceptance_criteria_revision) }),
+    };
+  }
+  createContinuation(input: {
+    id: string; plan: ExecutionPlan; cwd: string; start: PreparedStart; request: ContinuationRequest;
+    reused: Omit<ReusedOutputRecord, "receiptId">[]; paused: boolean;
+  }): RunRecord {
+    assertJson(input.request.input);
+    if (preparedExecutionId(input.plan.hash, input.cwd) !== input.start.preparedId || input.start.preparedId !== input.request.preparedId) throw new Error("Prepared start identity mismatch");
+    const canonical = canonicalContinuationRequest(input.request);
+    return this.transaction(() => {
+      const existing = this.findStart({ ...input.start, operation: continuationKind }, input.request.input, canonical);
+      if (existing) return existing;
+      const sourceId = input.request.source.runId;
+      if (sourceId === input.id) throw new Error("Continuation cannot target its source run");
+      const sourceState = this.readRecoveryState(sourceId);
+      if (sourceState.run.plan.hash !== input.request.source.planHash) throw new Error("Stale source plan hash; inspect again");
+      if (recoveryCheckpoint(sourceState.run, sourceState.activations, sourceState.collections, sourceState.eventSeq) !== input.request.source.checkpoint) {
+        throw new Error("Source checkpoint changed; inspect again");
+      }
+      if (this.fence(sourceId)) throw new Error("Source already has an admitted continuation successor");
+      const now = Date.now();
+      const sourceMember = this.membership(sourceId);
+      let taskId: string;
+      if (sourceMember) {
+        taskId = sourceMember.taskId;
+        const members = this.taskMembers(taskId);
+        if (members.some(member => member.runId === input.id)) throw new Error("Continuation ancestry cycle");
+      } else {
+        taskId = `task-${randomUUID()}`;
+        this.database.prepare("INSERT INTO workflow_tasks(id,root_run_id,created_at,creation_kind) VALUES(?,?,?,'adopted')").run(taskId, sourceId, now);
+        this.database.prepare("INSERT INTO workflow_task_membership(run_id,task_id,parent_run_id,role,receipt_id,created_at,launched_with_task) VALUES(?,?,NULL,'adopted-source',NULL,?,0)")
+          .run(sourceId, taskId, now);
+      }
+      const status = input.paused ? "paused" : "queued", desired = input.paused ? "paused" : "running";
+      const inserted = this.database.prepare(`INSERT INTO workflow_runs(id,plan,input,cwd,status,desired,created_at,updated_at)
+        VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING`)
+        .run(input.id, JSON.stringify(input.plan), JSON.stringify(input.request.input), input.cwd, status, desired, now, now);
+      if (Number(inserted.changes) !== 1) throw new Error(`Run already exists: ${input.id}`);
+      this.database.prepare("INSERT INTO workflow_run_starts(run_id,prepared_id,idempotency_key,operation,canonical_request) VALUES(?,?,?,?,?)")
+        .run(input.id, input.start.preparedId, input.start.idempotencyKey ?? null, continuationKind, JSON.stringify(canonical));
+      const receiptId = `cont-${randomUUID()}`;
+      this.database.prepare(`INSERT INTO workflow_continuation_receipts(id,task_id,actor,reason,evidence,source_run_id,source_plan_hash,source_checkpoint,target_prepared_id,target_plan_hash,target_run_id,canonical_request,workspace_digest,created_at,paused,admitted)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)`).run(receiptId, taskId, input.request.actor, input.request.reason, JSON.stringify(input.request.evidence),
+        sourceId, input.request.source.planHash, input.request.source.checkpoint, input.start.preparedId, input.plan.hash, input.id, JSON.stringify(canonical), input.request.workspaceDigest, now, Number(input.paused));
+      this.database.prepare("INSERT INTO workflow_task_membership(run_id,task_id,parent_run_id,role,receipt_id,created_at,launched_with_task) VALUES(?,?,?,'continuation',?,?,1)")
+        .run(input.id, taskId, sourceId, receiptId, now);
+      for (const reused of input.reused) {
+        this.database.prepare(`INSERT INTO workflow_reused_outputs(binding_id,receipt_id,source_run_id,source_plan_hash,source_activation_key,source_attempt,source_graph_id,source_node_id,output_digest,schema_digest,producer_schema_digest,value,target_graph_id,target_node_id,producer_run_id,producer_key,producer_attempt,producer_graph_id,producer_node_id,artifact_revision,acceptance_criteria_revision)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(reused.bindingId, receiptId, reused.sourceRunId, reused.sourcePlanHash, reused.sourceActivationKey,
+          reused.sourceAttempt, reused.sourceGraphId, reused.sourceNodeId, reused.outputDigest, reused.schemaDigest, reused.producerSchemaDigest ?? null, JSON.stringify(reused.value),
+          reused.targetGraphId, reused.targetNodeId, reused.producerRunId, reused.producerKey, reused.producerAttempt, reused.producerGraphId, reused.producerNodeId,
+          reused.artifactRevision ?? null, reused.acceptanceCriteriaRevision ?? null);
+      }
+      this.database.prepare("INSERT INTO workflow_continuation_fences(source_run_id,successor_run_id,receipt_id,created_at) VALUES(?,?,?,?)")
+        .run(sourceId, input.id, receiptId, now);
+      this.event(input.id, "run.created", { planHash: input.plan.hash, preparedId: input.start.preparedId, continuation: true, receiptId, sourceRunId: sourceId });
+      this.event(sourceId, "continuation.fenced", { successorRunId: input.id, receiptId, reason: input.request.reason });
+      return this.get(input.id);
+    });
   }
   events(id: string, after = 0): RunEvent[] {
     return this.database.prepare("SELECT * FROM workflow_run_events WHERE run_id=? AND seq>? ORDER BY seq").all(id, after).map(row => ({

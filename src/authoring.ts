@@ -120,6 +120,7 @@ function checkNodeConfig(node: Node): void {
     case "map": checkExpression(node.items); break;
     case "parallel": for (const child of node.children) checkExpression(child.input); break;
     case "check": break;
+    case "reuse": createOutputValidator(node.outputSchema); break;
   }
 }
 function checkExpression(expression: Expr): void {

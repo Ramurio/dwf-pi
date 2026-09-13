@@ -97,7 +97,7 @@ const headers = (url: string) => ({
 test("local UI serves all assets and a safe projection; read-only requests preserve journal events", async () =>
   fixture(async (f) => {
     const before = f.store.events("run-ui");
-    for (const name of ["", "app.js", "layout.js", "usage-pages.js", "style.css"]) {
+    for (const name of ["", "app.js", "layout.js", "usage-pages.js", "task-scope.js", "style.css"]) {
       const response = await fetch(f.url + name);
       assert.equal(response.status, 200);
       assert.match(
@@ -105,6 +105,7 @@ test("local UI serves all assets and a safe projection; read-only requests prese
         /frame-ancestors 'none'/,
       );
       assert.equal(response.headers.get("cache-control"), "no-store");
+      if (name === "app.js") assert.match(await response.text(), /from "\.\/task-scope\.js"/);
     }
     const snapshot = await (await fetch(f.url + "snapshot?id=run-ui")).json();
     assert.equal(snapshot.id, "run-ui");
@@ -386,3 +387,34 @@ test("routes and label masks avoid every node across joins, dense fan-out, multi
     }
   }
 });
+
+test("browser snapshot shows continuation lineage as text, reused nodes without models, and task usage links", async () =>
+  fixture(async (f) => {
+    const run = f.store.get("run-ui");
+    run.lineage = {
+      taskId: "task-ui", role: "continuation", parentRunId: "run-original", successorRunId: null, launchedWithTask: true,
+      receipt: {
+        id: "cont-ui", taskId: "task-ui", actor: "tester", reason: "<img src=x onerror=alert(1)>", evidence: ["<script>"],
+        sourceRunId: "run-original", sourcePlanHash: "a".repeat(64), sourceCheckpoint: "b".repeat(64),
+        targetPreparedId: "prepared-" + "c".repeat(64), targetPlanHash: run.plan.hash, targetRunId: "run-ui",
+        workspaceDigest: "f".repeat(64), createdAt: Date.now(), paused: false, reused: [{
+          bindingId: "planner", sourceRunId: "run-original", sourcePlanHash: "a".repeat(64), sourceActivationKey: "k", sourceAttempt: 1,
+          sourceGraphId: "main", sourceNodeId: "plan", outputDigest: "d".repeat(64), schemaDigest: "e".repeat(64),
+          targetGraphId: "main", targetNodeId: "prior", producerRunId: "run-original", producerKey: "k", producerAttempt: 1,
+          producerGraphId: "main", producerNodeId: "plan",
+        }],
+      },
+    };
+    const snapshot = graphSnapshot(run, [{
+      runId: "run-ui", key: "reuse-key", context: { graphId: "main", nodeId: "done", scope: ["graph", "main"], visit: 0 },
+      kind: "reuse", sideEffect: false, status: "succeeded", attempt: 1, ownerToken: "SECRET", startedAt: 1, finishedAt: 2,
+      output: { result: "plan-v1" }, metadata: { reused: { bindingId: "planner", sourceRunId: "run-original", sourceAttempt: 1, outputDigest: "d".repeat(64), invocation: false } },
+    }]);
+    assert.equal(snapshot.lineage?.receipt?.reason, "<img src=x onerror=alert(1)>");
+    assert.equal(snapshot.graphs[0]!.nodes[0]!.kind, "end");
+    assert.equal(snapshot.graphs[0]!.nodes[0]!.model, null);
+    assert.equal(snapshot.graphs[0]!.nodes[0]!.activations[0]!.reused?.invocation, false);
+    const html = await (await fetch(f.url)).text();
+    assert.match(html, /task-lineage/);
+    assert.doesNotMatch(JSON.stringify(snapshot), /SECRET/);
+  }));

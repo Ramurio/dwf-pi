@@ -64,7 +64,7 @@ business semantics between the transports.
 | --- | --- |
 | Roles | `catalog_list`, `catalog_describe` |
 | Authoring | `workflow_schema`, `workflow_create`, `workflow_list`, `workflow_inspect`, `workflow_patch`, `workflow_validate`, `workflow_compile`, `workflow_prepare`, `workflow_prepared` |
-| Execution | `run_start`, `run_status`, `run_list`, `run_inspect`, `run_events`, `run_attempts`, `run_pause`, `run_resume`, `run_cancel` |
+| Execution | `run_start`, `run_status`, `run_list`, `run_inspect`, `run_events`, `run_attempts`, `run_pause`, `run_resume`, `run_cancel`, `run_continuation_inspect`, `run_continue`, `task_inspect`, `task_usage` |
 | Presets | `preset_save`, `preset_list`, `preset_inspect`, `preset_run` |
 
 Every tool advertises a closed object input schema, with required fields and field

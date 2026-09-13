@@ -82,6 +82,25 @@ export function summarizeUsage(records: readonly ActivationRecord[]) {
     costPartial: partial || costPartial || costReported < reported,
     partial };
 }
+export function summarizeTaskUsage(runs: readonly { id: string; records: readonly ActivationRecord[]; reusedOutputs?: number }[]) {
+  const perRun = runs.map(run => ({ id: run.id, summary: summarizeUsage(run.records), reusedOutputs: run.reusedOutputs ?? run.records.filter(record => record.kind === "reuse").length }));
+  const summaries = perRun.map(item => item.summary);
+  const add = (key: keyof ReturnType<typeof summarizeUsage>) => summaries.reduce((total, item) => total + (item[key] as number), 0);
+  const summary = summaries.length ? {
+    ...summaries[0]!, input: add("input"), output: add("output"), totalTokens: add("totalTokens"), cost: add("cost"),
+    reported: add("reported"), costReported: add("costReported"), missing: add("missing"), pending: add("pending"),
+    earlierAttempts: add("earlierAttempts"), cacheRead: add("cacheRead"), cacheWrite: add("cacheWrite"), reasoning: add("reasoning"),
+    cacheReported: add("cacheReported"), reasoningReported: add("reasoningReported"), incomplete: add("incomplete"), responses: add("responses"),
+    cacheReadReported: add("cacheReadReported"), cacheWriteReported: add("cacheWriteReported"),
+    cacheReadPartial: summaries.some(item => item.cacheReadPartial), cacheWritePartial: summaries.some(item => item.cacheWritePartial),
+    reasoningPartial: summaries.some(item => item.reasoningPartial), costPartial: summaries.some(item => item.costPartial),
+    partial: summaries.some(item => item.partial),
+  } : summarizeUsage([]);
+  return {
+    summary, runs: perRun, reusedOutputs: perRun.reduce((n, item) => n + item.reusedOutputs, 0),
+    sdkCostIsEstimate: true, subscriptionInvoice: false, unknownCostIsZero: false,
+  };
+}
 export const tokenNumber = (value: number): string => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value).replace(/\u00a0/g, " ");
 export function tokenSummary(records: readonly ActivationRecord[]): string {
   const usage = summarizeUsage(records);

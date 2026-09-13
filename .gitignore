@@ -9,3 +9,4 @@ coverage/
 .dynamicwf/cache/
 .dynamicwf/state.sqlite*
 *.tsbuildinfo
+scratch/

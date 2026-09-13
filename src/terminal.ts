@@ -45,9 +45,13 @@ export function renderRun(run: RunRecord, activations: readonly ActivationRecord
     `Run ${terminalText(run.id)} · ${stateLabel(run)}`,
     `Journal: ${progress(activations)} · ${tokenSummary(activations)}`,
   ];
+  if (run.lineage) {
+    lines.push(`Task ${terminalText(run.lineage.taskId)} · ${run.lineage.role}${run.lineage.parentRunId ? ` · from ${terminalText(run.lineage.parentRunId)}` : ""}${run.lineage.successorRunId ? ` · continuation ${terminalText(run.lineage.successorRunId)}` : ""}`);
+    if (run.lineage.receipt) lines.push(`Continuation: ${terminalText(run.lineage.receipt.reason, 500)}`);
+  }
   if (presentation.taskOutcome) lines.push(`Task: ${presentation.taskOutcome.decision} · ${terminalText(presentation.taskOutcome.reason, 500)}`);
   if (presentation.liveness.state !== "unknown") lines.push(presentation.liveness.label);
-  if (run.failure) lines.push(terminalText(`${run.failure.code}/${run.failure.phase}${providerResponseSummary(run.failure.providerResponse)}: ${run.failure.message}`,500));
+  if (run.failure) lines.push(terminalText(`${run.failure.code}/${run.failure.phase}${run.failure.diagnostic?.subcode ? `/${run.failure.diagnostic.subcode}` : ""}${run.failure.diagnostic ? ` · ${run.failure.diagnostic.dispatch}` : ""}${providerResponseSummary(run.failure.providerResponse)}: ${run.failure.message}`,500));
   for (const record of activations.filter(a => activationState(a) === "waiting")) lines.push(`Wait ${terminalText(String(record.metadata.waitId))}: ${terminalText(String(record.metadata.waitReason), 500)}`);
   for (const [graphId, graph] of Object.entries(run.plan.workflow.graphs)) {
     lines.push("", `┌ Graph ${terminalText(graphId)} · entry ${terminalText(graph.entry)}`);

@@ -1,5 +1,15 @@
 import { layoutGraph } from "./layout.js";
 import { UsagePages, TracePages, AttemptPages, CollectionPages, RetryPages } from "./usage-pages.js";
+import {
+  activationTarget,
+  applyTaskScopeError,
+  applyTaskScopeFetch,
+  beginRunSelection,
+  linkedRunsForView,
+  reconcileTaskScopeAfterSnapshot,
+  reportOrigin,
+  taskUsageForView,
+} from "./task-scope.js";
 
 const usagePages = new UsagePages();
 const tracePages = new TracePages();
@@ -51,6 +61,7 @@ const kinds = {
   end: "Результат",
   finish: "Результат",
   await: "Ожидание ответа",
+  reuse: "Повторное использование результата",
 };
 const structural = new Set(["worktree", "parallel", "map", "subworkflow"]);
 const finished = new Set(["succeeded", "failed", "cancelled"]);
@@ -70,6 +81,11 @@ const state = {
   controlError: null,
   cameras: new Map(),
   snapshotAt: 0,
+  usageScope: "run",
+  taskUsage: null,
+  linkedRuns: [],
+  taskFetch: 0,
+  taskUsageError: null,
 };
 const number = (value) => new Intl.NumberFormat("ru-RU").format(value);
 const duration = (ms) => {
@@ -212,7 +228,7 @@ function renderRuns() {
       el(
         "small",
         "mini-id",
-        `${run.id.slice(-8)} · ${number(run.usage.totalTokens)} ток.`,
+        `${run.id.slice(-8)} · ${number(run.usage.totalTokens)} ток.${run.lineage?.role === "continuation" ? " · продолжение" : run.lineage?.successorRunId ? " · есть продолжение" : ""}`,
       ),
     );
     $("runs").append(item);
@@ -224,17 +240,50 @@ function renderRuns() {
 }
 async function selectRun(id) {
   if (state.id === id) return;
-  state.id = id;
-  state.run = null;
-  state.graph = null;
-  state.scope = "";
-  state.node = null;
-  state.signature = "";
-  state.filter = "all";
-  state.controlError = null;
+  const { previousTaskId } = beginRunSelection(state, id);
   for (const name of ["pause", "resume", "cancel"]) $(name).disabled = true;
   renderRuns();
   await refreshSnapshot();
+  reconcileTaskScopeAfterSnapshot(state, previousTaskId);
+  if (state.run) {
+    renderHeader();
+    renderPanel();
+  }
+}
+async function loadTaskScope(taskId) {
+  const seq = ++state.taskFetch;
+  const runId = state.id;
+  try {
+    const usage = await api(`task-usage?id=${encodeURIComponent(taskId)}&after=0`);
+    if (seq !== state.taskFetch || state.id !== runId) return false;
+    const task = await api(`task?id=${encodeURIComponent(taskId)}`);
+    const linked = [];
+    for (const member of task.members ?? []) {
+      if (seq !== state.taskFetch || state.id !== runId) return false;
+      linked.push(await api(`snapshot?id=${encodeURIComponent(member.runId)}`));
+    }
+    return applyTaskScopeFetch(state, seq, taskId, usage, linked) && state.id === runId;
+  } catch (error) {
+    applyTaskScopeError(state, seq, taskId, error instanceof Error ? error.message : String(error));
+    return false;
+  }
+}
+async function openActivation(activation) {
+  const target = activationTarget(activation, state.id);
+  if (!target.runId) return;
+  if (target.runId !== state.id) await selectRun(target.runId);
+  if (state.id !== target.runId || !state.run) return;
+  if (target.graphId) state.graph = target.graphId;
+  if (target.nodeId) state.node = target.nodeId;
+  state.scope = target.scope;
+  renderPanel();
+}
+function taskActivations() {
+  return linkedRunsForView(state).flatMap((run) =>
+    (run.graphs ?? []).flatMap((g) =>
+      g.nodes.flatMap((n) => n.activations.map((a) => ({ ...a, node: n, graphId: g.id, runId: run.id }))),
+    ),
+  );
 }
 function renderMetrics() {
   const r = state.run,
@@ -328,6 +377,37 @@ function renderHeader() {
       }
       groupsPanel.append(detail);
     }
+  }
+  const lineagePanel = $("task-lineage");
+  const lineage = r.lineage;
+  lineagePanel.hidden = !lineage;
+  lineagePanel.replaceChildren();
+  if (lineage) {
+    lineagePanel.append(el("strong", "", lineage.role === "continuation" ? "Продолжение задачи" : lineage.successorRunId ? "Исходный запуск заменён продолжением" : "Задача"));
+    lineagePanel.append(el("p", "", `Задача: ${lineage.taskId}`));
+    if (!lineage.launchedWithTask) lineagePanel.append(el("p", "muted", "Исходный запуск не создавался с идентификатором задачи; связь записана при явном продолжении."));
+    if (lineage.parentRunId) lineagePanel.append(button(`Исходный запуск: ${lineage.parentRunId}`, () => selectRun(lineage.parentRunId), "child-button"));
+    if (lineage.successorRunId) {
+      const successor = state.runs.find((item) => item.id === lineage.successorRunId);
+      const status = successor?.status;
+      const label = status === "paused" || status === "pausing" ? "Продолжение на паузе"
+        : status === "cancelled" || status === "cancelling" ? "Отменённое продолжение"
+        : status === "failed" || status === "interrupted" ? "Остановленное продолжение"
+        : status === "succeeded" ? "Завершённое продолжение"
+        : status ? "Активное продолжение"
+        : "Продолжение";
+      lineagePanel.append(button(`${label}: ${lineage.successorRunId}`, () => selectRun(lineage.successorRunId), "child-button"));
+    }
+    const receipt = lineage.receipt;
+    if (receipt) {
+      lineagePanel.append(el("p", "", `Причина: ${receipt.reason}`));
+      lineagePanel.append(el("p", "muted", `${receipt.actor}. Основания заявил автор; это не машинное подтверждение внешних эффектов.`));
+      lineagePanel.append(el("p", "muted", `План: ${receipt.sourcePlanHash.slice(0, 12)}… → ${receipt.targetPlanHash.slice(0, 12)}…`));
+      for (const reused of receipt.reused) {
+        lineagePanel.append(el("p", "", `Повторно использован ${reused.bindingId} · попытка ${reused.sourceAttempt} · ${reused.outputDigest.slice(0, 12)}…`));
+      }
+    }
+    if (r.status === "failed" && lineage.successorRunId) lineagePanel.append(el("p", "", "Исходный сбой остаётся в истории. Продолжение — отдельный запуск, не успешный перезапуск этого."));
   }
   const outcome = $("task-outcome");
   outcome.hidden = !r.taskOutcome;
@@ -425,6 +505,15 @@ function renderInspector() {
         `Токены: ${node.usage.reported ? number(node.usage.totalTokens) : node.activations.length ? "нет отчёта" : "—"}${node.usage.partial ? " · неполные данные" : ""}`,
       ),
     );
+  if (node.kind === "reuse") {
+    aside.append(el("p", "definition", `Повторное использование: ${node.bindingId ?? "binding"}. Модель не вызывалась.`));
+    for (const activation of node.activations) {
+      const reused = activation.reused;
+      if (!reused?.sourceRunId) continue;
+      aside.append(el("p", "", `Источник: попытка ${reused.sourceAttempt} · ${reused.outputDigest ?? ""}`));
+      aside.append(button(`Открыть исходный запуск ${reused.sourceRunId}`, () => selectRun(reused.sourceRunId), "child-button"));
+    }
+  }
   aside.append(
     el(
       "p",
@@ -623,6 +712,10 @@ function failureView(failure, runScope = false) {
   const panel=el("div","failure-detail");
   panel.append(el("strong","",`${labels[failure.code] ?? labels.unknown} · ${phases[failure.phase] ?? "этап неизвестен"}`),el("p","",failure.message),el("p","muted",runScope ? "Это причина остановки. Состояние действий показано в деталях отдельных узлов." : effects[failure.effects] ?? effects.unknown));
   if (failure.providerResponse) panel.append(el("p","",`HTTP-ответ: ${failure.providerResponse.status}${failure.providerResponse.retryAfterMs===undefined?"":` · Retry-After: ${number(failure.providerResponse.retryAfterMs)} мс`}`));
+  if (failure.diagnostic) {
+    const dispatch = { "not-dispatched": "запрос не отправлялся", "fetch-attempted": "транспорт вызван, получение не подтверждено", "http-observed": "получен HTTP-ответ", unknown: "отправка не установлена" };
+    panel.append(el("p","muted", `${failure.diagnostic.subcode ? `Код: ${failure.diagnostic.subcode}. ` : ""}Отправка: ${dispatch[failure.diagnostic.dispatch] ?? dispatch.unknown}${failure.diagnostic.sentReasoning ? ` · reasoning: ${failure.diagnostic.sentReasoning}` : failure.diagnostic.dispatch === "not-dispatched" ? " · reasoning неизвестен" : ""}`));
+  }
   return panel;
 }
 function retryView(progress) {
@@ -952,10 +1045,7 @@ function taskRow(a) {
     body = el("div", "task-body");
   body.append(
     button(`${title(a.node)} · ${a.node.id}`, () => {
-      state.graph = a.graphId;
-      state.scope = "";
-      state.node = a.node.id;
-      renderInspector();
+      void openActivation(a);
     }),
     el("div", "muted", a.path),
   );
@@ -1142,9 +1232,33 @@ function renderTrace() {
   if (page.opened && !page.reports.length) panel.append(el("p", "muted", "Решений о переходе пока нет."));
 }
 function renderTokens() {
-  const panel = $("content-panel"),
-    u = state.run.usage;
+  const panel = $("content-panel");
+  const taskId = state.run.lineage?.taskId;
+  const taskUsage = taskUsageForView(state);
+  const taskMode = Boolean(taskUsage);
+  const u = taskMode ? taskUsage.summary : state.run.usage;
   panel.replaceChildren(sectionHeading("Расход токенов"));
+  if (taskId) {
+    const selectedRun = state.id;
+    const toggle = el("div", "usage-scope");
+    toggle.append(
+      button("Этот запуск", () => { state.usageScope = "run"; renderTokens(); }, state.usageScope === "run" ? "child-button selected" : "child-button"),
+      button("Вся задача", async () => {
+        state.usageScope = "task";
+        const id = state.run.lineage?.taskId;
+        if (id) await loadTaskScope(id);
+        if (state.id === selectedRun && state.tab === "tokens") renderTokens();
+      }, state.usageScope === "task" ? "child-button selected" : "child-button"),
+    );
+    panel.append(toggle);
+    if (state.usageScope === "task" && state.taskUsageError) panel.append(el("p", "notice", state.taskUsageError));
+    if (taskMode) {
+      panel.append(el("p", "muted", `Связанных запусков: ${taskUsage.runs.length}. Повторно использованные результаты (${taskUsage.reusedOutputs}) не добавляют вызовов модели. Оценка SDK — не списание по подписке.`));
+      for (const item of taskUsage.runs) {
+        panel.append(button(`${item.id} · ${number(item.summary.totalTokens)} ток.`, () => selectRun(item.id), "child-button"));
+      }
+    }
+  }
   const split = el("div", "token-breakdown");
   for (const [label, value, partial] of [
     ["Всего", u.reported || !u.partial ? u.totalTokens : null, u.partial],
@@ -1177,27 +1291,37 @@ function renderTokens() {
   panel.append(el("div", "explanation", notes.join(" ")));
   const ledger = el("div", "usage-ledger");
   const selectedRun = state.id;
-  const page = usagePages.get(selectedRun);
+  const pageKey = taskMode ? `task:${taskUsage.taskId}` : selectedRun;
+  const page = usagePages.get(pageKey);
+  const records = taskMode ? taskActivations() : allActivations();
   for (const report of page.reports) {
-    const activation = allActivations().find(a => a.key === report.key);
+    const activation = records.find(a => a.key === report.key && (!report.runId || !a.runId || a.runId === report.runId));
+    const origin = reportOrigin(report, records, selectedRun);
     const row = el("div", "detail-run");
-    row.append(el("strong", "", `${activation?.path ?? "Агент"} · попытка ${report.attempt} · ответ ${report.reportId}`),
-      el("p", "", `${number(report.usage.totalTokens)} ток. · вход ${number(report.usage.input)} · кэш ${report.usage.cacheRead === undefined ? "н/д" : number(report.usage.cacheRead)} · выход ${number(report.usage.output)} · ${report.stopReason} · pi SDK`));
+    row.append(el("strong", "", `${activation?.path ?? "Агент"}${report.runId ? ` · ${report.runId.slice(-8)}` : ""} · попытка ${report.attempt} · ответ ${report.reportId}`),
+      el("p", "", `${number(report.usage.totalTokens)} ток. · вход ${number(report.usage.input)} · кэш ${report.usage.cacheRead === undefined ? "н/д" : number(report.usage.cacheRead)} · выход ${number(report.usage.output)} · ${report.stopReason} · pi SDK${report.observedEffort ? ` · reasoning ${report.observedEffort}` : ""}`));
+    if (origin?.runId) {
+      row.append(button(origin.nodeId ? `Открыть ${origin.nodeId} · ${origin.runId}` : `Открыть ${origin.runId}`, () => {
+        void openActivation({ runId: origin.runId, graphId: origin.graphId, nodeId: origin.nodeId, node: origin.nodeId ? { id: origin.nodeId } : null });
+      }, "child-button"));
+    }
     ledger.append(row);
   }
   if (page.opened && !page.reports.length) ledger.append(el("p", "muted", "Поответных отчётов пока нет. Старые запуски сохраняли только итог worker."));
   if (page.error) ledger.append(el("p", "explanation", page.error));
   const load = button(page.loading ? "Загрузка…" : !page.opened ? "Показать исходные отчёты ответов" : page.hasMore ? "Следующие отчёты" : "Проверить новые отчёты", async () => {
-    const pending = usagePages.load(selectedRun, (id, cursor) => api(`usage?id=${encodeURIComponent(id)}&after=${cursor}`));
+    const pending = usagePages.load(pageKey, (_id, cursor) => taskMode
+      ? api(`task-usage?id=${encodeURIComponent(taskUsage.taskId)}&after=${cursor}`)
+      : api(`usage?id=${encodeURIComponent(selectedRun)}&after=${cursor}`));
     load.disabled = true;
     load.textContent = "Загрузка…";
     await pending;
-    if (state.id === selectedRun && state.tab === "tokens") renderTokens();
+    if (state.id === selectedRun && state.tab === "tokens" && (!taskMode || (state.usageScope === "task" && state.run?.lineage?.taskId === taskUsage.taskId))) renderTokens();
   }, "child-button");
   load.disabled = page.loading;
   panel.append(load, ledger);
   const groups = new Map();
-  const agents = allActivations().filter((a) => a.node.kind === "agent");
+  const agents = records.filter((a) => a.node.kind === "agent");
   for (const a of agents) {
     const name = a.node.model
       ? `${a.node.model.provider} / ${a.node.model.id}`
@@ -1255,6 +1379,12 @@ async function refreshSnapshot() {
       state.signature = signature;
       renderHeader();
       renderPanel();
+    }
+    if (state.usageScope === "task" && run.lineage?.taskId) {
+      const taskId = run.lineage.taskId;
+      void loadTaskScope(taskId).then((applied) => {
+        if (applied && state.id === id && state.usageScope === "task" && state.run?.lineage?.taskId === taskId && state.tab === "tokens") renderTokens();
+      });
     }
     notice(state.controlError ?? (run.failure ? null : run.error));
     $("connection").textContent = "● Данные обновляются";
