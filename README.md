@@ -28,7 +28,7 @@ pause/resume/cancel, durable journal, CLI/MCP, переносимый skill, т�
 - [Контракт графа](docs/graph-contract.md), [операции authoring](docs/authoring.md), [компилятор](docs/compiler.md)
 - [CLI/service](docs/service.md), [MCP](docs/mcp.md), [установка и skill](docs/setup.md)
 - [Диагностика и модели](docs/doctor.md), [Grok provider](docs/grok-provider.md)
-- [Браузерный интерфейс](docs/browser-ui.md), [Пресеты](docs/presets.md), [терминальный watch](docs/watch.md), [council из четырёх reviewers](docs/examples.md)
+- [Браузерный интерфейс](docs/browser-ui.md), [Пресеты](docs/presets.md), [терминальный watch](docs/watch.md), [council из четырёх reviewers](docs/examples.md), [переносимый research-trio](skills/dynamic-workflows/recipes/research-trio/README.md)
 - [Execution plan](docs/execution-plan.md), [журнал](docs/run-journal.md), [pi worker](docs/pi-worker.md)
 - [Явные результаты и сохраняемое ожидание](docs/outcomes-and-waits.md): `finish`, `await`, ответ из CLI/MCP/браузера и восстановление.
 - [Общая проекция состояния](docs/observation.md): одинаковые outcome, waiting и liveness в CLI/MCP/watch/browser.
@@ -53,6 +53,9 @@ dynamicwf ui
 Если bin directory отсутствует в PATH, используй напечатанный абсолютный путь.
 Harness может прочитать [SKILL.md](skills/dynamic-workflows/SKILL.md) напрямую или
 подключить `dynamicwf mcp` как stdio server. Специфичные настройки harness не меняются.
+Стандартный граф трёх независимых исследователей и отдельного синтезатора — в
+[recipes/research-trio](skills/dynamic-workflows/recipes/research-trio/README.md);
+он копируется из установленного skill и не требует `examples/` или `src/`.
 
 CLI принимает один JSON-запрос через stdin и возвращает один JSON-ответ.
 Без установки команда доступна как `npm run --silent cli -- <tool>`.

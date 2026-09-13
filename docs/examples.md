@@ -1,9 +1,15 @@
 # Four-perspective reviewer council
 
-This remains a small, complete authoring example. Do not add continuation, reuse or
-capability-requirement ceremony here. For a later revision of a real task, inspect
-with `run.continuation.inspect` and create a successor through `run.continue` instead
-of copying saved JSON into a new unrelated start.
+This remains a small, complete authoring example in the checkout `examples/`
+directory. Do not add continuation, reuse or capability-requirement ceremony here.
+For a later revision of a real task, inspect with `run.continuation.inspect` and
+create a successor through `run.continue` instead of copying saved JSON into a new
+unrelated start.
+
+A portable three-independent-researchers then synthesizer recipe ships inside the
+installed skill: [research-trio](../skills/dynamic-workflows/recipes/research-trio/README.md).
+Copy those JSON files from the skill tree; do not look in `examples/` or `src/` for
+that graph.
 
 The files in `examples/` are authoring requests and run input, not scheduler code:
 
@@ -43,13 +49,33 @@ Edit `examples/council.input.json` before a real review. Replace the artifact re
 
 Inspect `catalog.describe` and `workflow.prepare` to see role defaults and resolved worker configuration. Select a concrete available model if the default does not fit the task. Use `workflow.patch` to replace the `reviewer.review` node with its original fields plus the desired `config`; the shared node config applies to all four invocations. For different per-perspective models or thinking levels, create distinct reviewer graphs and point each parallel branch at its corresponding graph. Graph configuration is fixed before launch.
 
-`council.input.json` is the input value, so wrap it in a `run.start` request. This small command constructs that JSON envelope; all orchestration remains in the graph:
+Prepare the inspected snapshot, then start from that handle. Do not use the draft-id
+`run.start` shortcut and do not pass `cwd` or `model` on top of `preparedId`. Check
+`ok` after every command; `workflow.patch` also requires `result.validation.valid`.
+Use the same `--store` on every command if the journal is not the default.
 
 ```sh
-node -e 'const fs=require("node:fs"); process.stdout.write(JSON.stringify({id:"review-council",cwd:process.cwd(),input:JSON.parse(fs.readFileSync("examples/council.input.json","utf8"))}));' | dynamicwf run.start
+node -e 'const fs=require("node:fs"); process.stdout.write(JSON.stringify({id:"review-council",cwd:process.cwd()}));' | dynamicwf workflow.prepare > prepare-response.json
+node -e 'const e=JSON.parse(require("node:fs").readFileSync("prepare-response.json","utf8")); if(!e.ok) throw new Error(e.error.message); process.stdout.write(e.result.preparedId+"\n");'
 ```
 
-Record the returned run ID and inspect its result with `run.inspect` or `dynamicwf watch --run <id>`. A successful run means the council computation finished; inspect `output.accepted` and `output.decision` to determine whether the artifact was approved. A computation can succeed with `request_changes`, `inconclusive`, or `invalid_policy` as its result.
+Inspect `prepare-response.json` `result.plan`. Choose a stable `idempotencyKey` before
+sending. Save a start request that contains only that `preparedId`, `input`, and the key:
+
+```sh
+node -e 'const fs=require("node:fs"); const prep=JSON.parse(fs.readFileSync("prepare-response.json","utf8")); if(!prep.ok) throw new Error(prep.error.message); const request={preparedId:prep.result.preparedId,idempotencyKey:"review-council-attempt-1",input:JSON.parse(fs.readFileSync("examples/council.input.json","utf8"))}; fs.writeFileSync("start-request.json", JSON.stringify(request));'
+dynamicwf run.start < start-request.json > start-response.json
+node -e 'const fs=require("node:fs"); const start=JSON.parse(fs.readFileSync("start-response.json","utf8")); if(!start.ok) throw new Error(start.error.message); const id=start.result.id; process.stdout.write(id+"\n"); process.stdout.write("dynamicwf watch --run "+JSON.stringify(id)+"\n");'
+```
+
+Print the real `result.id` and that quoted watch command immediately, before waiting
+for completion (add `--store` to the watch line when used). A lost response is retried
+with the unchanged `start-request.json`. A new intended run needs a new key. Inspect
+the result with `run.status` / `run.inspect`. A successful run means the council
+computation finished; inspect `taskOutcome` and `output.accepted` / `output.decision`
+to determine whether the artifact was approved. A computation can succeed with
+`request_changes`, `inconclusive`, or `invalid_policy` as its result. Do not auto-save
+a preset in this ordinary sequence.
 
 ## Policies and deterministic aggregation
 

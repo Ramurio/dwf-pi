@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { execFileSync, spawnSync } from "node:child_process";
-import { lstat, mkdir, mkdtemp, readFile, readlink, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Client, type CallToolResult } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
 import { setup } from "../scripts/setup.js";
@@ -21,6 +22,88 @@ function invoke(executable: string, args: string[], directory: string, request: 
 function alive(pid: number): boolean {
   try { process.kill(pid, 0); return true; }
   catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error; }
+}
+const markdownHref = /\[[^\]]*\]\(([^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'))?\)/g;
+const shippedSkillMarkdown = [
+  "SKILL.md", "recipes/research-trio/README.md",
+  "references/authoring.md", "references/operations.md", "references/recovery.md",
+  "references/continuation.md", "references/providers.md", "references/usage.md",
+];
+const shippedRecipeJson = [
+  "recipes/research-trio/create.json", "recipes/research-trio/patch.json", "recipes/research-trio/input.json",
+];
+function localHrefs(markdown: string): string[] {
+  const hrefs: string[] = [];
+  for (const match of markdown.matchAll(markdownHref)) {
+    const raw = match[1] ?? "";
+    if (!raw || raw.startsWith("#") || /^[a-z][a-z0-9+.-]*:/i.test(raw)) continue;
+    const path = raw.replace(/#.*$/, "");
+    if (path) hrefs.push(path);
+  }
+  return hrefs;
+}
+function skillRelative(root: string, fromFile: string, href: string): string {
+  const target = resolve(dirname(join(root, fromFile)), href);
+  const rel = relative(root, target);
+  assert.ok(rel !== "" && !isAbsolute(rel) && rel.split(/[\\/]/)[0] !== "..", `${fromFile} -> ${href} leaves the skill`);
+  return rel.split("\\").join("/");
+}
+async function listSkillFiles(root: string): Promise<string[]> {
+  const files: string[] = [];
+  async function walk(relativeDir: string) {
+    for (const entry of await readdir(join(root, relativeDir), { withFileTypes: true })) {
+      const path = relativeDir ? `${relativeDir}/${entry.name}` : entry.name;
+      assert.equal(entry.isSymbolicLink(), false, path);
+      if (entry.isDirectory()) await walk(path);
+      else if (entry.isFile()) files.push(path);
+      else assert.fail(`unsupported skill entry ${path}`);
+    }
+  }
+  await walk("");
+  return files.sort();
+}
+async function assertShippedSkillTree(root: string, discover: boolean) {
+  const files = await listSkillFiles(root);
+  assert.ok(files.includes("SKILL.md"));
+  for (const file of files.filter(path => path.endsWith(".md"))) {
+    const text = await readFile(join(root, file), "utf8");
+    for (const href of localHrefs(text)) await lstat(join(root, skillRelative(root, file, href)));
+  }
+  if (discover) {
+    const reached = new Set<string>(["SKILL.md"]);
+    const queue = ["SKILL.md"];
+    while (queue.length) {
+      const file = queue.pop()!;
+      if (!file.endsWith(".md")) continue;
+      for (const href of localHrefs(await readFile(join(root, file), "utf8"))) {
+        const rel = skillRelative(root, file, href);
+        if (reached.has(rel)) continue;
+        const stat = await lstat(join(root, rel));
+        if (stat.isDirectory()) {
+          const readme = `${rel.replace(/\/$/, "")}/README.md`;
+          assert.ok((await lstat(join(root, readme))).isFile(), readme);
+          reached.add(readme); queue.push(readme);
+        } else {
+          assert.ok(stat.isFile(), rel);
+          reached.add(rel); queue.push(rel);
+        }
+      }
+    }
+    for (const path of shippedSkillMarkdown) assert.ok(reached.has(path), path);
+  }
+  const create = JSON.parse(await readFile(join(root, shippedRecipeJson[0]!), "utf8"));
+  const patch = JSON.parse(await readFile(join(root, shippedRecipeJson[1]!), "utf8"));
+  const input = JSON.parse(await readFile(join(root, shippedRecipeJson[2]!), "utf8"));
+  assert.equal(typeof create.id, "string");
+  assert.equal(typeof create.name, "string");
+  assert.equal(typeof patch.id, "string");
+  assert.equal(typeof patch.expectedRevision, "number");
+  assert.ok(Array.isArray(patch.operations));
+  assert.equal(typeof input.question, "string");
+  assert.equal(typeof input.r1?.assignment, "string");
+  assert.equal(typeof input.r2?.assignment, "string");
+  assert.equal(typeof input.r3?.assignment, "string");
+  assert.equal(typeof input.synthesis?.assignment, "string");
 }
 
 test("setup creates only chosen bin and skill symlinks, repeats idempotently, and executable works from another cwd", async () => {
@@ -124,5 +207,34 @@ test("installed MCP command negotiates protocol in its own process and exits whe
       while (alive(pid) && Date.now() < deadline) await new Promise(resolveDelay => setTimeout(resolveDelay, 20));
       assert.equal(alive(pid), false, "MCP process must exit after detach");
     }
+  });
+});
+
+test("installed skill resolves recipe and reference resources from another cwd", async () => {
+  await temp(async directory => {
+    const result = await setup({ binDir: join(directory, "bin"), skillsDir: join(directory, "skills") });
+    assert.ok((await lstat(result.skill)).isSymbolicLink());
+    const workspace = join(directory, "workspace");
+    await mkdir(workspace);
+    await assertShippedSkillTree(result.skill, true);
+    for (const path of [...shippedSkillMarkdown, ...shippedRecipeJson]) {
+      const probe = spawnSync(process.execPath, ["-e",
+        "const fs=require('node:fs'); const { join }=require('node:path'); const text=fs.readFileSync(join(process.argv[1], process.argv[2]), 'utf8'); if (!text.length) throw new Error('empty'); if (process.argv[2].endsWith('.json')) JSON.parse(text);",
+        result.skill, path], { cwd: workspace, encoding: "utf8", timeout: 10_000 });
+      assert.ifError(probe.error);
+      assert.equal(probe.status, 0, `${path}\n${probe.stderr}\n${probe.stdout}`);
+    }
+  });
+});
+
+test("copied skill directory keeps local markdown links and recipe JSON self-contained", async () => {
+  await temp(async directory => {
+    const copy = join(directory, "dynamic-workflows");
+    await cp(await realpath(fileURLToPath(new URL("../skills/dynamic-workflows", import.meta.url))), copy, { recursive: true });
+    assert.equal((await lstat(copy)).isSymbolicLink(), false);
+    await assert.rejects(lstat(join(copy, "docs")), { code: "ENOENT" });
+    await assert.rejects(lstat(join(copy, "examples")), { code: "ENOENT" });
+    await assert.rejects(lstat(join(copy, "src")), { code: "ENOENT" });
+    await assertShippedSkillTree(copy, true);
   });
 });
