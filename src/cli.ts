@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { text } from "node:stream/consumers";
 import { parseArgs } from "node:util";
 import { WorkflowService, serviceToolNames } from "./service.js";
 import { ExecutionFailure } from "./execution-failure.js";
@@ -14,7 +14,7 @@ try {
       "One JSON request on stdin; one JSON response on stdout. Runs continue in detached supervisor processes after this command exits.");
   } else {
     if (positionals.length !== 1) throw new Error("Specify exactly one tool; use --help");
-    const raw = process.stdin.isTTY ? "" : readFileSync(0, "utf8").trim();
+    const raw = process.stdin.isTTY ? "" : (await text(process.stdin)).trim();
     const request: unknown = raw ? JSON.parse(raw) : {};
     service = new WorkflowService(values.store);
     const result = await service.dispatch(positionals[0]!, request);
