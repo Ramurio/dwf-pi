@@ -20,7 +20,8 @@
     "setup": "node --import tsx scripts/setup.ts",
     "mcp": "node --import tsx src/mcp.ts",
     "watch": "node --import tsx src/watch.ts",
-    "cli": "node --import tsx src/cli.ts"
+    "cli": "node --import tsx src/cli.ts",
+    "postinstall": "node scripts/apply-sdk-bash-signal.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.85.1",

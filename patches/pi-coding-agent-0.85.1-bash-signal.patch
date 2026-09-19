@@ -1,0 +1,130 @@
+--- a/dist/utils/child-process.js
++++ b/dist/utils/child-process.js
+@@ -20,11 +20,15 @@
+  * us reading, while a quiet inherited handle (e.g. a Windows daemonized descendant
+  * that never lets `close` fire) still releases us after the grace elapses.
+  */
+-export function waitForChildProcess(child) {
++export async function waitForChildProcess(child) {
++    return (await waitForChildProcessResult(child)).exitCode;
++}
++export function waitForChildProcessResult(child) {
+     return new Promise((resolve, reject) => {
+         let settled = false;
+         let exited = false;
+         let exitCode = null;
++        let exitSignal = null;
+         let postExitTimer;
+         let stdoutEnded = child.stdout === null;
+         let stderrEnded = child.stderr === null;
+@@ -41,14 +45,14 @@
+             child.stdout?.removeListener("data", onData);
+             child.stderr?.removeListener("data", onData);
+         };
+-        const finalize = (code) => {
++        const finalize = (code, signal = exitSignal) => {
+             if (settled)
+                 return;
+             settled = true;
+             cleanup();
+             child.stdout?.destroy();
+             child.stderr?.destroy();
+-            resolve(code);
++            resolve({ exitCode: code, signal });
+         };
+         const maybeFinalizeAfterExit = () => {
+             if (!exited || settled)
+@@ -83,7 +87,8 @@
+             cleanup();
+             reject(err);
+         };
+-        const onExit = (code) => {
++        const onExit = (code, signal) => {
++            exitSignal = signal;
+             exited = true;
+             exitCode = code;
+             maybeFinalizeAfterExit();
+@@ -91,8 +96,8 @@
+                 armIdleTimer();
+             }
+         };
+-        const onClose = (code) => {
+-            finalize(code);
++        const onClose = (code, signal) => {
++            finalize(code, signal ?? exitSignal);
+         };
+         child.stdout?.once("end", onStdoutEnd);
+         child.stderr?.once("end", onStderrEnd);
+--- a/dist/utils/child-process.d.ts
++++ b/dist/utils/child-process.d.ts
+@@ -14,5 +14,10 @@
+  * us reading, while a quiet inherited handle (e.g. a Windows daemonized descendant
+  * that never lets `close` fire) still releases us after the grace elapses.
+  */
++export interface ChildProcessResult {
++    exitCode: number | null;
++    signal: NodeJS.Signals | null;
++}
++export declare function waitForChildProcessResult(child: ChildProcess): Promise<ChildProcessResult>;
+ export declare function waitForChildProcess(child: ChildProcess): Promise<number | null>;
+ //# sourceMappingURL=child-process.d.ts.map
+\ No newline at end of file
+--- a/dist/core/tools/bash.js
++++ b/dist/core/tools/bash.js
+@@ -2,7 +2,7 @@
+ import { access as fsAccess } from "node:fs/promises";
+ import { spawn } from "child_process";
+ import { Type } from "typebox";
+-import { waitForChildProcess } from "../../utils/child-process.js";
++import { waitForChildProcessResult } from "../../utils/child-process.js";
+ import { getShellConfig, getShellEnv, killProcessTree, trackDetachedChildPid, untrackDetachedChildPid, } from "../../utils/shell.js";
+ import { getExperimentalToolSampling } from "../experimental.js";
+ import { OutputAccumulator } from "./output-accumulator.js";
+@@ -87,12 +87,18 @@
+                 }
+                 // Handle shell spawn errors and wait for the process to terminate without hanging
+                 // on inherited stdio handles held by detached descendants.
+-                const exitCode = await waitForChildProcess(child);
++                const { exitCode, signal: terminationSignal } = await waitForChildProcessResult(child);
+                 if (signal?.aborted) {
+                     throw new Error("aborted");
+                 }
+                 if (timedOut) {
+                     throw new Error(`timeout:${timeout}`);
++                }
++                if (terminationSignal) {
++                    throw new Error(`Command terminated by signal ${terminationSignal}`);
++                }
++                if (exitCode === null) {
++                    throw new Error("Command terminated without an exit code");
+                 }
+                 return { exitCode };
+             }
+@@ -256,11 +262,14 @@
+                         const timeoutSecs = err.message.split(":")[1];
+                         throw new Error(appendStatus(text, `Command timed out after ${timeoutSecs} seconds`));
+                     }
++                    if (err instanceof Error && err.message.startsWith("Command terminated")) {
++                        throw new Error(appendStatus(text, err.message));
++                    }
+                     throw err;
+                 }
+                 const snapshot = await finishOutput();
+                 const { text: outputText, details } = formatOutput(snapshot);
+-                if (exitCode !== 0 && exitCode !== null) {
++                if (exitCode !== 0) {
+                     throw new Error(appendStatus(outputText, `Command exited with code ${exitCode}`));
+                 }
+                 return { content: [{ type: "text", text: outputText }], details };
+--- a/dist/core/tools/bash.d.ts
++++ b/dist/core/tools/bash.d.ts
+@@ -26,7 +26,8 @@
+      * @param command The command to execute
+      * @param cwd Working directory
+      * @param options Execution options
+-     * @returns Promise resolving to exit code (null if killed)
++     * @returns Promise resolving to exit code; local execution rejects on signal, unknown termination, timeout or abort.
++     * A null code from custom operations is treated as an error.
+      */
+     exec: (command: string, cwd: string, options: {
+         onData: (data: Buffer) => void;
