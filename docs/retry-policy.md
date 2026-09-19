@@ -56,7 +56,13 @@ That decision cannot authorize another attempt after a crash during execution.
 
 `metadata.retry.status` is `scheduled`, `admitted` or `abandoned`. A scheduled
 decision has not yet admitted work. Terminal completion abandons outstanding
-decisions; it does not erase their history. Failure to commit the decision or
+decisions; it does not erase their history. A new manual reconciliation (`retry` or
+`accept`) abandons only that activation’s scheduled decision with reason
+`reconciled`, atomically with the manual decision. Accept archives the abandoned
+checkpoint and preserves usage. Exact decision redelivery adds no event; explicit
+supersession does not abandon it again. Manual retry authorizes one attempt, not
+an automatic `retry.admitted`. Interruption alone preserves scheduled backoff.
+Existing journals are not bulk-rewritten. Failure to commit the decision or
 admission rolls back the associated state changes and events.
 
 Pause blocks new admission and drains active leaves. The delay continues in wall

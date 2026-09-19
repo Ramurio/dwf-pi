@@ -746,7 +746,7 @@ function failureView(failure, runScope = false) {
   return panel;
 }
 function retryView(progress) {
-  const labels = {scheduled:"запланирована",admitted:"допущена",abandoned:"снята при завершении запуска"};
+  const labels = {scheduled:"запланирована",admitted:"допущена",abandoned:"снята без допуска"};
   const panel = el("div","notice"), when = progress.dueAt !== null && Number.isFinite(new Date(progress.dueAt).getTime()) ? date(progress.dueAt) : `задержка ${number(progress.delayMs)} мс`;
   panel.append(el("strong","",`Попытка ${progress.nextAttempt}: ${labels[progress.status] ?? progress.status}`),el("p","muted",`После ошибки попытки ${progress.attempt} · не раньше ${when}`));
   panel.append(el("p","muted",`Назначенная задержка: ${number(progress.delayMs)} мс.`));

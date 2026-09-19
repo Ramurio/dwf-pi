@@ -1,0 +1,61 @@
+N07 offline regression verification
+Reviewed source tree: d1a42c88932c0bfcf91f3c7905eb56fc2f30f253
+Expected review artifact: d1a42c88932c0bfcf91f3c7905eb56fc2f30f253
+Source SHA256 before: aef23bdd3f1fc6f644556aa5e8c9ee8709f0c0febb0477bb2b125004e19e8fde
+$ npm run typecheck
+
+> dynamicwf-pi@0.0.0 typecheck
+> tsc --noEmit
+
+Exit code: 0
+$ node --import tsx --test --test-concurrency=2 tests/retry-reconciliation.test.ts tests/reconciliation.test.ts tests/retry-policy.test.ts tests/provider-retry.test.ts tests/allocation-recovery.test.ts
+(node:42103) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ allocation recovery handles intent-only, retained branch and exact missing registration without pruning siblings (5880.867708ms)
+✔ locked, moved-branch and advanced allocation registrations remain untouched (2831.467042ms)
+✔ checkpoint failures before removal and after removal preserve an archive and allow a fresh recovery (6106.629667ms)
+✔ a journaled allocation gap resumes the same run and executes its child once (5102.918334ms)
+✔ missing child workspace cannot be recreated underneath already checkpointed child work (1310.369458ms)
+(node:42104) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ status filtering requires observed HTTP facts and preserves explicitly selected non-provider failures (41.881958ms)
+✔ native SDK retries selected statuses once per attempt, honors the server floor, and stops on 401 (1188.723458ms)
+✔ composite causes retain all supporting facts and use the greatest server delay (826.955292ms)
+✔ one excluded status in a composite cause denies the whole automatic retry (20.513792ms)
+✔ cause persistence rolls back atomically; reopening and replacing ownership retain the chosen server delay (18.700917ms)
+(node:42620) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ accept preserves the failed attempt, recorded spend and pause; exact redelivery survives completion (1205.252625ms)
+✔ freshness, output validation and journal rollback precede any accepted checkpoint (32.786208ms)
+✔ retry rechecks files, requires explicit supersession and admits exactly one real invocation (2429.9535ms)
+✔ retry admission and its receipt roll back together, and consumed authorization cannot repeat an uncertain effect (9.535958ms)
+✔ worktree acceptance proves current head and completed child output without creating a commit (2768.754958ms)
+✔ review acceptance binds the recorded artifact and criteria; CLI and browser expose the immutable receipt (774.755541ms)
+✔ browser decisions require the local control origin, reject stale files and preserve one-use identity (36.098667ms)
+✔ integration acceptance verifies every source ancestor and recorded original head; partial integration can retry (4791.847083ms)
+(node:47636) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ a pre-admission command failure retries after its frozen delay and archives the decision with the failed attempt (2894.3505ms)
+✔ retry survives SIGKILL during backoff and pause prevents admission after the deadline (5274.98125ms)
+✔ cancellation abandons pending retry; maxAttempts and absent policy do not admit extra attempts (4974.653417ms)
+✔ failure, retry decision and admission are atomic; authorization cannot be reused after a new attempt starts (29.160792ms)
+✔ safe retries are explicit, but unknown writes, mixed interruption, cleanup failures and excluded codes cannot repeat (113.706125ms)
+✔ retry policy is closed and versioned; very long delay is preserved without a timer overflow (1514.246834ms)
+✔ collect waits for retry exhaustion while a sibling await remains independent (2876.855917ms)
+✔ every member of a composite failure must match the selected retry codes (24.892167ms)
+✔ golden v6 retry plan retains source/hash and its original delay on the new detached runtime (2548.488542ms)
+(node:51905) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ retry replaces only selected automatic authorization after interruption (75.923083ms)
+✔ accept replaces only selected automatic authorization after interruption (45.023625ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 37088.940625
+Exit code: 0
+Source SHA256 after: aef23bdd3f1fc6f644556aa5e8c9ee8709f0c0febb0477bb2b125004e19e8fde
+Source unchanged: True
