@@ -415,18 +415,21 @@ export class RunStore {
       this.event(id, "run.interrupted", { error, failure: JSON.parse(JSON.stringify(failure)) as Json });
     });
   }
+  private abandonScheduledRetries(id: string, reason: string, key?: string): void {
+    for (const row of this.database.prepare("SELECT activation_key,metadata FROM workflow_activations WHERE run_id=? AND json_extract(metadata,'$.retry.status')='scheduled'" + (key === undefined ? "" : " AND activation_key=?")).all(...(key === undefined ? [id] : [id, key]))) {
+      const metadata = JSON.parse(String(row.metadata)), progress = parseRetryProgress(metadata.retry);
+      if (!progress) continue;
+      const abandoned = { ...progress, status: "abandoned" };
+      this.database.prepare("UPDATE workflow_activations SET metadata=json_set(metadata,'$.retry',json(?)) WHERE run_id=? AND activation_key=?").run(JSON.stringify(abandoned),id,String(row.activation_key));
+      this.event(id,"retry.abandoned",{key:String(row.activation_key),retry:abandoned,reason});
+    }
+  }
   finish(id: string, token: string, outcome: RunOutcome): void {
     this.transaction(() => {
       const run = this.owned(id, token);
       if (outcome.status === "succeeded" && run.desired !== "running") throw new Error(`Cannot succeed while ${run.desired} is requested`);
       if (outcome.status === "succeeded" && this.hasPendingWorkerGroups(id)) throw executionFailure("uncertain-effect", "cleanup", "unknown", "Worker process groups have not been verified empty");
-      for (const row of this.database.prepare("SELECT activation_key,metadata FROM workflow_activations WHERE run_id=? AND json_extract(metadata,'$.retry.status')='scheduled'").all(id)) {
-        const metadata = JSON.parse(String(row.metadata)), progress = parseRetryProgress(metadata.retry);
-        if (!progress) continue;
-        const abandoned = { ...progress, status: "abandoned" };
-        this.database.prepare("UPDATE workflow_activations SET metadata=json_set(metadata,'$.retry',json(?)) WHERE run_id=? AND activation_key=?").run(JSON.stringify(abandoned),id,String(row.activation_key));
-        this.event(id,"retry.abandoned",{key:String(row.activation_key),retry:abandoned,reason:outcome.status});
-      }
+      this.abandonScheduledRetries(id, outcome.status);
       if (outcome.status === "cancelled" && run.desired !== "cancelled") throw new Error("Cancellation was not requested");
       const running = this.database.prepare("SELECT 1 FROM workflow_activations WHERE run_id=? AND status='running' LIMIT 1").get(id);
       if (running) throw new Error("Cannot finish with running activations");
@@ -812,7 +815,9 @@ export class RunStore {
       this.database.prepare(`INSERT INTO workflow_reconciliations(run_id,decision_id,activation_key,source_attempt,request,plan_hash,workspace,created_at,supersedes) VALUES(?,?,?,?,?,?,?,?,?)`)
         .run(id,request.decisionId,request.key,request.attempt,JSON.stringify(request),state.run.plan.hash,JSON.stringify(workspace),now,request.supersedes ?? null);
       this.event(id, "reconciliation.recorded", { key: request.key, decisionId: request.decisionId, action: request.action, sourceAttempt: request.attempt, actor: request.actor, reason: request.reason, supersedes: request.supersedes ?? null });
+      this.abandonScheduledRetries(id, "reconciled", request.key);
       if (request.action === "accept") {
+        selected.metadata = this.getActivation(id, request.key)!.metadata;
         this.database.prepare("INSERT INTO workflow_activation_history(run_id,activation_key,attempt,record) VALUES(?,?,?,?)").run(id,request.key,selected.attempt,JSON.stringify(selected));
         // Preserve cumulative spend and completeness projection; no worker/model invocation is invented for an accepted checkpoint.
         const metadata = {
