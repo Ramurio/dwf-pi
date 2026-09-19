@@ -821,6 +821,8 @@ export class RunStore {
         this.database.prepare("INSERT INTO workflow_activation_history(run_id,activation_key,attempt,record) VALUES(?,?,?,?)").run(id,request.key,selected.attempt,JSON.stringify(selected));
         // Preserve cumulative spend and completeness projection; no worker/model invocation is invented for an accepted checkpoint.
         const metadata = {
+          ...(selected.metadata.usageLegacyIncomplete === true ? { usageLegacyIncomplete: true } : {}),
+          ...(selected.metadata.usageLegacyBaseline === undefined ? {} : { usageLegacyBaseline: selected.metadata.usageLegacyBaseline }),
           ...(selected.metadata.usage === undefined ? {} : {
             usage: selected.metadata.usage,
             ...(typeof selected.metadata.usageLedgerVersion === "number" ? { usageLedgerVersion: selected.metadata.usageLedgerVersion } : {}),
@@ -923,10 +925,34 @@ export class RunStore {
     const reports = this.database.prepare("SELECT usage FROM workflow_usage_reports WHERE run_id=? AND activation_key=? ORDER BY seq").all(activation.runId, activation.key)
       .map(row => JSON.parse(String(row.usage)) as TokenUsage);
     const attempts = this.database.prepare("SELECT attempt,complete FROM workflow_usage_attempts WHERE run_id=? AND activation_key=?").all(activation.runId, activation.key);
-    const metadata = { ...activation.metadata,
+    // Only immutable pre-ledger checkpoints prove the boundary of a cumulative legacy subtotal.
+    // Never add multiple historical snapshots or guess the provenance of a live mixed projection.
+    const archives = this.database.prepare("SELECT attempt,record FROM workflow_activation_history WHERE run_id=? AND activation_key=? ORDER BY attempt DESC").all(activation.runId, activation.key);
+    // Sticky evidence of legacy spend must survive rejection of its subtotal. A fully
+    // settled ledger only proves its own completeness, not that of the legacy usage.
+    let legacyIncomplete = activation.metadata.usageLegacyIncomplete === true ||
+      activation.metadata.usageLegacyBaseline !== undefined ||
+      (activation.metadata.usageLedgerVersion === undefined && activation.metadata.usage !== undefined);
+    let baseline: { version: number; throughAttempt: number; subtotal: TokenUsage } | undefined;
+    for (const row of archives) {
+      const record = JSON.parse(String(row.record)) as ActivationRecord;
+      if (record.runId !== activation.runId || record.key !== activation.key || record.attempt !== Number(row.attempt) || record.metadata.usageLedgerVersion !== undefined) continue;
+      if (record.metadata.usage !== undefined) legacyIncomplete = true;
+      const subtotal = parseUsage(record.metadata.usage);
+      if (!subtotal) continue;
+      // Even an empty ledger attempt inside the boundary makes provenance ambiguous.
+      if (attempts.some(item => Number(item.attempt) <= record.attempt)) break;
+      baseline = { version: 1, throughAttempt: record.attempt, subtotal };
+      break;
+    }
+    const { usage: _oldUsage, usageLegacyBaseline: _oldBaseline, ...rest } = activation.metadata;
+    const constituents = [...(baseline ? [baseline.subtotal] : []), ...reports];
+    const metadata = { ...rest,
+      ...(baseline ? { usageLegacyBaseline: baseline } : {}),
+      ...(legacyIncomplete ? { usageLegacyIncomplete: true } : {}),
       usageLedgerVersion: 1, usageReportCount: reports.length, usageRecordedAttempts: attempts.length,
-      usageComplete: attempts.length === activation.attempt && attempts.every(row => row.complete === 1),
-      ...(reports.length ? { usage: sumTokenUsage(reports) } : {}),
+      usageComplete: !legacyIncomplete && !baseline && attempts.length === activation.attempt && attempts.every(row => row.complete === 1),
+      ...(constituents.length ? { usage: sumTokenUsage(constituents) } : {}),
     };
     this.database.prepare("UPDATE workflow_activations SET metadata=? WHERE run_id=? AND activation_key=?").run(JSON.stringify(metadata), activation.runId, activation.key);
   }
