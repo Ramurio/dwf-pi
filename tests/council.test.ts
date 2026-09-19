@@ -31,7 +31,25 @@ async function load() {
     });
     const module = await loadGeneratedModule(plan, directory);
     const input = { ...await source("input"), artifactRevision: "fixture-tree-revision-7", acceptanceCriteriaRevision: "fixture-criteria-v2" } as Record<string, Json>;
-    return { module, input, plan, close: async () => { service.close(); await rm(directory, { recursive: true, force: true }); } };
+    // Count independently of the finish assertions: a legacy end must not bypass them.
+    const checkedModule = {
+      ...module,
+      run(runtime: WorkflowRuntime, value: Json) {
+        let finishes = 0;
+        const tracked: WorkflowRuntime = {
+          ...runtime,
+          finish: (...args) => Effect.suspend(() => {
+            finishes++;
+            assert.equal(args[0].graphId, "main", "Only a root council finish is expected");
+            return runtime.finish(...args);
+          }),
+        };
+        return module.run(tracked, value).pipe(Effect.tap(() => Effect.sync(() => {
+          assert.equal(finishes, 1, "Every council run must invoke exactly one root finish");
+        })));
+      },
+    };
+    return { module: checkedModule, input, plan, close: async () => { service.close(); await rm(directory, { recursive: true, force: true }); } };
   } catch (error) { service.close(); await rm(directory, { recursive: true, force: true }); throw error; }
 }
 function votes(decisions: Decision[]): Record<Perspective, Vote> {
@@ -44,7 +62,15 @@ function votes(decisions: Decision[]): Record<Perspective, Vote> {
 function runtime(results: Record<Perspective, Vote>, onCall?: (perspective: Perspective, task: string, input: Record<string, Json>) => void): WorkflowRuntime {
   return {
     collect: (_context, _id, work) => work().pipe(Effect.map(value => ({ status: "succeeded", value } as Json))),
-    finish: (_context, _node, _reason, _evidence, value) => Effect.succeed(value),
+    finish: (context, node, reason, _evidence, value) => Effect.sync(() => {
+      assert.equal(context.graphId, "main");
+      const output = value as unknown as { decision: string };
+      const expected = output.decision === "approve" ? "accepted" : output.decision === "inconclusive" ? "inconclusive" : "rejected";
+      assert.equal(node.decision, expected);
+      assert.equal(typeof reason, "string");
+      assert.ok((reason as string).trim());
+      return value;
+    }),
     route: (context, edges, scope) => Effect.try(() => chooseEdge(context.nodeId, edges, scope)),
     wait: () => Effect.fail(new Error("Unexpected await node")),
     reuse: () => Effect.fail(new Error("Unexpected reuse node")),
