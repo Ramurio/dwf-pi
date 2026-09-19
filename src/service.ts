@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { CreateDraftSchema, DraftPatchSchema, DraftSchema } from "./authoring.js";
+import { CreateDraftSchema, PublicDraftPatchSchema, DraftSchema } from "./authoring.js";
 import { roleCatalog, roleNames } from "./catalog.js";
 import { compileWorkflow } from "./compiler.js";
 import { prepareExecutionPlan, type PrepareExecutionOptions } from "./execution-plan.js";
@@ -90,7 +90,7 @@ export class WorkflowService {
       }
       case "workflow.schema":
         object(request, []);
-        return { workflow: WorkflowSchema, expression: ExprSchema, draft: DraftSchema, create: CreateDraftSchema, patch: DraftPatchSchema };
+        return { workflow: WorkflowSchema, expression: ExprSchema, draft: DraftSchema, create: CreateDraftSchema, patch: PublicDraftPatchSchema };
       case "workflow.create":
         return this.getDrafts().create(request as unknown as Parameters<DraftStore["create"]>[0]);
       case "workflow.list":

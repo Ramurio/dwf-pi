@@ -36,6 +36,17 @@ Use a consistent `--store /absolute/state.sqlite` if selecting a nondefault jour
 
 Discover models with `catalog.models {}` and role defaults with `catalog.describe {"name":"..."}`. For non-standard graphs, get exact fields from `workflow.schema {}` after this route — schema is not an entry barrier for the shipped recipe. When to read: [operations.md](references/operations.md) for watch/UI, pause, awaits, attempts, and presets; [authoring.md](references/authoring.md) for expressions, roles, collect, reviews, snapshots, and worktrees; [providers.md](references/providers.md) for catalog, capabilities, and thinking.
 
+`workflow.schema.result.patch` (the `patch` field inside the successful result) is the public request schema, identical to MCP `workflow_patch` in tools/list: it requires `id`, `expectedRevision`, and `operations`, and rejects extra fields. The internal store patch omits `id`; do not use that internal shape as a tool request.
+
+Both transports preserve actionable error fields, for example:
+```json
+{"ok":false,"error":{"name":"AuthoringError","message":"Node missing not found","operationIndex":1}}
+{"ok":false,"error":{"name":"RevisionConflictError","message":"Revision conflict: expected 1, actual 2","expectedRevision":1,"actualRevision":2}}
+```
+`operationIndex` is zero-based; the failed patch is atomic. Fix that operation, or inspect/rebase after a revision conflict.
+
+After start, immediately report, for example: “Run `<result.id>` started; first observed status: `<run.status.result.status>`. Watch: `dynamicwf watch --run <result.id> --store /absolute/state.sqlite`.” Substitute actual returned values, not placeholders. Fetch the first status without waiting for completion; a running/waiting status is not a success or acceptance verdict.
+
 A new draft is usually revision `1`. Take later values from `result.revision` / `result.workflow.revision` (or `workflow.inspect`). On a revision conflict, inspect the latest draft and rebase; do not resend a stale patch blindly.
 
 `workflow.prepare {"id":"...","cwd":"/absolute/workspace"}` freezes models, thinking, role defaults, skill snapshots, schemas, and generated code into `{preparedId,planHash,cwd,createdAt,plan}`. `workflow.prepared {"preparedId":"..."}` rereads that handle from the same journal. Inspect `plan` before start.
