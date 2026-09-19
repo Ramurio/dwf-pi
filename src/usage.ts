@@ -59,7 +59,7 @@ export function summarizeUsage(records: readonly ActivationRecord[]) {
     if (record.attempt > 1) earlierAttempts += Math.max(0, record.attempt - (typeof record.metadata.usageRecordedAttempts === "number" ? record.metadata.usageRecordedAttempts : 1));
     const usage = activationUsage(record);
     if (!usage) { if (record.status === "running") pending++; else missing++; continue; }
-    if (record.status === "running" || record.metadata.usageComplete === false) incomplete++;
+    if (record.status === "running" || record.metadata.usageComplete === false || record.metadata.usageLegacyIncomplete === true) incomplete++;
     if (typeof record.metadata.usageReportCount === "number") responses += record.metadata.usageReportCount;
     input += usage.input; output += usage.output; totalTokens += usage.totalTokens; reported++;
     if (usage.cost !== undefined) { cost += usage.cost; costReported++; }

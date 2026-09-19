@@ -19,3 +19,26 @@ If breakdown exists for only some responses, the known sum is kept with `partial
 `task.inspect` and `task.usage` show linked original/continuation runs, plan change, and aggregated SDK usage. Do not add report rows, archived attempts, and cumulative metadata together. Reused outputs add no model call and are not missing agent reports. Unknown cost does not become zero.
 
 Reuse adds no tokens. Details of continuation linkage: [continuation.md](continuation.md).
+
+### Legacy subtotal (D03)
+
+При первой ledger-проекции сохраняется `metadata.usageLegacyBaseline` версии 1:
+`{ version: 1, throughAttempt, subtotal }`. Источник — последний валидный
+pre-ledger checkpoint в immutable attempt history, а не сумма cumulative архивов.
+При retry `beginActivation` сначала архивирует checkpoint. Проекция добавляет
+baseline ровно один раз, только если все ledger attempts строго позже границы.
+Архив позволяет восстановить baseline и для ранее смешанной проекции при следующем
+start/record/settle; история при этом не изменяется. Accept сохраняет baseline.
+
+Если происхождение неизвестно или ledger пересекает границу, выводится только
+ledger subtotal. Отсутствующие attempts остаются неизвестными. Legacy subtotal
+не доказывает полноту: `partial`, `earlierAttempts` и частичные optional breakdown
+сохраняются. Baseline не создаёт SDK response/report rows; reuse расхода не добавляет.
+SDK cost — известная оценка/subtotal, **не счёт подписки**; неизвестная стоимость
+не означает нулевую стоимость.
+
+Признак `metadata.usageLegacyIncomplete=true` устойчиво фиксирует наличие legacy
+расхода, даже когда его subtotal отклонён из-за неизвестного происхождения или
+пересечения. Полностью settled ledger не снимает этот признак. Повторная проекция,
+reopen, retry и accept сохраняют неполноту; all-ledger usage без legacy-признака
+сохраняет прежнюю семантику complete.
