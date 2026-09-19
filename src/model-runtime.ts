@@ -1,3 +1,5 @@
+import { preserveCredentialPersistence } from "./credential-persistence.js";
+import { loadSdkAuthStorage } from "./sdk-auth-storage.js";
 import { executionFailure } from "./execution-failure.js";
 import { ModelRuntime, type CreateModelRuntimeOptions } from "@earendil-works/pi-coding-agent";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
@@ -11,7 +13,9 @@ export async function createWorkflowModelRuntime(options: WorkflowModelRuntimeOp
   const { requiredProvider, ...runtimeOptions } = options;
   if (requiredProvider === "xai-auth") throw executionFailure("configuration", "setup", "not-started",
     "The pi-xai-oauth adapter has been removed. Use native xai/grok-4.6 and /login xai (Use a subscription). Existing frozen runs require an explicit continuation with the new provider; they are not silently migrated.");
-  return ModelRuntime.create({ ...runtimeOptions, allowModelNetwork: false });
+  const credentials = preserveCredentialPersistence(runtimeOptions.credentials ??
+    (await loadSdkAuthStorage()).create(runtimeOptions.authPath));
+  return ModelRuntime.create({ ...runtimeOptions, credentials, allowModelNetwork: false });
 }
 export interface WorkflowCatalogOptions extends WorkflowModelRuntimeOptions {
   /** Explicit native xAI catalog refresh; ordinary discovery remains cache-only. */
