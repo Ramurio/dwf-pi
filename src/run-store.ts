@@ -554,6 +554,7 @@ export class RunStore {
         if (!isDeepStrictEqual(wait.response, response)) throw new Error("Wait already resolved with a different response");
         return wait;
       }
+      if (this.fence(id)) throw new Error("Run was replaced by a continuation and cannot receive a new wait response");
       if (terminal.has(run.status) || run.desired === "cancelled") throw new Error("Cannot resolve a wait in an ended or cancelling run");
       const valid = createOutputValidator(wait.responseSchema)(response);
       this.database.prepare("UPDATE workflow_waits SET status='resolved',response=?,resolved_by=?,resolved_at=? WHERE run_id=? AND id=?")

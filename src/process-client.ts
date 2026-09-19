@@ -80,6 +80,7 @@ export function runPiProcess(request: PiWorkerRequest, options: ProcessOptions &
     });
     const control = cancellation(child, options.signal);
     let output: PiWorkerResult | undefined;
+    let seenResult = false;
     let failure: Error | undefined;
     let pending = "";
     const fail = (error: unknown) => {
@@ -102,8 +103,9 @@ export function runPiProcess(request: PiWorkerRequest, options: ProcessOptions &
     // SDK stderr can contain provider headers or prompt data, including on crash.
     child.stderr!.resume();
     child.stdout!.setEncoding("utf8").on("data", (data: string) => {
+      if (failure) return;
       pending += data;
-      for (;;) {
+      while (!failure) {
         const newline = pending.indexOf("\n");
         if (newline < 0) break;
         const line = pending.slice(0, newline);
@@ -111,13 +113,16 @@ export function runPiProcess(request: PiWorkerRequest, options: ProcessOptions &
         if (!line.trim()) continue;
         try {
           const message = JSON.parse(line) as PiWorkerMessage;
+          if (!message || typeof message !== "object" || Array.isArray(message) || seenResult) throw new Error("Invalid or post-result worker message");
           if (message.type === "result") {
-            if (output) throw new Error("Worker sent multiple result messages");
+            if (!message.result || typeof message.result !== "object" || Array.isArray(message.result)) throw new Error("Invalid worker result envelope");
+            seenResult = true;
             output = message.result;
           } else if (message.type === "error") {
             const detail = parseExecutionFailure(message.failure);
-            if (message.failure !== undefined && (!detail || detail.message !== message.error)) throw executionFailure("protocol","execution","unknown","Invalid worker failure message");
-            failure = detail ? new ExecutionFailure(detail) : executionFailure("unknown","execution","unknown",message.error);
+            if (typeof message.error !== "string" || !message.error.trim() || message.failure !== undefined && (!detail || detail.message !== message.error)) throw executionFailure("protocol","execution","unknown","Invalid worker failure message");
+            // A terminal error keeps its original cause; later frames cannot replace it.
+            failure ??= detail ? new ExecutionFailure(detail) : executionFailure("unknown","execution","unknown",message.error);
           } else if (message.type === "event") {
             try { options.onEvent?.(message.event); }
             catch { fail(executionFailure("unknown","execution","unknown","Worker event could not be recorded")); }
@@ -130,7 +135,7 @@ export function runPiProcess(request: PiWorkerRequest, options: ProcessOptions &
       if (failure) reject(failure);
       else if (control.cancelled) reject(new ProcessCancelled());
       else if (code !== 0) reject(executionFailure("process","execution","unknown",`Pi worker exited ${code ?? signal} before a valid protocol result`));
-      else if (pending.trim() || !output) reject(executionFailure("protocol","execution","unknown","Pi worker closed without one complete result"));
+      else if (pending.trim() || !seenResult || output === undefined) reject(executionFailure("protocol","execution","unknown","Pi worker closed without one complete result"));
       else resolve(output);
     });
   });

@@ -223,6 +223,53 @@ test("active owner, admitted successor, paused successor and resume fence", asyn
   await wait(c, successor.id, "succeeded");
 }));
 
+test("continuation seals open source waits while identical recorded answers remain idempotent", async t => {
+  for (const paused of [true, false]) for (const answered of [false, true]) {
+    await t.test(`${paused ? "paused" : "running intent"}, ${answered ? "answered" : "open"}`, async () => fixture(async (s, c, directory) => {
+      const responseSchema = { type: "object", properties: { answer: { type: "string" } }, required: ["answer"], additionalProperties: false };
+      const waitNode: Node = { id: "answer", kind: "await", reason: { op: "literal", value: "fixture question" }, input: { op: "literal", value: {} }, responseSchema };
+      const finish: Node = { id: "done", kind: "end", value: { op: "literal", value: { result: "next" } } };
+      await author(s, "wait-source", [waitNode, finish]);
+      const prepared = await s.dispatch("workflow.prepare", { id: "wait-source" }) as PreparedExecution;
+      const id = "run-wait-source";
+      c.store.create({ id, plan: prepared.plan, input: null, cwd: directory });
+      const { token } = c.store.reserveLaunch(id);
+      const activation = c.store.beginActivation(id, token, { graphId: "main", nodeId: "answer", scope: ["graph", "main"], visit: 0 }, { kind: "await", sideEffect: false });
+      const opened = c.store.openWait(id, token, activation.key, "fixture question", {}, responseSchema);
+      if (paused) c.store.requestControl(id, "pause");
+      c.store.markInterrupted(id, token, "Fixture supervisor stopped; no external processes or effects");
+      const response = { answer: "kept" };
+      if (answered) c.store.resolveWait(id, opened.id, response, "first-client");
+      await author(s, "wait-successor", [finish]);
+      const next = await s.dispatch("workflow.prepare", { id: "wait-successor" }) as PreparedExecution;
+      const inspect = await s.dispatch("run.continuation.inspect", { id }) as { checkpoint: string; planHash: string; workspace: { digest: string }; blockers: unknown[] };
+      assert.deepEqual(inspect.blockers, []);
+      const successor = await s.dispatch("run.continue", {
+        preparedId: next.preparedId, idempotencyKey: "wait-successor", input: null,
+        source: { runId: id, checkpoint: inspect.checkpoint, planHash: inspect.planHash }, workspaceDigest: inspect.workspace.digest,
+        actor: "tester", reason: "Replace the stopped wait workflow", evidence: ["No worker or external effect was started"], reuse: [],
+      }) as { id: string };
+      assert.equal(c.store.fence(id)?.successorRunId, successor.id);
+      const before = c.store.getWait(id, opened.id), events = c.store.events(id);
+      if (answered) {
+        const delivered = await s.dispatch("run.resolve", { id, waitId: opened.id, response, resolvedBy: "duplicate-client" }) as { wait: unknown };
+        assert.deepEqual(delivered.wait, before);
+        assert.deepEqual(c.store.resolveWait(id, opened.id, response, "duplicate-client"), before);
+        await assert.rejects(s.dispatch("run.resolve", { id, waitId: opened.id, response: { answer: "different" } }), /different response/);
+      } else {
+        await assert.rejects(s.dispatch("run.resolve", { id, waitId: opened.id, response }), /replaced by a continuation/);
+        assert.throws(() => c.store.resolveWait(id, opened.id, response, "direct-client"), /replaced by a continuation/);
+      }
+      // A rejected delivery must not mutate first and fail later during relaunch.
+      assert.deepEqual(c.store.getWait(id, opened.id), before);
+      assert.deepEqual(c.store.events(id), events);
+      assert.equal(c.store.get(id).ownerToken, null);
+      if (paused) assert.equal(c.store.get(successor.id).desired, "paused");
+      else await wait(c, successor.id, "succeeded");
+    }));
+  }
+});
+
 test("writer retain-effects is required and does not accept or retry the old attempt", async () => fixture(async (s, c, directory) => {
   await author(s, "sample", [planNode, done]);
   const prepared = await s.dispatch("workflow.prepare", { id: "sample" }) as PreparedExecution;

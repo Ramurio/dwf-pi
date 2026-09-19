@@ -290,7 +290,7 @@ export class RunController {
     this.observe(id);
     const wait = this.store.resolveWait(id, waitId, response, resolvedBy);
     const run = this.store.get(id);
-    if (run.ownerToken === null && run.desired === "running" && ["queued", "interrupted"].includes(run.status)) await this.launch(id);
+    if (!this.store.fence(id) && run.ownerToken === null && run.desired === "running" && ["queued", "interrupted"].includes(run.status)) await this.launch(id);
     return wait;
   }
   async reconcile(value: unknown) {

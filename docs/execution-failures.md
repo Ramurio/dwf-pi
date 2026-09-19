@@ -52,9 +52,13 @@ data. A negative reviewer verdict is likewise data. Neither becomes a transport 
 runtime exception. Missing-command admission and a process failure *after* admission
 are distinguished; the latter cannot claim `not-started`.
 
-The IPC decoder validates exact fields, version and enums. Legacy worker error
+The IPC decoder validates exact fields, version and enums of structured failures. Legacy worker error
 messages without a typed record remain unknown. Malformed protocol data produces a
-protocol failure without echoing raw stdout. Arbitrary SDK errors are not promoted
+protocol failure without echoing raw stdout. The first failure stops further frame
+processing and event delivery; later messages cannot replace its cause. A successful
+stream must contain exactly one object result, with no messages after it (blank lines
+are allowed). Result payload validation remains the worker/runtime's responsibility.
+Arbitrary SDK errors are not promoted
 to trusted diagnostics because they start with a recognized phrase. This replaces
 the former prefix allowlist, which could forward arbitrary trailing text.
 Known local Grok adapter configuration errors retain their actionable diagnostics.

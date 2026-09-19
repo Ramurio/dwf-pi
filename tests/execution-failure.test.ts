@@ -36,6 +36,62 @@ test("malformed worker stdout is a protocol failure without raw diagnostic leaka
   });}finally{if(previous===undefined)delete process.env.NODE_OPTIONS;else process.env.NODE_OPTIONS=previous;await rm(directory,{recursive:true,force:true});}
 });
 
+test("worker IPC preserves the first failure and accepts exactly one object result", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "dynamicwf-ipc-frames-"));
+  const preload = join(directory, "preload.cjs"), previous = process.env.NODE_OPTIONS;
+  const frame = (value: unknown) => JSON.stringify(value) + "\n";
+  const result = frame({ type: "result", result: { synthetic: true } });
+  const event = frame({ type: "event", event: { type: "fixture" } });
+  const first = executionFailure("provider", "execution", "read-only", "First provider failure").failure;
+  const failure = frame({ type: "error", error: first.message, failure: first });
+  const later = frame({ type: "error", error: "Later failure" });
+  const cases: { name: string; chunks: string[]; code?: string; message?: string; events?: number; exitCode?: number }[] = [
+    { name: "malformed then error in one chunk", chunks: ["PRIVATE_BAD_FRAME\n" + later], code: "protocol" },
+    { name: "null result then object result", chunks: [frame({ type: "result", result: null }) + result], code: "protocol" },
+    { name: "false result then object result", chunks: [frame({ type: "result", result: false }) + result], code: "protocol" },
+    { name: "array result", chunks: [frame({ type: "result", result: [] })], code: "protocol" },
+    { name: "duplicate result", chunks: [result + result], code: "protocol" },
+    { name: "duplicate result across chunks", chunks: [result, result], code: "protocol" },
+    { name: "error after result", chunks: [result + failure], code: "protocol" },
+    { name: "event after result", chunks: [result + event], code: "protocol" },
+    { name: "ready after result", chunks: [result + frame({ type: "ready" })], code: "protocol" },
+    { name: "first error wins and stops callbacks", chunks: [event + failure + later + event + result], code: "provider", message: first.message, events: 1 },
+    { name: "first error across chunks", chunks: [failure, later + event], code: "provider", message: first.message },
+    { name: "unterminated result", chunks: [result.trimEnd()], code: "protocol" },
+    { name: "null envelope", chunks: ["null\n"], code: "protocol" },
+    { name: "error without a message", chunks: [frame({ type: "error" })], code: "protocol" },
+    { name: "legacy error remains supported", chunks: [later], code: "unknown", message: "Later failure" },
+    { name: "result does not hide nonzero exit", chunks: [result], code: "process", exitCode: 7 },
+    { name: "ordinary result", chunks: [result] },
+    { name: "ready and event before result", chunks: [frame({ type: "ready" }) + event + result + "\n"], events: 1 },
+    { name: "result split inside JSON", chunks: [result.slice(0, 15), result.slice(15)] },
+  ];
+  try {
+    process.env.NODE_OPTIONS = `--require=${preload}`;
+    for (const scenario of cases) await t.test(scenario.name, async () => {
+      // The real child process/client boundary runs; the preload exits before SDK/auth.
+      await writeFile(preload, `if(process.argv[1]?.endsWith('pi-worker-process.ts')) {
+        const fs=require('node:fs'), chunks=${JSON.stringify(scenario.chunks)};
+        for(let i=0;i<chunks.length;i++){if(i)Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,30);fs.writeSync(1,chunks[i]);}process.exit(${scenario.exitCode ?? 0});
+      }`);
+      const events: unknown[] = [];
+      const promise = runPiProcess({ version: 999, cwd: directory } as unknown as PiWorkerRequest, { onEvent: event => { events.push(event); } });
+      if (scenario.code) await assert.rejects(promise, (error: unknown) => {
+        assert.ok(error instanceof ExecutionFailure);
+        assert.equal(error.failure.code, scenario.code);
+        if (scenario.message) assert.equal(error.message, scenario.message);
+        assert.doesNotMatch(error.message, /PRIVATE_BAD_FRAME/);
+        return true;
+      });
+      else assert.deepEqual(await promise, { synthetic: true });
+      assert.equal(events.length, scenario.events ?? 0);
+    });
+  } finally {
+    if (previous === undefined) delete process.env.NODE_OPTIONS; else process.env.NODE_OPTIONS = previous;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("worker IPC accepts observed HTTP facts but rejects arbitrary response headers",async()=>{
   const directory=await mkdtemp(join(tmpdir(),"dynamicwf-http-ipc-")),preload=join(directory,"preload.cjs"),previous=process.env.NODE_OPTIONS;
   try {
