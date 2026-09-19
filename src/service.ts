@@ -245,9 +245,9 @@ export class WorkflowService {
         for (const current of scope ? [scope] : ["project", "global"] as const) {
           const library = await this.presetLibrary(current, cwd);
           for (const record of await library.list()) {
-            output.push({ ...presetSummary(record), scope: current, directory: library.root, shadowed: selected.has(record.name) });
-            selected.add(record.name);
+            output.push({ ...("kind" in record ? record : { ...presetSummary(record), ...(record.latest === false ? { latest: false } : {}) }), scope: current, directory: library.root, shadowed: selected.has(record.name) });
           }
+          for (const name of await library.names()) selected.add(name);
         }
         return output;
       }
@@ -259,7 +259,7 @@ export class WorkflowService {
         const cwd = input.cwd === undefined ? this.cwd : resolve(this.cwd, nonemptyString(input.cwd, "cwd"));
         for (const current of scope ? [scope] : ["project", "global"] as const) {
           const library = await this.presetLibrary(current, cwd);
-          if (!(await library.versions(name)).length) continue;
+          if (!await library.hasName(name)) continue;
           const record = await library.read(name, revision);
           if (tool === "preset.inspect") return { ...presetSummary(record), scope: current, directory: library.root, plan: record.plan };
           const run = await this.getController().startPrepared(record.plan, Object.hasOwn(input, "input") ? input.input as Json : null, cwd);
