@@ -19,6 +19,32 @@ const context: RuntimeContext = { scope: ["root"], graphId: "main", nodeId: "wor
 const key = activationKey(context);
 const create = (store: RunStore, id = "run") => store.create({ id, plan, input: { request: "test" }, cwd: "/tmp" });
 
+test("legacy journals migrate launch provenance and replace it atomically with ownership", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "dynamicwf-launch-migration-"));
+  const filename = join(directory, "state.sqlite");
+  let store = new RunStore(filename);
+  try {
+    create(store); store.close();
+    const legacy = new DatabaseSync(filename);
+    try { legacy.exec("ALTER TABLE workflow_runs DROP COLUMN supervisor_launch"); } finally { legacy.close(); }
+    store = new RunStore(filename);
+    assert.equal(store.get("run").supervisorLaunch, undefined);
+    const launch = { script: "/installation one/src/supervisor.ts", store: filename };
+    const { token } = store.reserveLaunch("run", false, launch);
+    store.close(); store = new RunStore(filename);
+    assert.deepEqual(store.get("run").supervisorLaunch, { ...launch, ownerToken: token });
+    assert.throws(() => store.reserveLaunch("run", false, { ...launch, script: "/other/supervisor.ts" }), /not launchable/);
+    assert.equal(store.get("run").supervisorLaunch?.ownerToken, token);
+    store.markInterrupted("run", token, "fixture dead process");
+    const next = store.reserveLaunch("run", false, { ...launch, script: "/other/supervisor.ts" });
+    assert.notEqual(next.token, token);
+    assert.equal(next.run.supervisorLaunch?.script, "/other/supervisor.ts");
+    assert.equal(next.run.supervisorLaunch?.ownerToken, next.token);
+    store.markInterrupted("run", next.token, "fixture dead process");
+    assert.equal(store.reserveLaunch("run").run.supervisorLaunch, undefined);
+  } finally { store.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
 test("wait admission is fenced and resolution commits atomically with its event", async () => {
   await withStores((store, second, filename) => {
     create(store); const { token } = store.reserveLaunch("run");

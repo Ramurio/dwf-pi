@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { execFileSync, spawn } from "node:child_process";
-import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -129,6 +129,92 @@ async function status(controller: RunController, id: string, expected: string): 
   }
   return record!;
 }
+
+test("another installation observes and resumes a workerless supervisor, including the pre-attach gap and legacy launches", { skip: !posix, timeout: 40_000 }, async () => {
+  await fixture(async ({ directory, workspace, filename, controller, track }) => {
+    const installation = join(directory, "other installation");
+    await mkdir(installation);
+    await cp(resolve("src"), join(installation, "src"), { recursive: true });
+    await cp(resolve("package.json"), join(installation, "package.json"));
+    await symlink(resolve("node_modules"), join(installation, "node_modules"), "dir");
+    const { RunController: OtherController } = await import(pathToFileURL(join(installation, "src/run-controller.ts")).href);
+    const other: RunController = new OtherController(filename);
+    const workflow = flow([
+      { id: "answer", kind: "await", reason: { op: "literal", value: "Wait" }, input: { op: "literal", value: null }, responseSchema: { type: "object" } },
+      { id: "done", kind: "end", value: { op: "literal", value: true } },
+    ]);
+    try {
+      const started = await other.start(workflow, null, workspace);
+      track(started);
+      assert.equal(started.supervisorLaunch?.script, await realpath(join(installation, "src/supervisor.ts")));
+      assert.equal(started.supervisorLaunch?.ownerToken, started.ownerToken);
+      await status(controller, started.id, "waiting");
+      assert.equal(controller.observe(started.id).workersAlive, 0);
+      assert.equal(controller.observe(started.id).supervisorAlive, true);
+      const resumed = await controller.control(started.id, "resume");
+      assert.equal(resumed.ownerToken, started.ownerToken);
+      assert.equal(resumed.supervisorPid, started.supervisorPid);
+      await controller.control(started.id, "cancel");
+      await status(controller, started.id, "cancelled");
+
+      for (const legacy of [false, true]) {
+        const id = `run-before-attach-${legacy}`;
+        const script = join(installation, "src/supervisor.ts");
+        const plan = await prepareExecutionPlan(workflow, { cwd: workspace });
+        controller.store.create({ id, plan, input: null, cwd: workspace });
+        const { token } = controller.store.reserveLaunch(id, false, legacy ? undefined : { script, store: filename });
+        const gate = join(directory, `gate-${legacy}.mjs`), release = join(directory, `release-${legacy}`);
+        await writeFile(gate, `import {existsSync} from 'node:fs'; while(!existsSync(${JSON.stringify(release)})) await new Promise(r=>setTimeout(r,20));`);
+        await mkdir(controller.directory(id), { recursive: true });
+        const child = spawn(process.execPath, ["--import", gate, "--import", import.meta.resolve("tsx"), script,
+          "--store", filename, "--run", id, "--owner", token, "--directory", controller.directory(id)], { stdio: "ignore" });
+        let exited = false; child.once("exit", () => { exited = true; });
+        try {
+          await new Promise<void>((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
+          assert.equal(controller.store.get(id).supervisorPid, null);
+          const observed = controller.observe(id);
+          assert.equal(observed.supervisorAlive, true);
+          assert.equal(observed.workersAlive, 0);
+          assert.equal(observed.run.supervisorPid, child.pid);
+          assert.equal((await controller.control(id, "resume")).ownerToken, token);
+          assert.equal(controller.store.events(id).filter(e => e.type === "run.reserved").length, 1);
+          await writeFile(release, "go");
+          await status(controller, id, "waiting");
+          assert.equal(controller.observe(id).supervisorAlive, true);
+          // A dead supervisor must still be detected across installations.
+          child.kill("SIGKILL"); await until(() => exited);
+          assert.equal(controller.observe(id).run.status, "interrupted");
+        } finally { if (!exited) { child.kill("SIGKILL"); await until(() => exited); } }
+      }
+    } finally { other.close(); }
+  });
+});
+
+test("supervisor identity rejects wrong owner, run, journal and script at an otherwise live PID", { skip: !posix, timeout: 20_000 }, async () => {
+  await fixture(async ({ directory, workspace, filename, controller }) => {
+    const script = join(directory, "supervisor.ts");
+    await writeFile(script, "setInterval(()=>{},1000);");
+    const plan = await prepareExecutionPlan(flow([{ id: "done", kind: "end", value: { op: "literal", value: null } }]), { cwd: workspace });
+    for (const legacy of [false, true]) for (const wrong of ["owner", "run", "store", "script"]) {
+      const id = `run-identity-${legacy}-${wrong}`;
+      controller.store.create({ id, plan, input: null, cwd: workspace });
+      const { token } = controller.store.reserveLaunch(id, false, legacy ? undefined : { script, store: filename });
+      const actualScript = wrong === "script" ? join(directory, "not-supervisor.ts") : script;
+      if (wrong === "script") await cp(script, actualScript);
+      const child = spawn(process.execPath, [actualScript, "--owner", token + (wrong === "owner" ? "-suffix" : ""),
+        "--run", id + (wrong === "run" ? "-suffix" : ""), "--store", filename + (wrong === "store" ? "-suffix" : "")], { stdio: "ignore" });
+      let exited = false; child.once("exit", () => { exited = true; });
+      try {
+        await new Promise<void>((resolve, reject) => { child.once("spawn", resolve); child.once("error", reject); });
+        controller.store.attachPid(id, token, child.pid!);
+        assert.equal(executing(child.pid!), true);
+        const observed = controller.observe(id);
+        assert.equal(observed.supervisorAlive, false, `${legacy}/${wrong}`);
+        assert.equal(observed.run.status, "interrupted");
+      } finally { if (!exited) { child.kill("SIGKILL"); await until(() => exited); } }
+    }
+  });
+});
 
 test("detached pure execution imports generated runtime from an external cwd and persists output", { skip: !posix, timeout: 25_000 }, async () => {
   await fixture(async ({ workspace, controller, track }) => {

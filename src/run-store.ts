@@ -41,6 +41,7 @@ export interface RunRecord {
   desired: DesiredRunStatus;
   ownerToken: string | null;
   supervisorPid: number | null;
+  supervisorLaunch?: { ownerToken: string; script: string; store: string };
   createdAt: number;
   updatedAt: number;
   heartbeatAt: number | null;
@@ -223,6 +224,8 @@ export class RunStore {
   }
   private migrateStartColumns(): void {
     this.transaction(() => {
+      const runCols = this.database.prepare("PRAGMA table_info(workflow_runs)").all().map(row => String(row.name));
+      if (!runCols.includes("supervisor_launch")) this.database.exec("ALTER TABLE workflow_runs ADD COLUMN supervisor_launch TEXT");
       const cols = this.database.prepare("PRAGMA table_info(workflow_run_starts)").all().map(row => String(row.name));
       if (!cols.includes("operation")) this.database.exec("ALTER TABLE workflow_run_starts ADD COLUMN operation TEXT NOT NULL DEFAULT 'start'");
       if (!cols.includes("canonical_request")) this.database.exec("ALTER TABLE workflow_run_starts ADD COLUMN canonical_request TEXT");
@@ -298,6 +301,7 @@ export class RunStore {
       id: String(row.id), plan: JSON.parse(String(row.plan)) as ExecutionPlan, input: JSON.parse(String(row.input)) as Json,
       cwd: String(row.cwd), status: row.status as RunStatus, desired: row.desired as DesiredRunStatus,
       ownerToken: row.owner_token === null ? null : String(row.owner_token), supervisorPid: row.supervisor_pid === null ? null : Number(row.supervisor_pid),
+      ...(row.supervisor_launch == null ? {} : { supervisorLaunch: JSON.parse(String(row.supervisor_launch)) as NonNullable<RunRecord["supervisorLaunch"]> }),
       createdAt: Number(row.created_at), updatedAt: Number(row.updated_at), heartbeatAt: row.heartbeat_at === null ? null : Number(row.heartbeat_at),
       ...(row.prepared_id === null ? {} : { preparedId: String(row.prepared_id) }),
       ...(row.output === null ? {} : { output: JSON.parse(String(row.output)) as Json }),
@@ -313,7 +317,7 @@ export class RunStore {
     return this.database.prepare("SELECT id FROM workflow_runs ORDER BY created_at, id").all().map(row => this.get(String(row.id)));
   }
   /** Atomic reservation. Never reclaim an active reservation based only on a timestamp or PID in this database. */
-  reserveLaunch(id: string, initialOnly = false): { token: string; run: RunRecord } {
+  reserveLaunch(id: string, initialOnly = false, launch?: { script: string; store: string }): { token: string; run: RunRecord } {
     return this.transaction(() => {
       const run = this.get(id);
       if (this.fence(id)) throw new Error(`Run was replaced by a continuation and cannot be relaunched: ${id}`);
@@ -321,8 +325,8 @@ export class RunStore {
       if (this.hasPendingWorkerGroups(id)) throw executionFailure("uncertain-effect", "recovery", "unknown", "Worker process groups have not been verified empty");
       const token = randomUUID();
       const now = Date.now();
-      this.database.prepare("UPDATE workflow_runs SET status='running',owner_token=?,supervisor_pid=NULL,heartbeat_at=?,updated_at=?,error=NULL WHERE id=?")
-        .run(token, now, now, id);
+      this.database.prepare("UPDATE workflow_runs SET status='running',owner_token=?,supervisor_pid=NULL,supervisor_launch=?,heartbeat_at=?,updated_at=?,error=NULL WHERE id=?")
+        .run(token, launch ? JSON.stringify({ ...launch, ownerToken: token }) : null, now, now, id);
       this.event(id, "run.reserved", { token });
       return { token, run: this.get(id) };
     });

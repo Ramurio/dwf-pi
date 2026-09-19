@@ -49,6 +49,20 @@ function matchesCommand(line: string, marker: string, script: string): boolean {
   return false;
 }
 
+/** Launch identity belongs to the owner, never to the observing installation. */
+function matchesSupervisor(line: string, run: RunRecord, filename: string): boolean {
+  if (!run.ownerToken) return false;
+  const launch = run.supervisorLaunch?.ownerToken === run.ownerToken ? run.supervisorLaunch : undefined;
+  // Older launchers have no provenance. Still require the supervisor role plus
+  // the unique owner, run and journal arguments, not just a PID or heartbeat.
+  if (!launch && !/(?:^|\s|[/\\])supervisor\.ts(?:\s|$)/.test(line)) return false;
+  const script = launch?.script ?? "supervisor.ts";
+  return (!launch || matchesCommand(line, script, script)) &&
+    matchesCommand(line, `--owner ${run.ownerToken}`, script) &&
+    matchesCommand(line, `--run ${run.id}`, script) &&
+    matchesCommand(line, `--store ${launch?.store ?? filename}`, script);
+}
+
 function processInventory(): string[] {
   return execFileSync("ps", ["-ax", "-o", "pid=,args="], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).split("\n");
 }
@@ -179,7 +193,7 @@ export class RunController {
   private async launch(id: string, initialOnly = false): Promise<void> {
     if (this.continuationLaunchable(id, initialOnly)) await this.assertContinuationWorkspace(id);
     let token: string;
-    try { token = this.store.reserveLaunch(id, initialOnly).token; }
+    try { token = this.store.reserveLaunch(id, initialOnly, { script: supervisorPath, store: this.filename }).token; }
     catch (error) {
       const current = this.store.get(id);
       if (error instanceof Error && error.message.startsWith("Run is not launchable:") &&
@@ -216,7 +230,8 @@ export class RunController {
     let run = this.store.get(id);
     let processes: string[] | undefined;
     const inventory = () => processes ??= processInventory();
-    let supervisorAlive = run.ownerToken !== null && matchesProcess(run.supervisorPid, `--owner ${run.ownerToken}`, supervisorPath);
+    const supervisorCommand = run.ownerToken && run.supervisorPid !== null ? commandLine(run.supervisorPid) : undefined;
+    let supervisorAlive = supervisorCommand !== undefined && matchesSupervisor(supervisorCommand, run, this.filename);
     const activations = this.store.listActivations(id), workerPids = liveWorkerPids(activations, inventory);
     const workersAlive = workerPids.length, unresolvedGroups: UnresolvedWorkerGroup[] = [], emptyGroups: ActivationRecord[] = [];
     let groups: GroupProcess[] | undefined;
@@ -230,7 +245,8 @@ export class RunController {
     if (!supervisorAlive && run.ownerToken && run.supervisorPid === null) {
       // Cover the small reserve/spawn/attach window without treating a fresh
       // reservation as proof of either a live process or a failed launch.
-      const pid = matchingPids(inventory(), `--owner ${run.ownerToken}`, supervisorPath)[0];
+      const pid = inventory().filter(line => matchesSupervisor(line, run, this.filename))
+        .map(line => Number(line.trim().split(/\s+/, 1)[0])).find(pid => Number.isSafeInteger(pid) && pid > 0);
       if (pid) {
         try { this.store.attachPid(id, run.ownerToken, pid); }
         catch (error) { if (this.store.get(id).ownerToken === run.ownerToken) throw error; return this.observe(id); }
