@@ -847,7 +847,7 @@
       "graphId": "main",
       "node": {
         "id": "done",
-        "kind": "end",
+        "kind": "transform",
         "value": {
           "op": "object",
           "fields": {
@@ -917,8 +917,80 @@
       "op": "addNode",
       "graphId": "main",
       "node": {
+        "id": "accepted",
+        "kind": "finish",
+        "decision": "accepted",
+        "reason": {
+          "op": "literal",
+          "value": "Council verdict: approve"
+        },
+        "value": {
+          "op": "ref",
+          "path": [
+            "nodes",
+            "done"
+          ]
+        },
+        "evidence": {
+          "op": "literal",
+          "value": []
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "rejected",
+        "kind": "finish",
+        "decision": "rejected",
+        "reason": {
+          "op": "literal",
+          "value": "Council verdict: request_changes"
+        },
+        "value": {
+          "op": "ref",
+          "path": [
+            "nodes",
+            "done"
+          ]
+        },
+        "evidence": {
+          "op": "literal",
+          "value": []
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "inconclusive",
+        "kind": "finish",
+        "decision": "inconclusive",
+        "reason": {
+          "op": "literal",
+          "value": "Council verdict: inconclusive"
+        },
+        "value": {
+          "op": "ref",
+          "path": [
+            "nodes",
+            "done"
+          ]
+        },
+        "evidence": {
+          "op": "literal",
+          "value": []
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
         "id": "invalid_policy",
-        "kind": "end",
+        "kind": "finish",
         "value": {
           "op": "object",
           "fields": {
@@ -953,6 +1025,15 @@
               "value": {}
             }
           }
+        },
+        "decision": "rejected",
+        "reason": {
+          "op": "literal",
+          "value": "Unsupported or absent council policy"
+        },
+        "evidence": {
+          "op": "literal",
+          "value": []
         }
       }
     },
@@ -1072,6 +1153,72 @@
       "edge": {
         "from": "review",
         "to": "done"
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "main",
+      "edge": {
+        "from": "done",
+        "to": "accepted",
+        "when": {
+          "op": "eq",
+          "left": {
+            "op": "ref",
+            "path": [
+              "nodes",
+              "verdict"
+            ]
+          },
+          "right": {
+            "op": "literal",
+            "value": "approve"
+          }
+        }
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "main",
+      "edge": {
+        "from": "done",
+        "to": "rejected",
+        "when": {
+          "op": "eq",
+          "left": {
+            "op": "ref",
+            "path": [
+              "nodes",
+              "verdict"
+            ]
+          },
+          "right": {
+            "op": "literal",
+            "value": "request_changes"
+          }
+        }
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "main",
+      "edge": {
+        "from": "done",
+        "to": "inconclusive",
+        "when": {
+          "op": "eq",
+          "left": {
+            "op": "ref",
+            "path": [
+              "nodes",
+              "verdict"
+            ]
+          },
+          "right": {
+            "op": "literal",
+            "value": "inconclusive"
+          }
+        }
       }
     }
   ]

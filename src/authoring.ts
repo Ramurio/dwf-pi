@@ -1,3 +1,4 @@
+import { portableInputSchema, type InputSchema } from "./public-schema.js";
 import { Type } from "typebox";
 import { Check, Errors } from "typebox/value";
 import { resolveAgentConfig } from "./catalog.js";
@@ -26,7 +27,10 @@ export const AuthoringOperationSchema = Type.Unsafe<AuthoringOperation>(Type.Uni
   operation("removeNode", { nodeId: id }), operation("setEntry", { nodeId: id }),
   operation("connect", { edge: EdgeSchema }), operation("disconnect", { edgeIndex: Type.Integer({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER }) }),
 ]));
-export const DraftPatchSchema = Type.Unsafe<DraftPatch>(Type.Object({ expectedRevision: positiveInteger, operations: Type.Array(AuthoringOperationSchema, { minItems: 1 }) }, closed));
+const patchFields = { expectedRevision: positiveInteger, operations: Type.Array(AuthoringOperationSchema, { minItems: 1 }) };
+export const DraftPatchSchema = Type.Unsafe<DraftPatch>(Type.Object(patchFields, closed));
+/** Public transport request; DraftStore.patch still accepts the id separately. */
+export const PublicDraftPatchSchema = portableInputSchema(Type.Object({ id, ...patchFields }, closed) as unknown as InputSchema);
 // Drafts allow empty graphs and graph-level semantic errors. Individual records
 // still obey the same closed Node/Edge schema used for compilation.
 export const DraftSchema = Type.Unsafe<WorkflowDefinition>(Type.Object({

@@ -13,6 +13,20 @@ export interface PresetRecord {
   savedAt: number;
   plan: ExecutionPlan;
 }
+export interface PresetDiagnostic {
+  kind: "diagnostic";
+  name: string;
+  revision: string | null;
+  reason: string;
+}
+export interface PresetScan { records: PresetRecord[]; diagnostics: PresetDiagnostic[] }
+function safeReason(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  return ["Preset directory must be a real directory", "Preset revision must be a real JSON file",
+    "Invalid preset record", "Preset revision and execution plan hash differ",
+    "Execution plan compiled source or source hash mismatch", "Execution plan hash mismatch"].includes(message)
+    ? message : error instanceof SyntaxError ? "Invalid preset JSON" : "Preset unreadable or frozen plan verification failed";
+}
 export type PresetScope = "global" | "project";
 export function presetName(value: unknown): string {
   if (typeof value !== "string" || !/^[A-Za-z][A-Za-z0-9_-]*$/.test(value)) throw new Error("Invalid preset name");
@@ -59,8 +73,9 @@ export class PresetLibrary {
     if (revision !== undefined) presetRevision(revision);
     if (!await this.directory(this.root) || !await this.directory(join(this.root, name))) throw new Error(`Preset not found: ${name}`);
     if (revision === undefined) {
-      const entries = await this.versions(name);
-      const latest = entries.at(-1);
+      const scan = await this.scan(name);
+      if (scan.diagnostics.length) throw new Error(`Ambiguous latest for preset ${name}; specify an explicit revision hash: ${scan.diagnostics.map(d => d.reason).join("; ")}`);
+      const latest = scan.records.at(-1);
       if (!latest) throw new Error(`Preset not found: ${name}`);
       return latest;
     }
@@ -76,22 +91,44 @@ export class PresetLibrary {
     if (plan.hash !== revision) throw new Error("Preset revision and execution plan hash differ");
     return { ...record, plan };
   }
-  async versions(name: string): Promise<PresetRecord[]> {
-    presetName(name);
-    if (!await this.directory(this.root) || !await this.directory(join(this.root, name))) return [];
-    const files = (await readdir(join(this.root, name))).filter(file => /^[a-f0-9]{64}\.json$/.test(file));
-    const records = await Promise.all(files.map(file => this.read(name, file.slice(0, -5))));
-    return records.sort((a, b) => a.savedAt - b.savedAt || a.revision.localeCompare(b.revision));
-  }
-  async list(): Promise<PresetRecord[]> {
+  async names(): Promise<string[]> {
     if (!await this.directory(this.root)) return [];
-    const names = (await readdir(this.root)).filter(name => /^[A-Za-z][A-Za-z0-9_-]*$/.test(name)).sort();
-    const records: PresetRecord[] = [];
-    for (const name of names) {
-      const versions = await this.versions(name);
-      if (versions.length) records.push(versions.at(-1)!);
+    return (await readdir(this.root)).filter(name => /^[A-Za-z][A-Za-z0-9_-]*$/.test(name)).sort();
+  }
+  async hasName(name: string): Promise<boolean> {
+    presetName(name);
+    return (await this.names()).includes(name);
+  }
+  async scan(name: string): Promise<PresetScan> {
+    presetName(name);
+    const result: PresetScan = { records: [], diagnostics: [] };
+    let files: string[];
+    try {
+      if (!await this.directory(this.root) || !await this.directory(join(this.root, name))) return result;
+      files = (await readdir(join(this.root, name))).filter(file => /^[a-f0-9]{64}\.json$/.test(file)).sort();
+    } catch (error) {
+      result.diagnostics.push({ kind: "diagnostic", name, revision: null, reason: safeReason(error) });
+      return result;
     }
-    return records;
+    for (const file of files) {
+      const revision = file.slice(0, -5);
+      try { result.records.push(await this.read(name, revision)); }
+      catch (error) { result.diagnostics.push({ kind: "diagnostic", name, revision, reason: safeReason(error) }); }
+    }
+    result.records.sort((a, b) => a.savedAt - b.savedAt || a.revision.localeCompare(b.revision));
+    return result;
+  }
+  async versions(name: string): Promise<PresetRecord[]> {
+    return (await this.scan(name)).records;
+  }
+  async list(): Promise<((PresetRecord & { latest?: false }) | PresetDiagnostic)[]> {
+    const entries: ((PresetRecord & { latest?: false }) | PresetDiagnostic)[] = [];
+    for (const name of await this.names()) {
+      const { records, diagnostics } = await this.scan(name);
+      if (diagnostics.length) entries.push(...records.map(record => ({ ...record, latest: false as const })), ...diagnostics);
+      else if (records.length) entries.push(records.at(-1)!);
+    }
+    return entries;
   }
 }
 

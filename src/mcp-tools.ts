@@ -1,8 +1,9 @@
-import { CreateDraftSchema, DraftPatchSchema } from "./authoring.js";
+import { CreateDraftSchema, PublicDraftPatchSchema } from "./authoring.js";
 import { roleNames } from "./catalog.js";
 import { serviceToolNames, type ServiceToolName } from "./service.js";
 
-type InputSchema = { type: "object"; properties: Record<string, unknown>; required?: string[]; additionalProperties: false; $defs?: Record<string, unknown>; oneOf?: unknown[] };
+import { portableInputSchema, type InputSchema } from "./public-schema.js";
+export { portableInputSchema } from "./public-schema.js";
 const identifier = { type: "string", pattern: "^[A-Za-z][A-Za-z0-9_-]*$" };
 const cwd = { type: "string", minLength: 1, pattern: "^[^\\u0000]+$", description: "Workspace directory, relative to the server's cwd or absolute; defaults to server cwd." };
 const model = { type: "object", properties: { provider: { type: "string", minLength: 1 }, id: { type: "string", minLength: 1 } }, required: ["provider", "id"], additionalProperties: false, description: "Actual pi provider/model ID. Sets the default for nodes without a model; explicit node choices take precedence." };
@@ -22,9 +23,7 @@ const start: InputSchema = {
 };
 const scope = { type: "string", enum: ["global", "project"], description: "Library scope. Save defaults to project; reads without scope prefer project over global." };
 const revision = { type: "string", pattern: "^[a-f0-9]{64}$", description: "Immutable preset revision hash; omit to use current named revision." };
-const patch = JSON.parse(JSON.stringify(DraftPatchSchema)) as InputSchema;
-patch.properties.id = identifier;
-patch.required = ["id", ...(patch.required ?? [])];
+const patch = PublicDraftPatchSchema;
 
 const definitions: Record<ServiceToolName, { description: string; inputSchema: InputSchema; readOnly?: boolean; destructive?: boolean; idempotent?: boolean; openWorld?: boolean }> = {
   "run.reconcile": { description: "Record an explicit accept or one-use retry decision for an unconsumed failed operation, using a fresh run.recovery checkpoint and workspaceDigest. Supply a stable decisionId, actor, reason and nonempty evidence; accept also requires output. Exact redelivery returns the receipt, conflicting reuse fails. Pending retry replacement requires supersedes. Files, output schema, reviewer bindings and managed Git state are verified. Prepares the same run without launching workers or lifting pause; run.resume is separate. Evidence is the actor's attestation, not automatic certification of external effects.", inputSchema: {
@@ -77,31 +76,6 @@ const definitions: Record<ServiceToolName, { description: string; inputSchema: I
   "preset.run": { description: "Start a fresh detached run from a preset's frozen plan with new optional input. Uses snapshotted resources and models; does not rewrite the draft or reuse previous outputs.", inputSchema: object({ name: identifier, scope, revision, cwd, input: { description: "New JSON entry-graph input; defaults to null." } }, ["name"]), destructive: true, openWorld: true },
   "run.cancel": { description: "Cancel a workflow and interrupt active workers. Cancellation is separate from pause and cannot be revoked; observe cancelling until cancelled. Existing external effects are not rolled back.", inputSchema: byId(), destructive: true, idempotent: true },
 };
-
-/** TypeBox embeds named cyclic definitions more than once; publish one portable local-$ref bundle. */
-export function portableInputSchema(value: InputSchema): InputSchema {
-  const definitions: Record<string, unknown> = Object.create(null);
-  function rewrite(value: unknown): unknown {
-    if (Array.isArray(value)) return value.map(rewrite);
-    if (value === null || typeof value !== "object") return value;
-    const schema = value as Record<string, unknown>;
-    const result: Record<string, unknown> = {};
-    if (schema.$defs && typeof schema.$defs === "object") for (const [name, definition] of Object.entries(schema.$defs)) {
-      const rewritten = rewrite(definition);
-      if (Object.hasOwn(definitions, name) && JSON.stringify(definitions[name]) !== JSON.stringify(rewritten)) throw new Error(`Conflicting MCP schema definition: ${name}`);
-      definitions[name] = rewritten;
-    }
-    for (const [key, item] of Object.entries(schema)) {
-      if (key === "$defs" || key === "$id") continue;
-      result[key] = key === "$ref" && typeof item === "string" && !item.startsWith("#")
-        ? `#/$defs/${item.replace(/~/g, "~0").replace(/\//g, "~1")}` : rewrite(item);
-    }
-    return result;
-  }
-  const schema = rewrite(value) as InputSchema;
-  if (Object.keys(definitions).length) schema.$defs = definitions;
-  return schema;
-}
 
 /** Stable underscore names work with hosts that impose function-name restrictions. */
 export const mcpToolDefinitions = serviceToolNames.map(serviceTool => {

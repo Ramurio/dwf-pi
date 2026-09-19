@@ -25,6 +25,13 @@ import {
 
 export type RunStatus = "queued" | "running" | "waiting" | "pausing" | "paused" | "cancelling" | "cancelled" | "succeeded" | "failed" | "interrupted";
 export type DesiredRunStatus = "running" | "paused" | "cancelled";
+/** Atomic control-state admission refusal; no activation has been started. */
+export class RunNotAcceptingWork extends Error {
+  constructor(readonly desired: DesiredRunStatus, readonly status: RunStatus) {
+    super(`Run is not accepting work: ${desired}/${status}`);
+    this.name = "RunNotAcceptingWork";
+  }
+}
 export interface RunRecord {
   id: string;
   plan: ExecutionPlan;
@@ -408,18 +415,21 @@ export class RunStore {
       this.event(id, "run.interrupted", { error, failure: JSON.parse(JSON.stringify(failure)) as Json });
     });
   }
+  private abandonScheduledRetries(id: string, reason: string, key?: string): void {
+    for (const row of this.database.prepare("SELECT activation_key,metadata FROM workflow_activations WHERE run_id=? AND json_extract(metadata,'$.retry.status')='scheduled'" + (key === undefined ? "" : " AND activation_key=?")).all(...(key === undefined ? [id] : [id, key]))) {
+      const metadata = JSON.parse(String(row.metadata)), progress = parseRetryProgress(metadata.retry);
+      if (!progress) continue;
+      const abandoned = { ...progress, status: "abandoned" };
+      this.database.prepare("UPDATE workflow_activations SET metadata=json_set(metadata,'$.retry',json(?)) WHERE run_id=? AND activation_key=?").run(JSON.stringify(abandoned),id,String(row.activation_key));
+      this.event(id,"retry.abandoned",{key:String(row.activation_key),retry:abandoned,reason});
+    }
+  }
   finish(id: string, token: string, outcome: RunOutcome): void {
     this.transaction(() => {
       const run = this.owned(id, token);
       if (outcome.status === "succeeded" && run.desired !== "running") throw new Error(`Cannot succeed while ${run.desired} is requested`);
       if (outcome.status === "succeeded" && this.hasPendingWorkerGroups(id)) throw executionFailure("uncertain-effect", "cleanup", "unknown", "Worker process groups have not been verified empty");
-      for (const row of this.database.prepare("SELECT activation_key,metadata FROM workflow_activations WHERE run_id=? AND json_extract(metadata,'$.retry.status')='scheduled'").all(id)) {
-        const metadata = JSON.parse(String(row.metadata)), progress = parseRetryProgress(metadata.retry);
-        if (!progress) continue;
-        const abandoned = { ...progress, status: "abandoned" };
-        this.database.prepare("UPDATE workflow_activations SET metadata=json_set(metadata,'$.retry',json(?)) WHERE run_id=? AND activation_key=?").run(JSON.stringify(abandoned),id,String(row.activation_key));
-        this.event(id,"retry.abandoned",{key:String(row.activation_key),retry:abandoned,reason:outcome.status});
-      }
+      this.abandonScheduledRetries(id, outcome.status);
       if (outcome.status === "cancelled" && run.desired !== "cancelled") throw new Error("Cancellation was not requested");
       const running = this.database.prepare("SELECT 1 FROM workflow_activations WHERE run_id=? AND status='running' LIMIT 1").get(id);
       if (running) throw new Error("Cannot finish with running activations");
@@ -445,7 +455,7 @@ export class RunStore {
   beginActivation(id: string, token: string, context: RuntimeContext, options: { kind: string; sideEffect: boolean; reconciliation?: string }): ActivationRecord {
     return this.transaction(() => {
       const run = this.owned(id, token);
-      if (run.desired !== "running" || !["running", "waiting"].includes(run.status)) throw new Error(`Run is not accepting work: ${run.desired}/${run.status}`);
+      if (run.desired !== "running" || !["running", "waiting"].includes(run.status)) throw new RunNotAcceptingWork(run.desired, run.status);
       const key = activationKey(context);
       const old = this.getActivation(id, key);
       if (old && (old.kind !== options.kind || old.sideEffect !== options.sideEffect)) throw new Error(`Activation definition changed: ${key}`);
@@ -805,10 +815,14 @@ export class RunStore {
       this.database.prepare(`INSERT INTO workflow_reconciliations(run_id,decision_id,activation_key,source_attempt,request,plan_hash,workspace,created_at,supersedes) VALUES(?,?,?,?,?,?,?,?,?)`)
         .run(id,request.decisionId,request.key,request.attempt,JSON.stringify(request),state.run.plan.hash,JSON.stringify(workspace),now,request.supersedes ?? null);
       this.event(id, "reconciliation.recorded", { key: request.key, decisionId: request.decisionId, action: request.action, sourceAttempt: request.attempt, actor: request.actor, reason: request.reason, supersedes: request.supersedes ?? null });
+      this.abandonScheduledRetries(id, "reconciled", request.key);
       if (request.action === "accept") {
+        selected.metadata = this.getActivation(id, request.key)!.metadata;
         this.database.prepare("INSERT INTO workflow_activation_history(run_id,activation_key,attempt,record) VALUES(?,?,?,?)").run(id,request.key,selected.attempt,JSON.stringify(selected));
         // Preserve cumulative spend and completeness projection; no worker/model invocation is invented for an accepted checkpoint.
         const metadata = {
+          ...(selected.metadata.usageLegacyIncomplete === true ? { usageLegacyIncomplete: true } : {}),
+          ...(selected.metadata.usageLegacyBaseline === undefined ? {} : { usageLegacyBaseline: selected.metadata.usageLegacyBaseline }),
           ...(selected.metadata.usage === undefined ? {} : {
             usage: selected.metadata.usage,
             ...(typeof selected.metadata.usageLedgerVersion === "number" ? { usageLedgerVersion: selected.metadata.usageLedgerVersion } : {}),
@@ -911,10 +925,34 @@ export class RunStore {
     const reports = this.database.prepare("SELECT usage FROM workflow_usage_reports WHERE run_id=? AND activation_key=? ORDER BY seq").all(activation.runId, activation.key)
       .map(row => JSON.parse(String(row.usage)) as TokenUsage);
     const attempts = this.database.prepare("SELECT attempt,complete FROM workflow_usage_attempts WHERE run_id=? AND activation_key=?").all(activation.runId, activation.key);
-    const metadata = { ...activation.metadata,
+    // Only immutable pre-ledger checkpoints prove the boundary of a cumulative legacy subtotal.
+    // Never add multiple historical snapshots or guess the provenance of a live mixed projection.
+    const archives = this.database.prepare("SELECT attempt,record FROM workflow_activation_history WHERE run_id=? AND activation_key=? ORDER BY attempt DESC").all(activation.runId, activation.key);
+    // Sticky evidence of legacy spend must survive rejection of its subtotal. A fully
+    // settled ledger only proves its own completeness, not that of the legacy usage.
+    let legacyIncomplete = activation.metadata.usageLegacyIncomplete === true ||
+      activation.metadata.usageLegacyBaseline !== undefined ||
+      (activation.metadata.usageLedgerVersion === undefined && activation.metadata.usage !== undefined);
+    let baseline: { version: number; throughAttempt: number; subtotal: TokenUsage } | undefined;
+    for (const row of archives) {
+      const record = JSON.parse(String(row.record)) as ActivationRecord;
+      if (record.runId !== activation.runId || record.key !== activation.key || record.attempt !== Number(row.attempt) || record.metadata.usageLedgerVersion !== undefined) continue;
+      if (record.metadata.usage !== undefined) legacyIncomplete = true;
+      const subtotal = parseUsage(record.metadata.usage);
+      if (!subtotal) continue;
+      // Even an empty ledger attempt inside the boundary makes provenance ambiguous.
+      if (attempts.some(item => Number(item.attempt) <= record.attempt)) break;
+      baseline = { version: 1, throughAttempt: record.attempt, subtotal };
+      break;
+    }
+    const { usage: _oldUsage, usageLegacyBaseline: _oldBaseline, ...rest } = activation.metadata;
+    const constituents = [...(baseline ? [baseline.subtotal] : []), ...reports];
+    const metadata = { ...rest,
+      ...(baseline ? { usageLegacyBaseline: baseline } : {}),
+      ...(legacyIncomplete ? { usageLegacyIncomplete: true } : {}),
       usageLedgerVersion: 1, usageReportCount: reports.length, usageRecordedAttempts: attempts.length,
-      usageComplete: attempts.length === activation.attempt && attempts.every(row => row.complete === 1),
-      ...(reports.length ? { usage: sumTokenUsage(reports) } : {}),
+      usageComplete: !legacyIncomplete && !baseline && attempts.length === activation.attempt && attempts.every(row => row.complete === 1),
+      ...(constituents.length ? { usage: sumTokenUsage(constituents) } : {}),
     };
     this.database.prepare("UPDATE workflow_activations SET metadata=? WHERE run_id=? AND activation_key=?").run(JSON.stringify(metadata), activation.runId, activation.key);
   }

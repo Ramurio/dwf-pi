@@ -377,3 +377,56 @@ test("worker rejects unsafe skill names before filesystem admission", async t =>
   f.request.config.skills = [{ name: "../escape", hash: "test", files: [{ path: "SKILL.md", base64: "", executable: false }] }];
   await assert.rejects(executePiWorker(f.request, f.options), /Unsafe frozen skill name/);
 });
+
+for (const type of ["string", "integer", "boolean"] as const) {
+  for (const union of [false, true]) {
+    for (const value of [null, type === "string" ? "" : type === "integer" ? 0 : false]) {
+      test(`SDK loop preserves ${type} ${JSON.stringify(value)} (union=${union})`, async t => {
+        const f = await fixture(t, [() => submit({ answer: value })]);
+        f.request.config.outputSchema.properties = { answer: union ? { type: [type, "null"] } : { type, nullable: true } };
+        const schema = structuredClone(f.request.config.outputSchema);
+        assert.deepEqual((await executePiWorker(f.request, f.options)).output, { answer: value });
+        assert.deepEqual(f.calls[0]!.tools![0]!.parameters, schema);
+      });
+    }
+  }
+}
+
+for (const present of [false, true]) test(`SDK loop preserves optional nullable presence=${present}`, async t => {
+  const expected = present ? { answer: 42, optional: null } : { answer: 42 };
+  const f = await fixture(t, [() => submit(expected)]);
+  f.request.config.outputSchema.properties = { answer: { type: "integer" }, optional: { type: "string", nullable: true } };
+  assert.deepEqual((await executePiWorker(f.request, f.options)).output, expected);
+});
+
+test("unknown schema keywords fail before SDK/model admission (no-change)", async t => {
+  const f = await fixture(t, []);
+  f.request.config.outputSchema.properties = { answer: { type: "integer", unknownKeyword: true } };
+  await assert.rejects(executePiWorker(f.request, f.options), /Invalid frozen output schema/);
+  assert.equal(f.calls.length, 0);
+});
+
+test("cancellation after SDK preparation never publishes the accepted snapshot", async t => {
+  const f = await fixture(t, [() => submit({ answer: null })]);
+  f.request.config.outputSchema.properties = { answer: { type: "string", nullable: true } };
+  const controller = new AbortController(); let prepared = false;
+  await assert.rejects(executePiWorker(f.request, { ...f.options, signal: controller.signal, onSession(session) {
+    session.agent.beforeToolCall = async event => {
+      // This hook is after prepareArguments AND the still-enabled SDK validation.
+      assert.deepEqual(event.args, { answer: "" });
+      prepared = true;
+      controller.abort();
+      return undefined;
+    };
+  } }), /cancelled/);
+  assert.equal(prepared, true);
+});
+
+test("duplicate nullable submission and invalid repair cannot reuse an accepted snapshot", async t => {
+  const duplicate = () => reply([...submit({ answer: null }).content, { type: "toolCall", id: "duplicate", name: "submit_result", arguments: { answer: "second" } }], "toolUse");
+  const f = await fixture(t, [duplicate, () => submit({}), () => submit({ answer: "fresh" })]);
+  f.request.config.outputSchema.properties = { answer: { type: "string", nullable: true } };
+  f.request.config.outputRepair = { mode: "submit-only", maxRounds: 2 };
+  assert.deepEqual((await executePiWorker(f.request, f.options)).output, { answer: "fresh" });
+  assert.deepEqual(f.events.filter((e: any) => e.type === "output.repair").map((e: any) => [e.progress.status, e.progress.cause]), [["running", "duplicate"], ["invalid", "duplicate"], ["running", "schema"], ["succeeded", "schema"]]);
+});

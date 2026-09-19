@@ -11,7 +11,7 @@ import type { ExecutionPlan, FrozenAgent, PiWorkerRequest } from "./execution-ty
 import type { Json, Node } from "./graph.js";
 import { assertJson, createOutputValidator } from "./output-schema.js";
 import { runCheckProcess, runPiProcess, ProcessCancelled } from "./process-client.js";
-import { activationKey, RunStore, type RunRecord } from "./run-store.js";
+import { activationKey, RunNotAcceptingWork, RunStore, type RunRecord } from "./run-store.js";
 import { GitWorkspaces, parseWorkspaceSources, type GitOperationOptions, type WorkspaceRecord } from "./workspaces.js";
 import type { RuntimeContext, WorkflowRuntime } from "./runtime-contract.js";
 import { explicitOutcome } from "./task-outcome.js";
@@ -204,8 +204,9 @@ export class JournalRuntime implements WorkflowRuntime {
         }),
       ).pipe(Effect.catchAll(error => {
         const current = runtime.store.get(runtime.run.id);
-        // A pause can race the outer gate; the journal atomically denies admission.
-        if (current.ownerToken === runtime.token && current.desired === "paused" && /not accepting work/.test(error.message)) return runtime.step(context, work);
+        // A pause can race the outer gate and resume before this handler runs.
+        // Retry admission only, never work that has already started.
+        if (error instanceof RunNotAcceptingWork && executedAttempt === undefined && current.ownerToken === runtime.token && current.desired !== "cancelled") return runtime.step(context, work);
         if (error instanceof RetryNotReady) return runtime.step(context,work);
         const decision = runtime.store.scheduledRetry(runtime.run.id,activationKey(context));
         if (current.ownerToken === runtime.token && decision && decision.attempt === executedAttempt) return runtime.step(context,work);

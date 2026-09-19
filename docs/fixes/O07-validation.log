@@ -1,0 +1,109 @@
+O07 review follow-up: final validation
+eb6e9873f5d8983677fc9043f72898214c145ddad275a10f1595e1dda89c4ed7  scripts/apply-sdk-bash-signal.mjs
+72aaeb3e41d7768fcd42cc06211bc6a5ec37cd260e0898fe66c4e932a2bcd18a  patches/pi-coding-agent-0.85.1-bash-signal.patch
+706f46aae622f4d24861fdd51217a6b97e372288751623037d742bb3af53170c  tests/bash-signal.test.ts
+ee0e9a8defc845a9129e64548f4ad19419e49c61e335d9cae12bc6fc1dfa9cb6  tests/bash-signal-worker.test.ts
+42046f60143bee45679c845ebd98690876886f6091bd9ad413ceef3e1c529200  tests/pi-worker.test.ts
+d837fcd099af24a97bfebb60cb68a5af6654e30e47e19a2a070915383f0a4a2e  tests/process-client.test.ts
+$ node --import tsx --test tests/bash-signal.test.ts tests/bash-signal-worker.test.ts tests/pi-worker.test.ts tests/process-client.test.ts
+(node:80849) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ offline worker reports real bash signal as tool error (33.232125ms)
+✔ check-worker signal remains process/execution/unknown with exit 1 (no change) (76.438667ms)
+(node:80850) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ real bash: signal, output, ordinary exits, timeout and cancellation (163.217708ms)
+✔ unknown null exit is not success (0.251625ms)
+✔ waiter retains signal via exit (0.321958ms)
+✔ waiter retains signal via close (0.04625ms)
+✔ waiter retains signal via idle (101.346167ms)
+✔ inherited stdio drains late active output and retains signal (346.079459ms)
+✔ legacy waiter remains number/null (3.634417ms)
+✔ installer reproducibility, idempotence and fail closed guards (git=false) (326.041708ms)
+✔ installer reproducibility, idempotence and fail closed guards (git=true) (369.081458ms)
+(node:80851) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ output repair preserves the same transcript and blocks every original tool, including hallucinated writes (29.778583ms)
+✔ each invalid repair takes one configured round; missing, duplicate and unavailable-tool results cannot bypass the bound (12.009625ms)
+✔ enabled repair without a bound continues through multiple malformed rounds to a valid result (9.326875ms)
+✔ provider and setup failures do not enter format repair; provider failure inside repair terminates it (22.064167ms)
+✔ cancelling an active repair drains the session and preserves every known response report (6.827542ms)
+✔ continued visits restore original configured tools and only count new invocation responses after repair (12.641542ms)
+✔ invalid output repair policy fails before model admission (6.572709ms)
+✔ typed output failure distinguishes read-only work from a writer that already changed an artifact (13.997458ms)
+✔ plain SDK errors cannot masquerade as curated output errors or leak diagnostics through a recognized prefix (10.449791ms)
+✔ SDK provider failure remains unclassified within provider errors instead of guessing a retryable transport cause (6.531667ms)
+✔ actual SDK worker returns exact output, curated events, usage and persisted session after settlement (5.824958ms)
+✔ usage is emitted before result validation, including cache and reasoning without double counting (5.540833ms)
+✔ completed response usage is observable during the next turn and retained when cancelled (8.61125ms)
+✔ worker rejects missing result (5.494ms)
+✔ worker rejects coercible output (5.335291ms)
+✔ worker rejects additional property (5.499917ms)
+✔ worker rejects missing property (7.664709ms)
+✔ worker rejects duplicate submissions in one turn (5.30275ms)
+✔ worker rejects assistant failure (5.187167ms)
+✔ cancellation drains queued followup and steering before abort and disposes settled session (5.248042ms)
+✔ continued node reuses transcript and measures only new invocation usage (10.961333ms)
+✔ frozen resources exclude discovered project context and skills (8.625583ms)
+✔ reject unsafe snapshot path ../escape (4.631458ms)
+✔ reject unsafe snapshot path /escape (6.287583ms)
+✔ reject unsafe snapshot path nested/../../escape (4.67025ms)
+✔ reject unsafe snapshot path nested\escape (4.834208ms)
+✔ reject unsafe snapshot path nested//escape (5.990291ms)
+✔ reject symlink resource directory (6.5735ms)
+✔ reject clamped thinking instead of silently changing configured model behavior (4.767916ms)
+✔ pre-cancelled worker admits no work (4.510042ms)
+✔ a post-submission assistant error invalidates the recorded result (5.460417ms)
+✔ worker awaits full agent settlement, including async end listeners (7.168292ms)
+✔ fresh workers cannot accept continuation and read-only cannot grant bash (1.529666ms)
+✔ worker child emits only NDJSON and terminal error for malformed input (682.036875ms)
+✔ worker child cancels incomplete stdin on SIGTERM (634.367334ms)
+✔ worker child cancels incomplete stdin on disconnect (724.914375ms)
+✔ a closed supervisor output pipe cancels bootstrap without an uncaught EPIPE (704.3265ms)
+✔ frozen skill prepared from directory fallback runs through actual SDK (36.300041ms)
+✔ frozen skill prepared from declared alias runs through actual SDK (18.833833ms)
+✔ worker rejects unsafe skill names before filesystem admission (4.276792ms)
+✔ SDK loop preserves string null (union=false) (5.076292ms)
+✔ SDK loop preserves string "" (union=false) (6.121ms)
+✔ SDK loop preserves string null (union=true) (4.804333ms)
+✔ SDK loop preserves string "" (union=true) (5.125208ms)
+✔ SDK loop preserves integer null (union=false) (5.279417ms)
+✔ SDK loop preserves integer 0 (union=false) (7.069375ms)
+✔ SDK loop preserves integer null (union=true) (5.192916ms)
+✔ SDK loop preserves integer 0 (union=true) (5.031417ms)
+✔ SDK loop preserves boolean null (union=false) (4.722875ms)
+✔ SDK loop preserves boolean false (union=false) (7.249959ms)
+✔ SDK loop preserves boolean null (union=true) (5.241458ms)
+✔ SDK loop preserves boolean false (union=true) (5.040292ms)
+✔ SDK loop preserves optional nullable presence=false (5.184167ms)
+✔ SDK loop preserves optional nullable presence=true (7.3055ms)
+✔ unknown schema keywords fail before SDK/model admission (no-change) (4.153542ms)
+✔ cancellation after SDK preparation never publishes the accepted snapshot (5.365917ms)
+✔ duplicate nullable submission and invalid repair cannot reuse an accepted snapshot (5.819459ms)
+(node:80852) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+✔ check arguments stay literal without shell expansion, cwd is honored and nonzero exits are data (102.612208ms)
+✔ pre-aborted checks never admit a process (0.236375ms)
+✔ worker reservation precedes spawn and PID persistence precedes sending either execution request (2291.127083ms)
+✔ cancellation immediately after wrapper admission settles and reaps its process group (0.959041ms)
+✔ supervisor death during the PID checkpoint closes either worker without sending its task (948.873583ms)
+✔ post-admission cancellation kills command and ordinary descendants (118.519209ms)
+✔ cancellation escalates for a TERM-resistant descendant after its immediate parent exits (132.781208ms)
+✔ supervisor death disconnects check IPC and terminates wrapper, command and ordinary descendants (229.560375ms)
+✔ supervisor death disconnects check IPC and terminates wrapper, command and TERM-resistant descendants (207.458041ms)
+✔ check spawn errors and onStarted callback failures settle without orphaning the wrapper (67.243292ms)
+✔ pi process rejects an unsupported protocol version before loading credentials or admitting a model (636.538333ms)
+✔ unhandled pi bootstrap stderr never leaks into the public worker error (23.259208ms)
+ℹ tests 80
+ℹ suites 0
+ℹ pass 80
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4846.084167
+$ npm run typecheck
+
+> dynamicwf-pi@0.0.0 typecheck
+> tsc --noEmit
+
