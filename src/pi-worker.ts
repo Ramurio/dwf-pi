@@ -170,6 +170,7 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
     const loadedSkills = resourceLoader.getSkills();
     if (loadedSkills.diagnostics.some(d => d.type === "error") || loadedSkills.skills.length !== config.skills.length || loadedSkills.skills.some(skill => !skillPaths.includes(skill.filePath) || config.skills[skillPaths.indexOf(skill.filePath)]?.name !== skill.name)) throw executionFailure("configuration","setup","not-started","Frozen skills did not load exactly as configured");
     let output: Json | undefined;
+    let acceptedOutput: Json | undefined;
     let submissions = 0;
     let outputFailure: OutputFailureCause | undefined;
     let repairing = false;
@@ -179,15 +180,22 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
       prepareArguments(raw: unknown) {
         submissions++;
         if (submissions !== 1) { outputFailure = "duplicate"; throw new Error(outputFailureMessages[outputFailure]); }
-        try { return validateOutput(raw); } catch (error) {
+        try {
+          // Keep the strict JSON snapshot isolated from SDK argument coercion.
+          acceptedOutput = structuredClone(validateOutput(raw));
+          return structuredClone(acceptedOutput);
+        } catch (error) {
+          acceptedOutput = undefined;
           outputFailure = "schema";
           // Validator diagnostics are private tool feedback, never public failure/event text.
           throw new Error(`${outputFailureMessages[outputFailure]}: ${error instanceof Error ? error.message : "Invalid JSON output"}`);
         }
       },
-      async execute(_id, raw) {
+      async execute() {
         checkAdmission();
-        output = structuredClone(raw) as Json;
+        if (acceptedOutput === undefined) throw new Error("No accepted output snapshot");
+        output = acceptedOutput;
+        acceptedOutput = undefined;
         return { content: [{ type: "text", text: "Result accepted. Worker complete." }], details: {} };
       },
     });
@@ -313,7 +321,7 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
         session.setActiveToolsByName(["submit_result"]);
         const active = session.getActiveToolNames();
         if (active.length !== 1 || active[0] !== "submit_result") throw executionFailure("configuration",phase,effects,"Output repair could not close the worker tool allowlist");
-        output = undefined; submissions = 0; outputFailure = undefined;
+        output = undefined; acceptedOutput = undefined; submissions = 0; outputFailure = undefined;
         const progress: OutputRepairProgress = { round: ++repairRound, status: "running", cause, afterReport: reportIndex, throughReport: reportIndex };
         options.onEvent?.({ type: "output.repair", progress: { ...progress } });
         try {
