@@ -78,15 +78,29 @@ export function layoutGraph(graph) {
     });
     return box.x + box.width / 2 + (sorted.indexOf(edge) - (list.length - 1) / 2) * 16;
   };
+  // Reserve vertical intervals, not just ports on individual cards: an arrival
+  // can otherwise coincide with a departure on the opposite side of a gap.
+  const verticals = [];
+  const reservePort = (id, edge, list, low, high) => {
+    const preferred = port(id, edge, list), box = positions.get(id);
+    for (let distance = 0; ; distance += 4) {
+      for (const x of distance ? [preferred + distance, preferred - distance] : [preferred]) {
+        if (x < box.x + 12 || x > box.x + box.width - 12) continue;
+        if (verticals.some(v => Math.abs(v.x - x) < 4 && Math.min(v.high, high) > Math.max(v.low, low))) continue;
+        verticals.push({ x, low, high });
+        return x;
+      }
+    }
+  };
   const routed = edges.map(edge => {
     const from = positions.get(edge.from), to = positions.get(edge.to);
-    const x1 = port(edge.from, edge, outgoing.get(edge.from));
-    const x2 = port(edge.to, edge, incoming.get(edge.to));
     const exitY = gapStarts.get(edge.fromRank) + 32 + edge.exitTrack * 28;
+    const entryY = edge.external ? gapStarts.get(edge.toRank - 1) + 32 + edge.entryTrack * 28 : exitY;
+    const x1 = reservePort(edge.from, edge, outgoing.get(edge.from), from.y + from.height, exitY);
+    const x2 = reservePort(edge.to, edge, incoming.get(edge.to), entryY, to.y);
     const points = [{ x: x1, y: from.y + from.height }, { x: x1, y: exitY }];
     if (edge.external) {
       const side = 48 + stackWidth + 40 + edge.outerLane * 28;
-      const entryY = gapStarts.get(edge.toRank - 1) + 32 + edge.entryTrack * 28;
       points.push({ x: side, y: exitY }, { x: side, y: entryY }, { x: x2, y: entryY });
     } else points.push({ x: x2, y: exitY });
     points.push({ x: x2, y: to.y });
@@ -99,6 +113,27 @@ export function layoutGraph(graph) {
     return { ...edge, points, path: roundedPath(points), label, labelBox,
       labelX: labelBox.x + 8, labelY: labelBox.y + 13 };
   });
+  // Keep masks clear of other routes, including an 8px envelope for rounded
+  // corners. Search deterministically on the same track; the canvas can grow.
+  const masks = [];
+  const intersects = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+  for (const edge of routed.filter(e => e.label)) {
+    const obstacles = [...positions.values(), ...masks];
+    for (const other of routed) if (other !== edge) {
+      for (let i = 1; i < other.points.length; i++) {
+        const a = other.points[i - 1], b = other.points[i];
+        obstacles.push({ x: Math.min(a.x, b.x) - 8, y: Math.min(a.y, b.y) - 8,
+          width: Math.abs(a.x - b.x) + 16, height: Math.abs(a.y - b.y) + 16 });
+      }
+    }
+    while (true) {
+      const conflicts = obstacles.filter(box => intersects(edge.labelBox, box));
+      if (!conflicts.length) break;
+      edge.labelBox.x = Math.max(...conflicts.map(box => box.x + box.width)) + 4;
+    }
+    edge.labelX = edge.labelBox.x + 8;
+    masks.push(edge.labelBox);
+  }
   return {
     width: Math.max(48 + stackWidth + 48 + outerCount * 28,
       ...routed.filter(e => e.label).map(e => e.labelBox.x + e.labelBox.width + 48)),
