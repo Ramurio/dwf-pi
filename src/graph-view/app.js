@@ -133,8 +133,20 @@ function attention(node) {
       return true;
     })
     .some((a) =>
-      /request_changes|rejected|inconclusive|exit [1-9]|не принят/.test(a.result ?? ""),
+      /request_changes|rejected|inconclusive|exit [1-9]|не принят/.test(a.result ?? "") ||
+        Number(a.collectionSummary?.failed) > 0,
     );
+}
+function collectionNotice(node) {
+  const scopes = new Set();
+  for (const a of node.activations) {
+    if (scopes.has(a.scope)) continue;
+    scopes.add(a.scope);
+    if (Number(a.collectionSummary?.failed) > 0) {
+      return `ошибок: ${a.collectionSummary.failed} из ${a.collectionSummary.total}`;
+    }
+  }
+  return null;
 }
 function badge(status) {
   return el("span", `badge ${status}`, names[status] ?? status);
@@ -150,6 +162,11 @@ function notice(message) {
 }
 async function api(path, options) {
   const response = await fetch(path, { cache: "no-store", ...options });
+  if (response.status === 401) {
+    // A viewer restart rotates the local session; the bookmark itself stays valid.
+    window.location.reload();
+    throw new Error("Восстанавливаем подключение к панели…");
+  }
   const value = await response.json();
   if (!response.ok) throw new Error(value.error ?? `HTTP ${response.status}`);
   return value;
@@ -238,12 +255,22 @@ function renderRuns() {
       el("p", "muted", filter ? "Ничего не найдено" : "Запусков пока нет"),
     );
 }
-async function selectRun(id) {
+async function selectRun(id, navigation = "push") {
+  if (navigation !== "none") {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("run") !== id) {
+      url.searchParams.set("run", id);
+      window.history[navigation === "replace" ? "replaceState" : "pushState"]({}, "", url);
+    }
+  }
   if (state.id === id) return;
   const { previousTaskId } = beginRunSelection(state, id);
+  $("workspace").hidden = true;
+  $("empty").hidden = true;
   for (const name of ["pause", "resume", "cancel"]) $(name).disabled = true;
   renderRuns();
   await refreshSnapshot();
+  if (state.id !== id) return;
   reconcileTaskScopeAfterSnapshot(state, previousTaskId);
   if (state.run) {
     renderHeader();
@@ -991,11 +1018,12 @@ function renderGraph() {
       svgEl(
         "text",
         { x: 16, y: 69, class: "node-state" },
-        attention(node)
+        collectionNotice(node) ??
+        (attention(node)
           ? "Есть замечания"
           : node.activations.length > 1
             ? `Запусков: ${node.activations.length} · веток: ${node.branches}`
-            : (names[node.status] ?? node.status),
+            : (names[node.status] ?? node.status)),
       ),
     );
     g.append(
@@ -1168,7 +1196,7 @@ function renderHistory() {
     ),
   );
   const records = allActivations()
-    .filter((a) => a.status !== "running" && !structural.has(a.node.kind))
+    .filter((a) => a.status !== "running" && (!structural.has(a.node.kind) || a.collectionSummary))
     .sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0))
     .filter(
       (a) =>
@@ -1176,6 +1204,7 @@ function renderHistory() {
         (state.filter === "agent" && a.node.kind === "agent") ||
         (state.filter === "issues" &&
           (a.error ||
+            Number(a.collectionSummary?.failed) > 0 ||
             /request_changes|inconclusive|exit [1-9]|не принят/.test(
               a.result ?? "",
             ))),
@@ -1302,7 +1331,7 @@ function renderTokens() {
       el("p", "", `${number(report.usage.totalTokens)} ток. · вход ${number(report.usage.input)} · кэш ${report.usage.cacheRead === undefined ? "н/д" : number(report.usage.cacheRead)} · выход ${number(report.usage.output)} · ${report.stopReason} · pi SDK${report.observedEffort ? ` · reasoning ${report.observedEffort}` : ""}`));
     if (origin?.runId) {
       row.append(button(origin.nodeId ? `Открыть ${origin.nodeId} · ${origin.runId}` : `Открыть ${origin.runId}`, () => {
-        void openActivation({ runId: origin.runId, graphId: origin.graphId, nodeId: origin.nodeId, node: origin.nodeId ? { id: origin.nodeId } : null });
+        void openActivation(origin);
       }, "child-button"));
     }
     ledger.append(row);
@@ -1406,13 +1435,14 @@ async function refreshRuns() {
       state.listSignature = signature;
       renderRuns();
     }
-    if (!state.id && data.runs.length)
+    if (!state.id && (data.runs.length || new URL(window.location.href).searchParams.get("run")))
       await selectRun(
-        data.initialRun ??
+        new URL(window.location.href).searchParams.get("run") ?? data.initialRun ??
           data.runs.find((r) => !finished.has(r.status))?.id ??
-          data.runs[0].id,
+          data.runs[0]?.id,
+        "replace",
       );
-    if (!data.runs.length) {
+    if (!data.runs.length && !state.id) {
       $("empty").hidden = false;
       $("connection").textContent = "● Подключено";
     }
@@ -1511,6 +1541,14 @@ new ResizeObserver(() => {
     }
   }
 }).observe($("graph"));
+window.addEventListener("popstate", () => {
+  const id = new URL(window.location.href).searchParams.get("run");
+  if (id) void selectRun(id, "none");
+  else {
+    beginRunSelection(state, null);
+    void refreshRuns();
+  }
+});
 await refreshRuns();
 let tick = 0;
 async function poll() {

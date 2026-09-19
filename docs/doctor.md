@@ -6,7 +6,7 @@
 
 - `pureRuns`: supported Node version and POSIX platform, readable workspace, and writable persistent state location.
 - `agentRuns`: the same prerequisites plus at least one authenticated cached model candidate.
-- `grok`: the same prerequisites plus at least one `xai-auth` model candidate; this is not a live entitlement or Heavy-tier check.
+- `grok`: the same prerequisites plus at least one `xai` model candidate; this is not a live entitlement or Heavy-tier check.
 - `workspaceWrites`: the same prerequisites plus OS write/traversal access to the workspace.
 
 Checks cover Node >=22.19.0, POSIX process-group support, workspace existence/read/write access, persistent-state storage, Git availability and the model catalog. Missing Git is reported separately because non-Git workflows can still run. Missing models do not block pure/check workflows. `:memory:` is unsuitable for detached execution and is reported as unavailable persistent state.

@@ -152,6 +152,7 @@ test("browser client wires producer navigation and task-identity rendering", () 
   assert.match(app, /openActivation/);
   assert.match(app, /reportOrigin/);
   assert.match(app, /void openActivation\(a\)/);
+  assert.match(app, /void openActivation\(origin\)/);
   assert.doesNotMatch(
     app,
     /state\.graph = a\.graphId;\s*state\.scope = "";\s*state\.node = a\.node\.id;\s*renderInspector\(\)/,

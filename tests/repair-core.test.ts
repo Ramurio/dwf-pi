@@ -1,20 +1,18 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test, { type TestContext } from "node:test";
 import { InMemoryCredentialStore, InMemoryModelsStore } from "@earendil-works/pi-ai";
 import { createReadToolDefinition } from "@earendil-works/pi-coding-agent";
 import { createWorkflowModelRuntime } from "../src/model-runtime.js";
-import { createXaiSubscriptionProvider } from "../src/xai-provider.js";
 import { executePiWorker } from "../src/pi-worker.js";
 import type { PiWorkerRequest } from "../src/execution-types.js";
 import { ExecutionFailure } from "../src/execution-failure.js";
-import { wrapImageProducingTool } from "../src/image-boundary.js";
+import { drainReadResizeObservations, wrapImageProducingTool } from "../src/image-boundary.js";
 import { noneAdapterCapabilities } from "../src/capabilities.js";
 import { prepareExecutionPlan } from "../src/execution-plan.js";
-import { readInstalledSdkIdentity, reviewedSdkVersions, type SdkIdentity } from "../src/adapter-identity.js";
 import { jpegDigit, oversizedPng, pngDigit } from "./helpers/test-images.js";
 import {
   consumedRequestIndex,
@@ -34,24 +32,6 @@ import {
   REPAIR_LIVE_EVIDENCE_ENV,
   resolveRepairLiveEvidencePath,
 } from "./helpers/repair-live-evidence.js";
-import { readFileSync } from "node:fs";
-
-const packageRoot = join(homedir(), ".pi/agent/npm/node_modules/pi-xai-oauth");
-
-test("CORE repair scripts and reviewed helper are present; skip is not success", () => {
-  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
-  assert.equal(typeof pkg.scripts["test:repair:core"], "string");
-  assert.equal(typeof pkg.scripts["test:repair:live"], "string");
-  assert.match(pkg.scripts.test, /test-concurrency=4/);
-  assert.doesNotMatch(pkg.scripts.test, /test:repair:live/);
-  assert.equal(pkg.dependencies["@earendil-works/pi-ai"], "0.85.1");
-  assert.equal(existsSync(join(packageRoot, "package.json")), true, "reviewed pi-xai-oauth helper is required for CORE image/adapter regressions");
-  assert.equal(existsSync(join(packageRoot, "extensions/xai/images.ts")), true);
-  assert.match(pkg.scripts["test:repair:core"], /lineage\.test\.ts/);
-  assert.match(pkg.scripts["test:repair:core"], /continuation\.test\.ts/);
-  assert.match(pkg.scripts["test:repair:core"], /task-usage\.test\.ts/);
-  assert.match(pkg.scripts["test:repair:core"], /graph-view-task-scope\.test\.ts/);
-});
 
 function grokSse(name: string, args: Record<string, unknown>, model = "grok-4.6"): Response {
   const callId = `call-${name}-${JSON.stringify(args).length}`;
@@ -87,21 +67,17 @@ function extractImages(payload: unknown): { mimeType: string; digest: string; ch
 async function grokFixture(t: TestContext, id = "grok-4.6", extra: Record<string, unknown> = {}) {
   const directory = await mkdtemp(join(tmpdir(), "dynamicwf-repair-core-"));
   t.after(async () => { await rm(directory, { recursive: true, force: true }); });
-  const cachePath = join(directory, "catalog.json");
-  const model: Record<string, unknown> = {
-    id, name: id, apiBackend: "responses", reasoning: true,
+  const modelsPath = join(directory, "models.json");
+  const model = {
+    id, name: id, reasoning: true, input: extra.input ?? ["text", "image"],
     thinkingLevelMap: { low: "low", medium: "medium", high: "high", xhigh: "xhigh" },
     contextWindow: 100000, maxTokens: 1000, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
   };
-  if (extra.omitModalities !== true) {
-    model.input = extra.input ?? ["text", "image"];
-    model.inputProvenance = extra.inputProvenance ?? "authenticated-accepts-images";
-  }
-  await writeFile(cachePath, JSON.stringify({ schemaVersion: 2, fetchedAt: Date.now(), models: [model] }));
+  await writeFile(modelsPath, JSON.stringify({ providers: { xai: { models: [model] } } }));
   const credentials = new InMemoryCredentialStore();
-  await credentials.modify("xai-auth", async () => ({ type: "oauth", access: "TEST_ACCESS_NO_SECRET", refresh: "TEST_REFRESH_NO_SECRET", expires: Date.now() + 3_600_000 }));
-  const options = { credentials, modelsStore: new InMemoryModelsStore(), modelsPath: null, refreshOnCreate: false, grok: { agentDirectory: directory, packageRoot, cachePath } };
-  return { directory, cachePath, credentials, options, id };
+  await credentials.modify("xai", async () => ({ type: "oauth", access: "TEST_ACCESS_NO_SECRET", refresh: "TEST_REFRESH_NO_SECRET", expires: Date.now() + 3_600_000 }));
+  const options = { credentials, modelsStore: new InMemoryModelsStore(), modelsPath, refreshOnCreate: true };
+  return { directory, credentials, options, id };
 }
 
 test("PNG and JPEG read results are converted into outbound Grok images, a later tool is replayed, xhigh is sent, resize runs, and session continuation submits", { timeout: 60000 }, async t => {
@@ -113,11 +89,12 @@ test("PNG and JPEG read results are converted into outbound Grok images, a later
   await writeFile(join(f.directory, "panel-b.jpg"), jpeg);
   await writeFile(join(f.directory, "panel-c.png"), huge);
   const runtime = await createWorkflowModelRuntime(f.options);
-  const provider = runtime.getRegisteredNativeProvider("xai-auth") as Awaited<ReturnType<typeof createXaiSubscriptionProvider>>;
+  drainReadResizeObservations();
   const requests: { payload: any }[] = [];
   const script = [
     () => grokSse("read", { path: "panel-a.png" }),
     () => grokSse("read", { path: "panel-b.jpg" }),
+    () => grokSse("read", { path: "panel-c.png" }),
     () => grokSse("ls", { path: "." }),
     () => grokSse("submit_result", { png: 3, jpeg: 8, files: 3 }),
   ];
@@ -131,13 +108,13 @@ test("PNG and JPEG read results are converted into outbound Grok images, a later
   const request: PiWorkerRequest = {
     version: 1, cwd: f.directory, resourceDirectory: join(f.directory, "resources"), sessionDirectory: join(f.directory, "sessions"),
     task: "Inspect the workspace panels and list files, then submit.", input: {},
-    config: { model: { provider: "xai-auth", id: f.id }, thinking: "xhigh", tools: ["read", "ls"], systemPrompt: "Use tools.", skills: [], session: "fresh", permission: "read-only",
+    config: { model: { provider: "xai", id: f.id }, thinking: "xhigh", tools: ["read", "ls"], systemPrompt: "Use tools.", skills: [], session: "fresh", permission: "read-only",
       outputSchema: { type: "object", additionalProperties: false, properties: { png: { type: "integer" }, jpeg: { type: "integer" }, files: { type: "integer" } }, required: ["png", "jpeg", "files"] } },
   };
   const events: unknown[] = [];
   const result = await executePiWorker(request, { modelRuntime: runtime, providerFetch: fakeFetch, onEvent: event => events.push(event) });
   assert.deepEqual(result.output, { png: 3, jpeg: 8, files: 3 });
-  assert.equal(requests.length, 4);
+  assert.equal(requests.length, 5);
   assert.equal(requests[0]!.payload.reasoning.effort, "xhigh");
   const imageTurns = requests.flatMap(request => extractImages(request.payload));
   assert.ok(imageTurns.some(image => image.mimeType === "image/png"));
@@ -158,17 +135,7 @@ test("PNG and JPEG read results are converted into outbound Grok images, a later
   });
   assert.deepEqual(continued.output, { png: 3, jpeg: 8, files: 3 });
   assert.equal(continued.sessionFile, result.sessionFile);
-  const model = runtime.getAvailableSnapshot().find(item => item.provider === "xai-auth")!;
-  const hugeData = huge.toString("base64");
-  await runtime.streamSimple(model, { messages: [{ role: "user", content: [{ type: "text", text: "see" }, { type: "image", mimeType: "image/png", data: hugeData }], timestamp: 1 }], tools: [] }, { reasoning: "xhigh", fetch: async (_input, init) => {
-    const payload = JSON.parse(String(init?.body));
-    const images = extractImages(payload);
-    assert.equal(payload.reasoning.effort, "xhigh");
-    assert.ok(images.length >= 1);
-    assert.ok(images[0]!.chars < hugeData.length || provider.resizeObservations().some(item => item.wasResized && item.width < 2200));
-    return grokSse("submit_result", { ok: true });
-  } }).result();
-  assert.ok(provider.resizeObservations().some(item => item.wasResized));
+  assert.ok(drainReadResizeObservations().some(item => item.wasResized));
 });
 
 test("text-only Grok route keeps a working text tool path and guards unexpected image reads", { timeout: 30000 }, async t => {
@@ -185,7 +152,7 @@ test("text-only Grok route keeps a working text tool path and guards unexpected 
   const request: PiWorkerRequest = {
     version: 1, cwd: f.directory, resourceDirectory: join(f.directory, "resources"), sessionDirectory: join(f.directory, "sessions"),
     task: "Read files then submit.", input: {},
-    config: { model: { provider: "xai-auth", id: f.id }, thinking: "high", tools: ["read"], systemPrompt: "Use tools.", skills: [], session: "fresh", permission: "read-only",
+    config: { model: { provider: "xai", id: f.id }, thinking: "high", tools: ["read"], systemPrompt: "Use tools.", skills: [], session: "fresh", permission: "read-only",
       outputSchema: { type: "object", additionalProperties: false, properties: { answer: { type: "integer" } }, required: ["answer"] } },
   };
   const result = await executePiWorker(request, { modelRuntime: runtime, providerFetch: async (_input, init) => {
@@ -206,7 +173,7 @@ test("incompatible restored image history fails before a request and leaves the 
   const request: PiWorkerRequest = {
     version: 1, cwd: vision.directory, resourceDirectory: join(vision.directory, "resources"), sessionDirectory: join(vision.directory, "sessions"),
     task: "Read then submit.", input: {},
-    config: { model: { provider: "xai-auth", id: vision.id }, thinking: "high", tools: ["read"], systemPrompt: "Use tools.", skills: [], session: "fresh", permission: "read-only",
+    config: { model: { provider: "xai", id: vision.id }, thinking: "high", tools: ["read"], systemPrompt: "Use tools.", skills: [], session: "fresh", permission: "read-only",
       outputSchema: { type: "object", additionalProperties: false, properties: { answer: { type: "integer" } }, required: ["answer"] } },
   };
   const first = await executePiWorker(request, { modelRuntime: runtime, providerFetch: async (_input, init) => {
@@ -229,49 +196,10 @@ test("incompatible restored image history fails before a request and leaves the 
   assert.deepEqual(await readFile(first.sessionFile), before);
 });
 
-test("a write before local image rejection leaves effects unknown and sends no request for that turn", { timeout: 20000 }, async t => {
-  const f = await grokFixture(t, "grok-text", { input: ["text"], inputProvenance: "authenticated-input-modalities" });
-  const runtime = await createWorkflowModelRuntime(f.options);
-  const provider = runtime.getRegisteredNativeProvider("xai-auth")!;
-  const original = provider.streamSimple.bind(provider);
-  let fetches = 0;
-  let injected = false;
-  provider.streamSimple = (model, context, options) => {
-    if (context.messages.some(message => JSON.stringify(message).includes("artifact.txt"))) {
-      injected = true;
-      const png = pngDigit(9).toString("base64");
-      context = { ...context, messages: [...context.messages, { role: "user", content: [{ type: "image", mimeType: "image/png", data: png }], timestamp: Date.now() }] };
-    }
-    return original(model, context, options);
-  };
-  const request: PiWorkerRequest = {
-    version: 1, cwd: f.directory, resourceDirectory: join(f.directory, "resources"), sessionDirectory: join(f.directory, "sessions"),
-    task: "Write then continue.", input: {},
-    config: { model: { provider: "xai-auth", id: f.id }, thinking: "high", tools: ["write"], systemPrompt: "Use tools.", skills: [], session: "fresh", permission: "workspace-write",
-      outputSchema: { type: "object", additionalProperties: false, properties: { answer: { type: "integer" } }, required: ["answer"] } },
-  };
-  await assert.rejects(executePiWorker(request, { modelRuntime: runtime, providerFetch: async () => {
-    fetches++;
-    if (fetches === 1) return grokSse("write", { path: "artifact.txt", content: "written" });
-    throw new Error("second request must not be sent");
-  } }), (error: unknown) => {
-    assert.ok(error instanceof ExecutionFailure);
-    assert.equal(error.failure.code, "configuration");
-    assert.equal(error.failure.effects, "unknown");
-    assert.equal(error.failure.diagnostic?.subcode, "image-unsupported");
-    assert.equal(error.failure.diagnostic?.dispatch, "not-dispatched");
-    assert.equal(error.failure.diagnostic?.sentReasoning, undefined);
-    return true;
-  });
-  assert.equal(injected, true);
-  assert.equal(fetches, 1);
-  assert.equal(await readFile(join(f.directory, "artifact.txt"), "utf8"), "written");
-});
-
 test("malformed and unsupported images fail locally; HTTP facts stay numeric; later failures do not inherit status", { timeout: 20000 }, async t => {
   const f = await grokFixture(t);
   const runtime = await createWorkflowModelRuntime(f.options);
-  const model = runtime.getAvailableSnapshot().find(item => item.provider === "xai-auth")!;
+  const model = runtime.getAvailableSnapshot().find(item => item.provider === "xai" && item.id === f.id)!;
   const before = globalThis.fetch;
   const invalid = await runtime.streamSimple(model, { messages: [{ role: "user", content: [{ type: "image", mimeType: "image/png", data: "%%%%" }], timestamp: 1 }] }, { fetch: async () => { throw new Error("network must not run"); } }).result();
   assert.equal(invalid.stopReason, "error");
@@ -280,7 +208,7 @@ test("malformed and unsupported images fail locally; HTTP facts stay numeric; la
   const request: PiWorkerRequest = {
     version: 1, cwd: f.directory, resourceDirectory: join(f.directory, "resources"), sessionDirectory: join(f.directory, "sessions"),
     task: "Submit", input: {},
-    config: { model: { provider: "xai-auth", id: f.id }, thinking: "xhigh", tools: [], systemPrompt: "Submit.", skills: [], session: "fresh", permission: "read-only",
+    config: { model: { provider: "xai", id: f.id }, thinking: "xhigh", tools: [], systemPrompt: "Submit.", skills: [], session: "fresh", permission: "read-only",
       outputSchema: { type: "object", additionalProperties: false, properties: { answer: { type: "integer" } }, required: ["answer"] } },
   };
   await assert.rejects(executePiWorker(request, { modelRuntime: runtime, providerFetch: async () => {
@@ -309,20 +237,20 @@ test("malformed and unsupported images fail locally; HTTP facts stay numeric; la
   });
 });
 
-test("explicit image requirements freeze adapter identity and reject stale text-only catalogs", async t => {
+test("explicit image requirements use native capabilities and reject stale text-only catalogs", async t => {
   const f = await grokFixture(t);
   const { discoverWorkflowCatalog } = await import("../src/model-runtime.js");
   const models = await discoverWorkflowCatalog(f.options);
   const plan = await prepareExecutionPlan({
     schemaVersion: 1, id: "img", name: "img", revision: 1, entryGraph: "main",
     graphs: { main: { entry: "work", nodes: [
-      { id: "work", kind: "agent", role: "general", task: { op: "literal", value: "See" }, config: { tools: ["read"], requirements: { toolResultModalities: ["image"] } } },
+      { id: "work", kind: "agent", role: "general", task: { op: "literal", value: "See" }, config: { model: { provider: "xai", id: f.id }, tools: ["read"], requirements: { toolResultModalities: ["image"] } } },
       { id: "done", kind: "end", value: { op: "ref", path: ["nodes", "work"] } },
     ], edges: [{ from: "work", to: "done" }] } },
   }, { cwd: f.directory, availableModels: models.models });
   assert.equal(plan.agents.main!.work!.capabilities?.effective.toolResult.state, "supported");
-  assert.equal(plan.agents.main!.work!.adapterIdentity?.capabilityRevision, "dynamicwf-xai-bridge-v1");
-  await assert.rejects(prepareExecutionPlan(plan.workflow, { cwd: f.directory, availableModels: [{ provider: "xai-auth", id: "grok-4.6", thinkingLevels: ["high"] }] }), /unknown required image|Unsupported or unknown/);
+  assert.equal(plan.agents.main!.work!.adapterIdentity, null);
+  await assert.rejects(prepareExecutionPlan(plan.workflow, { cwd: f.directory, availableModels: [{ provider: "xai", id: "grok-4.6", thinkingLevels: ["high"] }] }), /unknown required image|Unsupported or unknown/);
   const denied = wrapImageProducingTool(createReadToolDefinition(f.directory), noneAdapterCapabilities());
   await writeFile(join(f.directory, "x.png"), pngDigit(5));
   await assert.rejects(denied.execute("t", { path: "x.png" }, undefined, undefined, { cwd: f.directory } as never));
@@ -336,7 +264,7 @@ test("frozen image requirements fail before execution when the live catalog is t
     const plan = await prepareExecutionPlan({
       schemaVersion: 1, id: "drift", name: "drift", revision: 1, entryGraph: "main",
       graphs: { main: { entry: "work", nodes: [
-        { id: "work", kind: "agent", role: "general", task: { op: "literal", value: "See" }, config: { model: { provider: "xai-auth", id }, tools: ["read"], thinking: "high", requirements: { toolResultModalities: ["image"] } } },
+        { id: "work", kind: "agent", role: "general", task: { op: "literal", value: "See" }, config: { model: { provider: "xai", id }, tools: ["read"], thinking: "high", requirements: { toolResultModalities: ["image"] } } },
         { id: "done", kind: "end", value: { op: "ref", path: ["nodes", "work"] } },
       ], edges: [{ from: "work", to: "done" }] } },
     }, { cwd: vision.directory, availableModels: models.models });
@@ -344,7 +272,7 @@ test("frozen image requirements fail before execution when the live catalog is t
     assert.equal(frozen.capabilities?.effective.toolResult.state, "supported");
     const live = await grokFixture(t, id, liveExtra);
     const runtime = await createWorkflowModelRuntime(live.options);
-    assert.ok(runtime.getAvailableSnapshot().some(m => m.provider === "xai-auth" && m.id === id));
+    assert.ok(runtime.getAvailableSnapshot().some(m => m.provider === "xai" && m.id === id));
     let fetches = 0;
     await assert.rejects(executePiWorker({
       version: 1, cwd: live.directory, resourceDirectory: join(live.directory, "resources"), sessionDirectory: join(live.directory, "sessions"),
@@ -369,7 +297,7 @@ test("capability drift without explicit requirements returns recoverable image-r
   const plan = await prepareExecutionPlan({
     schemaVersion: 1, id: "drift2", name: "drift2", revision: 1, entryGraph: "main",
     graphs: { main: { entry: "work", nodes: [
-      { id: "work", kind: "agent", role: "general", task: { op: "literal", value: "See" }, config: { tools: ["read"], thinking: "high" } },
+      { id: "work", kind: "agent", role: "general", task: { op: "literal", value: "See" }, config: { model: { provider: "xai", id: vision.id }, tools: ["read"], thinking: "high" } },
       { id: "done", kind: "end", value: { op: "ref", path: ["nodes", "work"] } },
     ], edges: [{ from: "work", to: "done" }] } },
   }, { cwd: vision.directory, availableModels: models.models });
@@ -400,18 +328,18 @@ test("capability drift without explicit requirements returns recoverable image-r
   assert.match(JSON.stringify(payloads[1]), /does not accept image tool results|photo.png|notes.txt/);
 });
 
-test("authenticated inputModalities image provenance prepares and transports a PNG through the worker", { timeout: 30000 }, async t => {
+test("native model input metadata prepares and transports a PNG through the worker", { timeout: 30000 }, async t => {
   const f = await grokFixture(t, "grok-4.6", { input: ["text", "image"], inputProvenance: "authenticated-input-modalities" });
   const { discoverWorkflowCatalog } = await import("../src/model-runtime.js");
   const models = await discoverWorkflowCatalog(f.options);
-  const grok = models.models.find(model => model.provider === "xai-auth" && model.id === f.id);
+  const grok = models.models.find(model => model.provider === "xai" && model.id === f.id);
   assert.equal(grok?.capabilities?.raw.input.state, "supported");
-  assert.equal(grok?.capabilities?.raw.input.provenance, "authenticated-input-modalities");
+  assert.equal(grok?.capabilities?.raw.input.provenance, "model.input");
   assert.equal(grok?.capabilities?.effective.toolResult.state, "supported");
   const plan = await prepareExecutionPlan({
     schemaVersion: 1, id: "modalities", name: "modalities", revision: 1, entryGraph: "main",
     graphs: { main: { entry: "work", nodes: [
-      { id: "work", kind: "agent", role: "general", task: { op: "literal", value: "See" }, config: { tools: ["read"], thinking: "high", requirements: { toolResultModalities: ["image"] } } },
+      { id: "work", kind: "agent", role: "general", task: { op: "literal", value: "See" }, config: { model: { provider: "xai", id: f.id }, tools: ["read"], thinking: "high", requirements: { toolResultModalities: ["image"] } } },
       { id: "done", kind: "end", value: { op: "ref", path: ["nodes", "work"] } },
     ], edges: [{ from: "work", to: "done" }] } },
   }, { cwd: f.directory, availableModels: models.models });
@@ -434,59 +362,6 @@ test("authenticated inputModalities image provenance prepares and transports a P
   } });
   assert.deepEqual(result.output, { answer: 7 });
   assert.ok(payloads.some(payload => extractImages(payload).some(image => image.mimeType === "image/png")));
-});
-
-async function writerThenAdapterFailure(t: TestContext, mutate: (scratch: string) => Promise<void> | void, sdkIdentity?: () => SdkIdentity): Promise<void> {
-  const scratch = await mkdtemp(join(tmpdir(), "dynamicwf-adapter-live-"));
-  t.after(async () => { await rm(scratch, { recursive: true, force: true }); });
-  await cp(packageRoot, scratch, { recursive: true });
-  const f = await grokFixture(t);
-  const runtime = await createWorkflowModelRuntime({ ...f.options, grok: { ...f.options.grok, packageRoot: scratch, ...(sdkIdentity ? { sdkIdentity } : {}) } });
-  let fetches = 0;
-  await assert.rejects(executePiWorker({
-    version: 1, cwd: f.directory, resourceDirectory: join(f.directory, "resources"), sessionDirectory: join(f.directory, "sessions"),
-    task: "Write then continue.", input: {},
-    config: { model: { provider: "xai-auth", id: f.id }, thinking: "high", tools: ["write"], systemPrompt: "Use tools.", skills: [], session: "fresh", permission: "workspace-write",
-      outputSchema: { type: "object", additionalProperties: false, properties: { answer: { type: "integer" } }, required: ["answer"] } },
-  }, { modelRuntime: runtime, providerFetch: async () => {
-    fetches++;
-    if (fetches === 1) {
-      await mutate(scratch);
-      return grokSse("write", { path: "artifact.txt", content: "written" });
-    }
-    throw new Error("second request must not be sent");
-  } }), (error: unknown) => {
-    assert.ok(error instanceof ExecutionFailure, String(error));
-    assert.equal(error.failure.code, "configuration");
-    assert.equal(error.failure.effects, "unknown");
-    assert.equal(error.failure.diagnostic?.subcode, "adapter-content-mismatch");
-    assert.equal(error.failure.diagnostic?.dispatch, "not-dispatched");
-    assert.equal(error.failure.diagnostic?.sentReasoning, undefined);
-    const publicText = JSON.stringify(error.failure);
-    assert.doesNotMatch(publicText, /TEST_ACCESS|TEST_REFRESH|ENOENT|EACCES/);
-    assert.doesNotMatch(error.failure.message, new RegExp(scratch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-    assert.doesNotMatch(publicText, new RegExp(scratch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-    return true;
-  });
-  assert.equal(fetches, 1);
-  assert.equal(await readFile(join(f.directory, "artifact.txt"), "utf8"), "written");
-}
-
-test("scratch adapter manifest failure after writer admission is a local not-dispatched configuration error", { timeout: 30000 }, async t => {
-  await writerThenAdapterFailure(t, async scratch => { await writeFile(join(scratch, "package.json"), "{not-json"); });
-});
-
-test("scratch adapter identity/version failure after writer admission is a local not-dispatched configuration error", { timeout: 30000 }, async t => {
-  await writerThenAdapterFailure(t, async scratch => {
-    await writeFile(join(scratch, "package.json"), JSON.stringify({ name: "pi-xai-oauth", version: "9.9.9" }));
-  });
-});
-
-test("SDK mismatch after writer admission is a local not-dispatched configuration error", { timeout: 30000 }, async t => {
-  let sdk = readInstalledSdkIdentity();
-  await writerThenAdapterFailure(t, () => {
-    sdk = { piAi: "0.0.0", piCodingAgent: reviewedSdkVersions.piCodingAgent, piAgentCore: reviewedSdkVersions.piAgentCore };
-  }, () => sdk);
 });
 
 function ioTurn(invocation: ToolIoTurn["invocation"], index: number, calls: ToolIoTurn["calls"], results: ToolIoTurn["results"] = calls.map(call => ({ id: call.id }))): ToolIoTurn {

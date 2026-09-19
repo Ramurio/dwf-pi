@@ -71,7 +71,10 @@ export async function inspectUncertainWriterGit(
   const operation = parseOperation(activation.metadata.operation);
   if (!operation) throw new Error("The actual operation was not recorded; historical inputs or paths cannot be reconstructed as evidence.");
   if (operation.kind === "worktree") {
-    if (activation.metadata.workspace === undefined) throw new Error("No owned workspace allocation was recorded");
+    if (activation.metadata.workspace === undefined) {
+      if (activation.metadata.workspacePhase === "allocating") return;
+      throw new Error("No owned workspace allocation was recorded");
+    }
     const allocating = activation.metadata.workspacePhase === "allocating"
       && !activations.some(item => item.key !== activation.key && operation.childScope.every((part, index) => item.context.scope[index] === part));
     if (allocating) {
@@ -98,7 +101,7 @@ export async function inspectUncertainWriterGit(
 export function continuationGitBlocker(activation: ActivationRecord, error: unknown): ContinuationBlocker {
   const message = error instanceof Error ? error.message : String(error);
   const errno = (error as NodeJS.ErrnoException).code;
-  if (activation.kind === "integrate" || /integration/i.test(message)) {
+  if (activation.kind === "integrate") {
     return { code: "invalid-integration", key: activation.key, message };
   }
   if (/unlocked allocation|registration requires inspection/i.test(message)) {

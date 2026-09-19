@@ -1,7 +1,7 @@
 import { Type } from "typebox";
 import { Check, Errors } from "typebox/value";
 import { AgentConfigSchema, roleNames, resolveAgentConfig, type AgentConfig, type RoleName } from "./catalog.js";
-import { createOutputValidator } from "./output-schema.js";
+import { createOutputValidator, defaultOutputSchema } from "./output-schema.js";
 import type { TaskDecision } from "./task-outcome.js";
 import { RetryPolicySchema, type RetryPolicy } from "./retry-policy.js";
 
@@ -131,8 +131,11 @@ export function validateWorkflow(value: unknown): ValidationResult {
       }
       for (const expression of expressions(item)) inspectExpr(expression, nodes, path, add);
       if (item.kind === "agent") {
-        try { resolveAgentConfig(item.role, item.config); }
-        catch (error) { add(`${path}.config`, error instanceof Error ? error.message : "Invalid effective agent configuration"); }
+        try {
+          const config = resolveAgentConfig(item.role, item.config);
+          try { createOutputValidator(structuredClone(config.outputSchema ?? defaultOutputSchema)); }
+          catch (error) { add(`${path}.config.outputSchema`, error instanceof Error ? error.message : "Invalid output schema"); }
+        } catch (error) { add(`${path}.config`, error instanceof Error ? error.message : "Invalid effective agent configuration"); }
       }
       if (item.kind === "await") {
         try { createOutputValidator(item.responseSchema); }

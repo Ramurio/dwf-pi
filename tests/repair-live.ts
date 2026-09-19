@@ -22,7 +22,6 @@ import {
   resolveRepairLiveEvidencePath,
 } from "./helpers/repair-live-evidence.js";
 import { drainReadResizeObservations, sessionHistoryHasImages } from "../src/image-boundary.js";
-import type { SubscriptionProvider } from "../src/xai-provider.js";
 
 const PNG_ANSWER = 10 + randomInt(89);
 const JPEG_ANSWER = 10 + randomInt(89);
@@ -74,21 +73,18 @@ drainReadResizeObservations();
 
 let runtime;
 try {
-  runtime = await createWorkflowModelRuntime({ requiredProvider: "xai-auth" });
-  const refresh = await runtime.refresh({ providers: ["xai-auth"], allowNetwork: true, force: true });
+  runtime = await createWorkflowModelRuntime({ requiredProvider: "xai" });
+  const refresh = await runtime.refresh({ providers: ["xai"], allowNetwork: true, force: true });
   if (refresh.errors.size) fail("Live Grok catalog refresh failed");
 } catch (error) {
   await rm(workspace, { recursive: true, force: true });
-  fail(`Live Grok probe failed to load xai-auth: ${error instanceof Error ? error.message : error}`);
+  fail(`Live Grok probe failed to load xai: ${error instanceof Error ? error.message : error}`);
 }
-const grok = runtime.getAvailableSnapshot().find(model => model.provider === "xai-auth" && model.id === "grok-4.6");
+const grok = runtime.getAvailableSnapshot().find(model => model.provider === "xai" && model.id === "grok-4.6");
 if (!grok) {
   await rm(workspace, { recursive: true, force: true });
-  fail("Live probe requires xai-auth/grok-4.6 in the authenticated catalog");
+  fail("Live probe requires xai/grok-4.6 in the authenticated catalog");
 }
-const provider = runtime.getRegisteredNativeProvider("xai-auth") as SubscriptionProvider | undefined;
-if (!provider) fail("xai-auth provider was not registered");
-
 const outbound: OutboundTurn[] = [];
 const completions: SuccessfulLsCompletion[] = [];
 let activeInvocation: Invocation = "first";
@@ -126,7 +122,7 @@ const request: PiWorkerRequest = {
   task: "There are image files in the workspace with neutral names. First turn: call read on every image file only. After image tool results exist, on a later turn call ls only. After a subsequent model request has consumed that ls result, submit_result with pngDigit (the digit from the PNG that is not the oversized noisy panel) and jpegDigit from the JPEG. listed must be true. continued must be false. Never call ls and submit_result in the same assistant turn.",
   input: { files: ["panel-north.png", "panel-south.jpg", "panel-wide.png"] },
   config: {
-    model: { provider: "xai-auth", id: "grok-4.6" }, thinking: "xhigh", tools: ["read", "ls"],
+    model: { provider: "xai", id: "grok-4.6" }, thinking: "xhigh", tools: ["read", "ls"],
     systemPrompt: "Inspect visual file contents yourself. Do not guess. The filenames do not contain the digits.",
     skills: [], session: "fresh", permission: "read-only", outputSchema: schema,
   },
@@ -256,7 +252,6 @@ if (second.sessionFile !== first.sessionFile) {
 }
 
 const resize = [
-  ...provider.resizeObservations().map(item => ({ ...item, source: "helper-compact", via: "helper-compact" as const })),
   ...drainReadResizeObservations(),
 ];
 if (!resize.some(item => item.wasResized === true && (item.originalWidth >= OVERSIZED_SIDE || item.originalHeight >= OVERSIZED_SIDE))) {
@@ -280,7 +275,7 @@ if (!toolRoundTrips.some(trip => trip.invocation === "first") || !toolRoundTrips
 
 const evidence = {
   ok: true,
-  model: "xai-auth/grok-4.6",
+  model: "xai/grok-4.6",
   thinkingRequested: "xhigh",
   outboundTurns: outbound.map(turn => ({
     invocation: turn.invocation, index: turn.index, effort: turn.effort, imageCount: turn.imageCount,

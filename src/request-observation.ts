@@ -9,7 +9,7 @@ export type DiagnosticSubcode = typeof diagnosticSubcodes[number];
 export const dispatchStates = ["not-dispatched", "fetch-attempted", "http-observed", "unknown"] as const;
 export type DispatchState = typeof dispatchStates[number];
 export const diagnosticMessages: Record<DiagnosticSubcode, string> = {
-  "adapter-content-mismatch": "Grok adapter contents do not match the reviewed pi-xai-oauth 1.5.2 helper; no request was sent. Reinstall the reviewed helper and keep project-local pi 0.85.1.",
+  "adapter-content-mismatch": "Historical Grok adapter identity mismatch; no request was sent. The adapter is retired. Use an explicit continuation with native xai.",
   "image-unsupported": "This worker route does not accept image tool results. Use a model with supported image capabilities, or continue with text-only tools such as grep/ls.",
   "image-invalid": "An image was malformed or used an unsupported type. Provide PNG or JPEG within size limits; raw codec errors are not sent.",
   "image-compaction-failed": "Image inputs could not be compacted to a safe transport size; no request was sent. Reduce image dimensions or count.",

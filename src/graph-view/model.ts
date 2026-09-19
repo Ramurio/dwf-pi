@@ -3,7 +3,7 @@ import { parseOutputRepairProgress } from "../output-repair.js";
 import { parseRetryProgress } from "../retry-policy.js";
 import type { ActivationRecord, RunRecord, WaitRecord, RunStore } from "../run-store.js";
 import { activationUsage, summarizeUsage } from "../usage.js";
-import { activationPath, type WorkerActivity } from "../monitor.js";
+import { activationPath, collectionEvidence, type WorkerActivity } from "../monitor.js";
 import { activationState, projectRun } from "../observation.js";
 import { publicLineage } from "../lineage.js";
 
@@ -117,18 +117,25 @@ export function graphSnapshot(
 }
 function resultSummary(a: ActivationRecord): string | null {
   const outcome = a.metadata.taskOutcome;
-  if (outcome && typeof outcome === "object" && !Array.isArray(outcome)) return `${outcome.decision}: ${outcome.reason}`;
-  const value = a.output;
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return typeof value === "string" ? value.slice(0, 500) : null;
-  const bits: string[] = [];
-  if (typeof value.decision === "string") bits.push(value.decision);
-  if (typeof value.accepted === "boolean")
-    bits.push(value.accepted ? "Результат принят" : "Результат не принят");
-  if (typeof value.exitCode === "number") bits.push(`exit ${value.exitCode}`);
-  if (typeof value.summary === "string")
-    bits.push(value.summary.slice(0, 1000));
-  return bits.join(" · ") || null;
+  let primary: string | null = null;
+  if (outcome && typeof outcome === "object" && !Array.isArray(outcome)) primary = `${outcome.decision}: ${outcome.reason}`;
+  else {
+    const value = a.output;
+    if (typeof value === "string") primary = value.slice(0, 500);
+    else if (value && typeof value === "object" && !Array.isArray(value)) {
+      const bits: string[] = [];
+      if (typeof value.decision === "string") bits.push(value.decision);
+      if (typeof value.accepted === "boolean")
+        bits.push(value.accepted ? "Результат принят" : "Результат не принят");
+      if (typeof value.exitCode === "number") bits.push(`exit ${value.exitCode}`);
+      if (typeof value.summary === "string")
+        bits.push(value.summary.slice(0, 1000));
+      primary = bits.join(" · ") || null;
+    }
+  }
+  const collection = collectionEvidence(a);
+  if (!collection) return primary;
+  return primary ? `${primary} · ${collection}` : collection;
 }
 
 function parseReused(a: ActivationRecord) {

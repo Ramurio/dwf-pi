@@ -16,7 +16,8 @@ import { createWorkflowModelRuntime } from "./model-runtime.js";
 import { ExecutionFailure, executionFailure, type ExecutionFailureRecord } from "./execution-failure.js";
 import { parseUsage, sumTokenUsage } from "./usage.js";
 import { observeProviderResponse, type ProviderResponseRecord } from "./provider-response.js";
-import { adapterIdentitiesEqual } from "./adapter-identity.js";
+import { providerFailureMessage } from "./provider-failure-message.js";
+
 import { capabilityAllowsImage, effectiveFromRaw, intersectEffectiveCapabilities, rawInputCapability, requirementsSatisfied, type FrozenCapabilities } from "./capabilities.js";
 import { sessionHistoryHasImages, wrapImageProducingTool } from "./image-boundary.js";
 import {
@@ -90,6 +91,19 @@ function curatedEvent(event: AgentSessionEvent): Extract<PiWorkerMessage, { type
   }
 }
 
+function isModelsAuthError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const record = error as { name?: unknown; code?: unknown };
+  return record.name === "ModelsError" && (record.code === "oauth" || record.code === "auth");
+}
+
+function hasProviderReportedUsage(usage: NonNullable<ReturnType<typeof parseUsage>>, stopReason: string): boolean {
+  if (stopReason !== "aborted" && stopReason !== "error") return true;
+  return usage.input > 0 || usage.output > 0 || usage.totalTokens > 0
+    || (usage.cacheRead ?? 0) > 0 || (usage.cacheWrite ?? 0) > 0
+    || (usage.reasoning ?? 0) > 0 || (usage.cost ?? 0) > 0;
+}
+
 export async function executePiWorker(request: PiWorkerRequest, options: PiWorkerOptions = {}): Promise<PiWorkerResult> {
   if (request.version !== 1) throw executionFailure("configuration","setup","not-started","Unsupported pi worker request version");
   const config = request.config;
@@ -128,22 +142,23 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
     checkAdmission();
     const model = runtime.getAvailableSnapshot().find(candidate => candidate.provider === config.model.provider && candidate.id === config.model.id);
     if (!model) throw executionFailure("configuration","setup","not-started",`Configured model is not available: ${config.model.provider}/${config.model.id}`);
-    if (config.adapterIdentity) {
-      const current = (runtime.getRegisteredNativeProvider("xai-auth") as { adapterIdentity?: () => import("./adapter-identity.js").AdapterIdentityRecord } | undefined)?.adapterIdentity?.();
-      if (!adapterIdentitiesEqual(config.adapterIdentity, current ?? null)) {
-        throw executionFailure("configuration","setup","not-started", diagnosticMessages["adapter-content-mismatch"], { diagnostic: { subcode: "adapter-content-mismatch", dispatch: "not-dispatched" } });
-      }
+    if (config.model.provider === "xai-auth" || config.adapterIdentity) {
+      throw executionFailure("configuration", "setup", "not-started", "This frozen worker requires the removed Grok adapter. Prepare an explicit continuation using native xai; historical plans are not silently migrated.");
     }
-    const currentCapabilities: FrozenCapabilities = (() => {
-      const modelExtra = model as unknown as { inputProvenance?: string };
-      const provenance = typeof modelExtra.inputProvenance === "string" ? modelExtra.inputProvenance : Array.isArray(model.input) ? "model.input" : undefined;
-      const liveAdapter = config.adapterIdentity ?? (runtime.getRegisteredNativeProvider("xai-auth") as { adapterIdentity?: () => import("./adapter-identity.js").AdapterIdentityRecord } | undefined)?.adapterIdentity?.() ?? null;
-      return effectiveFromRaw(rawInputCapability(model.input, provenance), liveAdapter, config.model.provider === "xai-auth" ? "xai-auth" : "native");
-    })();
+    const currentCapabilities = effectiveFromRaw(rawInputCapability(model.input, "model.input"), null, "native");
     if (!requirementsSatisfied(config.requirements, currentCapabilities)) {
       throw executionFailure("configuration","setup","not-started", diagnosticMessages["image-unsupported"], { diagnostic: { subcode: "image-unsupported", dispatch: "not-dispatched" } });
     }
     const capabilities = intersectEffectiveCapabilities(config.capabilities, currentCapabilities);
+    try {
+      await runtime.getAuth(model, { ...(options.signal ? { signal: options.signal } : {}) });
+    } catch (error) {
+      if (!options.signal?.aborted && isModelsAuthError(error)) {
+        throw executionFailure("provider", "setup", "not-started", "Provider authentication failed before a request was sent; re-authenticate with local pi. Stored credentials were not replaced.", { diagnostic: { dispatch: "not-dispatched" } });
+      }
+      throw error;
+    }
+    checkAdmission();
     const settings = SettingsManager.inMemory({ retry: { enabled: false, provider: { maxRetries: 0 } }, compaction: { enabled: false }, enableInstallTelemetry: false, enableAnalytics: false });
     const resourceLoader = new DefaultResourceLoader({
       cwd: request.cwd, agentDir: request.resourceDirectory, settingsManager: settings,
@@ -211,6 +226,12 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
         ...(requestModel.api === "openai-codex-responses" ? { transport: "sse" as const } : {}),
         ...(canObserveFetch ? { fetch: (async (input, init) => {
           observation.dispatch = observation.dispatch === "http-observed" ? observation.dispatch : "fetch-attempted";
+          if (requestModel.provider === "xai" && typeof init?.body === "string") {
+            try {
+              const payload = JSON.parse(init.body);
+              if (typeof payload.reasoning?.effort === "string") observation.sentReasoning = payload.reasoning.effort;
+            } catch { /* Transport owns payload validation. Never log the request body. */ }
+          }
           const result = await upstreamFetch(input,init);
           observedHttp = true;
           response.value = observeProviderResponse(result.status,result.headers.get("retry-after"));
@@ -242,7 +263,7 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
         if (["error","aborted"].includes(event.message.stopReason)) failedResponse = currentResponse.value;
         const usage = parseUsage({ ...event.message.usage, cost: event.message.usage.cost?.total });
         const reportId = String(++reportIndex);
-        if (usage) {
+        if (usage && hasProviderReportedUsage(usage, event.message.stopReason)) {
           reports.push(usage);
           const observedEffort = typeof event.message.providerThinkingLevel === "string" ? event.message.providerThinkingLevel
             : lastObservation?.sentReasoning ?? (lastObservation?.dispatch === "not-dispatched" || lastObservation?.dispatch === "unknown" ? "unknown" : "unknown");
@@ -271,11 +292,8 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
           ...(diagnostic ? { diagnostic } : {}),
         });
       }
-      if (failed.some(message => message.stopReason === "aborted") && observation?.dispatch !== "http-observed" && observation?.dispatch !== "fetch-attempted") {
-        throw executionFailure("cancelled",phase,effects,"Pi worker cancelled", { diagnostic: diagnostic ?? { dispatch: "not-dispatched" } });
-      }
       throw new ExecutionFailure({
-        version: 1, code: "provider", phase, effects, message: "Pi assistant turn failed or was aborted",
+        version: 1, code: "provider", phase, effects, message: providerFailureMessage(failed),
         ...(failedResponse ? { providerResponse: failedResponse } : {}),
         ...(diagnostic || failedResponse ? { diagnostic: diagnostic ?? { dispatch: failedResponse ? "http-observed" : "unknown" } } : {}),
       });

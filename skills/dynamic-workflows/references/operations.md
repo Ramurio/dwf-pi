@@ -4,7 +4,7 @@ Watch, inspect, pause, await, and save presets after a run exists. Launch still 
 
 ## Watch and browser UI
 
-Give the user the actual run ID and a ready-to-copy `dynamicwf watch --run <id>` command (including `--store` when used) immediately after launch, before waiting. For the browser interface, provide `dynamicwf ui --run <id>` with the same store; it prints a local URL and offers a graph, branch selection, current work, history, tokens, and pause/resume/cancel. Keep its server running while viewing; closing the browser or server does not stop workflows.
+Give the user the actual run ID and a ready-to-copy `dynamicwf watch --run <id>` command (including `--store` when used) immediately after launch, before waiting. For the browser interface, provide `dynamicwf ui --run <id>` with the same store; it prints a local URL and offers a graph, branch selection, current work, history, tokens, and pause/resume/cancel. The command exits and leaves the persistent viewer running in the background; repeated calls reuse it. The default bookmark is `http://127.0.0.1:4380/`, with `?run=<id>` for a specific run (use the printed address when configured differently). `dynamicwf ui --install` enables macOS login startup when requested. For a temporary viewer of another store, use `--foreground --port 0`. Closing the browser or viewer does not stop workflows.
 
 The terminal monitor opens a compact live dashboard: 1 current work, 2 history, 3 graph, 4 token usage; arrows scroll and q detaches. Use `--once` for a compact snapshot or `--graph --once` for the complete technical graph. Ctrl-C in the watcher only detaches the viewer.
 

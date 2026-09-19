@@ -308,12 +308,11 @@ export class JournalRuntime implements WorkflowRuntime {
       const childScope = [...context.scope, "node", node.id, "visit", String(context.visit), "worktree", "graph", node.graphId];
       const previous = runtime.store.getActivation(runtime.run.id, key)!.metadata;
       const operation:Extract<OperationRecord,{kind:"worktree"}>={kind:"worktree",source:runtime.workspaceCwd(context),childScope:[...childScope],...(node.base?{base:node.base}:{})};
-      runtime.store.setActivationMetadata(runtime.run.id,runtime.token,key,{operation});
       const resuming = previous.workspacePhase === "children" && previous.workspace !== undefined;
       const reconciliation = previous.reconciliation;
       const recoveringAllocation = previous.workspacePhase === "allocating" && previous.workspace !== undefined &&
         reconciliation && typeof reconciliation === "object" && !Array.isArray(reconciliation) && reconciliation.action === "retry";
-      if (!resuming) runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspacePhase: "allocating", childScope });
+      runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { operation, ...(resuming ? {} : { workspacePhase: "allocating", childScope }) });
       const allocation = yield* processEffect(signal => resuming
         ? runtime.workspaces.reattach(runtime.workspaceCwd(context), key, previous.workspace!, runtime.gitOptions(context, signal))
         : recoveringAllocation

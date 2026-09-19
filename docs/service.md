@@ -37,7 +37,7 @@ Each invocation reads one JSON request from stdin and writes one JSON response t
 stdout. Empty stdin means `{}`. Success is `{"ok":true,"result":...}`; failure is
 `{"ok":false,"error":{"name":"...","message":"..."}}` with exit status 1.
 Validation errors can also include `error.issues`. Diagnostics from dependencies may
-appear on stderr. `--help` prints available tool names and usage.
+appear on stderr. `src/cli.ts --help` (`npm run --silent cli -- --help`, or `dynamicwf <tool> --help`) prints usage and the live `serviceToolNames` list after `Tools:`. Count that list rather than reusing an older inventory; the current export has 39 names. Installed `dynamicwf --help` only shows watch/ui/mcp entry points and example dotted names. MCP `--help` writes usage to stderr and does not enumerate tools.
 
 The default store is `$DYNAMICWF_HOME/state.sqlite`, or `~/.dynamicwf/state.sqlite`
 when that variable is absent. `--store` overrides it. Run resources, sessions,
@@ -48,10 +48,14 @@ persistent store path. Catalog/schema calls do not create a database.
 
 ## Tools
 
+The CLI help `Tools:` line is `serviceToolNames.join(", ")`. Count those names instead of reusing an older inventory; the current export has 39 tools, all listed below.
+
 | Tool | Request fields | Result |
 | --- | --- | --- |
 | `catalog.list` | none | Built-in role names and descriptions |
 | `catalog.describe` | `name` | Role definition and defaults |
+| `catalog.models` | optional `refresh` | `{models,issues}` from the cached authenticated catalog; `refresh:true` refreshes the Grok catalog over the network |
+| `system.doctor` | optional `cwd` | Local Node/POSIX, workspace, store, Git and cached-model diagnosis; no inference |
 | `workflow.schema` | none | Workflow, expression, draft, create and patch schemas |
 | `workflow.create` | `id`, `name`, optional `entryGraph` | New editable draft |
 | `workflow.list` | none | Draft IDs, names and revisions |
@@ -66,16 +70,25 @@ persistent store path. Catalog/schema calls do not create a database.
 | `run.list` | none | Public summaries and process liveness for stored runs |
 | `run.inspect` | run `id` | Summary, frozen workflow, run input and activation journal |
 | `run.events` | run `id`, optional `after` | `{events,nextAfter}` for incremental observation |
+| `run.usage` | run `id`, optional `after`, `limit` | Token totals and a page of per-response SDK reports |
 | `run.attempts` | run `id`, activation `key`, optional `after`, `limit` | Archived attempts, separate current checkpoint, per-attempt accounting and history gaps |
 | `run.retries` | run `id`, activation `key`, optional `after`, `limit` | Immutable automatic retry decisions; current progress is separate, scheduling does not prove admission |
+| `run.collections` | run `id`, activation `key`, optional `after`, `limit` | Committed collect-policy child results from one read snapshot |
 | `run.pause` | run `id` | Public state after pause request |
 | `run.resume` | run `id` | Public state after resume request |
 | `run.cancel` | run `id` | Public state after cancellation request |
+| `preset.save` | run `id`, `name`, optional `scope`, `cwd` | Immutable frozen-plan preset of an accepted succeeded run |
+| `preset.list` | optional `scope`, `cwd` | Library summaries; omitted scope lists project then global, with shadowing |
+| `preset.inspect` | `name`, optional `scope`, `revision`, `cwd` | Named or hashed revision, including the frozen plan |
+| `preset.run` | `name`, optional `scope`, `revision`, `cwd`, `input` | Fresh run from that frozen plan; new sessions, no prior output reuse |
 | `run.waits` | run `id` | Observed public state and durable wait records |
 | `run.trace` | run `id`, optional `after`, `limit` | Durable routing records, summary, plan hash and exclusive cursor |
 | `run.resolve` | run `id`, `waitId`, `response`, optional `resolvedBy` | Persisted answer and observed state; same-answer retry is idempotent |
+| `run.recovery` | run `id`, activation `key` | Attempt, checkpoint, operation, blockers and workspace digest. Authorizes nothing |
+| `run.reconcile` | run `id`, `key`, `attempt`, `checkpoint`, `workspaceDigest`, `decisionId`, `action` accept or retry, `actor`, `reason`, `evidence`; `accept` requires `output`; optional `supersedes` | Decision receipt; prepares the same run without launching workers or lifting pause |
+| `run.reconciliations` | run `id`, optional `key` | Immutable decisions and application/supersession receipts. Reading authorizes nothing |
 | `run.continuation.inspect` | source run `id` | Checkpoint, lineage, reusable outputs, writer-effect blockers and workspace digest. Authorizes nothing |
-| `run.continue` | `preparedId`, `idempotencyKey`, `source`, `actor`, `reason`, `evidence`, `workspaceDigest`, optional `input`, `reuse`, `dispositions` | New or idempotent continuation run public summary; reports the new run ID immediately |
+| `run.continue` | `preparedId`, `idempotencyKey`, `source` (`runId`, `checkpoint`, `planHash`), `actor`, `reason`, `evidence`, `workspaceDigest`, optional `input`, `reuse`, `dispositions` | New or idempotent continuation run public summary; reports the new run ID immediately |
 | `task.inspect` | task `id` | Linked runs, receipts and reused output identities. Does not launch work |
 | `task.usage` | task `id`, optional `after`, `limit` | Per-run and task SDK totals plus paged reports. Reuse adds no invocation; cost is not a subscription invoice |
 
@@ -94,10 +107,18 @@ without an explicit model; it does not replace per-node choices. Availability an
 thinking behavior are described in [execution-plan.md](execution-plan.md).
 
 The recommended prepared start uses the saved snapshot regardless of later draft,
-skill or default-model changes. `workflow.prepare` now returns an envelope with the
+skill or default-model changes. That snapshot is the frozen plan (validated graph,
+generated source, versions, resolved models/thinking, prompts, tools, permissions,
+schemas and skill bytes) plus a canonical workspace path. Live files under `cwd`,
+Git HEAD and the directory inode are not frozen; workers read and write the current
+workspace. `workflow.prepare` now returns an envelope with the
 execution plan under `plan` (previously the result was the plan itself). Library
 `prepareExecutionPlan` still returns an `ExecutionPlan` directly. See
 [prepared-start.md](prepared-start.md) for exact start, delivery retries and recovery.
+Keyed start deduplicates the launch command; it is not an exact-once guarantee of
+worker side effects. A revised graph of the same user task uses
+`run.continuation.inspect` then `run.continue`. Do not `run.start` an unrelated
+replacement that copies saved JSON.
 `workflow.prepared` exposes the concrete plan for inspection, including skill
 snapshots; ordinary status responses omit that potentially large payload and owner
 fencing tokens. They include workflow identity/revision, `planHash`, `sourceHash`,
@@ -137,10 +158,12 @@ supervisor with live recorded workers is not treated as an entirely stopped run.
 When both supervisor and recorded workers are absent, the controller records an
 interruption. Completed activation outputs remain durable. Resume can relaunch an
 interrupted run, but it must not silently repeat a failed/interrupted agent or check
-whose external effects are uncertain. Such an activation reports that explicit
-retry authorization/reconciliation is required; this service version does not yet
-provide a reconciliation tool. Inspect the recorded effects before deciding how to
-continue work.
+whose external effects are uncertain. Inspect with `run.recovery`, then record an
+explicit `run.reconcile` accept or one-use retry; see [reconciliation.md](reconciliation.md).
+That decision prepares the same run and does not launch workers or lift pause:
+`run.resume` remains separate. Actor evidence is attestation, not proof of outside
+effects. A revised graph of the same user task still uses `run.continuation.inspect`
+then `run.continue`, not an unrelated replacement start.
 
 ## Permissions and current boundaries
 

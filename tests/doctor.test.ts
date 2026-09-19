@@ -7,7 +7,7 @@ import { diagnoseSystem } from "../src/doctor.js";
 import { WorkflowService, serviceToolNames } from "../src/service.js";
 import { mcpToolDefinitions } from "../src/mcp-tools.js";
 import type { AvailableExecutionModel } from "../src/execution-plan.js";
-const models: AvailableExecutionModel[] = [{ provider: "test-provider", id: "test-model", thinkingLevels: ["off", "high"] }, { provider: "xai-auth", id: "grok-test", thinkingLevels: ["low"] }];
+const models: AvailableExecutionModel[] = [{ provider: "test-provider", id: "test-model", thinkingLevels: ["off", "high"] }, { provider: "xai", id: "grok-test", thinkingLevels: ["low"] }];
 async function fixture(t: TestContext) {
   const directory = await mkdtemp(join(tmpdir(), "dynamicwf-doctor-test-"));
   t.after(() => rm(directory, { recursive: true, force: true }));

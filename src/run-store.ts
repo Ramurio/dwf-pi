@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { openWorkflowDatabase } from "./sqlite.js";
 import { preparedExecutionId, type ExecutionPlan } from "./execution-types.js";
@@ -474,6 +475,7 @@ export class RunStore {
         this.database.prepare("UPDATE workflow_runs SET status='running',updated_at=? WHERE id=?").run(now, id);
         this.event(id, "run.running", {});
       }
+      this.admitFrozenWriterIntent(run, id, context, options.kind, metadata);
       this.database.prepare(`INSERT INTO workflow_activations(run_id,activation_key,context,kind,side_effect,status,attempt,owner_token,started_at,metadata)
         VALUES(?,?,?,?,?,'running',?,?,?,?) ON CONFLICT(run_id,activation_key) DO UPDATE SET
         status='running',attempt=excluded.attempt,owner_token=excluded.owner_token,started_at=excluded.started_at,finished_at=NULL,error=NULL,output=NULL,metadata=excluded.metadata`)
@@ -482,6 +484,31 @@ export class RunStore {
       if (allowed) this.event(id,"retry.admitted",{key,retry:retryProgress(decision!,"admitted")});
       return this.getActivation(id, key)!;
     });
+  }
+  /** Check/worktree intent is known from the frozen node; persist it with admission so a crash before work() is still recoverable. */
+  private admitFrozenWriterIntent(run: RunRecord, id: string, context: RuntimeContext, kind: string, metadata: ActivationMetadata): void {
+    if (kind !== "check" && kind !== "worktree") return;
+    const node = run.plan.workflow.graphs[context.graphId]?.nodes.find(item => item.id === context.nodeId);
+    if (!node || node.kind !== kind) return;
+    const parents = this.listActivations(id).filter(item => {
+      const scope = item.metadata.childScope;
+      return item.kind === "worktree" && Array.isArray(scope) && scope.length <= context.scope.length && scope.every((segment, index) => segment === context.scope[index]);
+    }).sort((a, b) => (b.metadata.childScope as Json[]).length - (a.metadata.childScope as Json[]).length);
+    const recorded = parents[0]?.metadata.workspace;
+    const source = recorded && typeof recorded === "object" && !Array.isArray(recorded) && typeof recorded.path === "string" ? recorded.path : run.cwd;
+    if (node.kind === "check") {
+      const operation = parseOperation({ kind: "check", cwd: node.cwd ? resolve(source, node.cwd) : source, command: node.command, args: [...node.args] });
+      if (operation) metadata.operation = JSON.parse(JSON.stringify(operation)) as Json;
+      return;
+    }
+    if (node.kind !== "worktree") return;
+    const childScope = [...context.scope, "node", node.id, "visit", String(context.visit), "worktree", "graph", node.graphId];
+    const operation = parseOperation({ kind: "worktree", source, childScope, ...(node.base ? { base: node.base } : {}) });
+    if (!operation) return;
+    metadata.operation = JSON.parse(JSON.stringify(operation)) as Json;
+    if (metadata.workspacePhase === "children" && metadata.workspace !== undefined) return;
+    metadata.workspacePhase = "allocating";
+    metadata.childScope = childScope;
   }
   openWait(id: string, token: string, key: string, reason: string, input: Json, responseSchema: Record<string, unknown>): WaitRecord {
     if (!reason.trim()) throw new Error("Wait requires a nonempty reason");
@@ -779,9 +806,17 @@ export class RunStore {
       this.event(id, "reconciliation.recorded", { key: request.key, decisionId: request.decisionId, action: request.action, sourceAttempt: request.attempt, actor: request.actor, reason: request.reason, supersedes: request.supersedes ?? null });
       if (request.action === "accept") {
         this.database.prepare("INSERT INTO workflow_activation_history(run_id,activation_key,attempt,record) VALUES(?,?,?,?)").run(id,request.key,selected.attempt,JSON.stringify(selected));
-        // Preserve cumulative spend, but no worker/model invocation is invented for an accepted checkpoint.
-        const metadata = { ...(selected.metadata.usage === undefined ? {} : { usage: selected.metadata.usage }),
-          reconciliation: { decisionId: request.decisionId, sourceAttempt: selected.attempt, action: "accept" } };
+        // Preserve cumulative spend and completeness projection; no worker/model invocation is invented for an accepted checkpoint.
+        const metadata = {
+          ...(selected.metadata.usage === undefined ? {} : {
+            usage: selected.metadata.usage,
+            ...(typeof selected.metadata.usageLedgerVersion === "number" ? { usageLedgerVersion: selected.metadata.usageLedgerVersion } : {}),
+            ...(typeof selected.metadata.usageReportCount === "number" ? { usageReportCount: selected.metadata.usageReportCount } : {}),
+            ...(typeof selected.metadata.usageComplete === "boolean" ? { usageComplete: selected.metadata.usageComplete } : {}),
+            usageRecordedAttempts: (typeof selected.metadata.usageRecordedAttempts === "number" ? selected.metadata.usageRecordedAttempts : 1) + 1,
+          }),
+          reconciliation: { decisionId: request.decisionId, sourceAttempt: selected.attempt, action: "accept" },
+        };
         this.database.prepare(`UPDATE workflow_activations SET status='succeeded',attempt=?,owner_token='',started_at=?,finished_at=?,output=?,error=NULL,metadata=? WHERE run_id=? AND activation_key=?`)
           .run(selected.attempt+1,now,now,JSON.stringify(output),JSON.stringify(metadata),id,request.key);
         this.applyReconciliation(id,request.decisionId,selected.attempt+1,now);

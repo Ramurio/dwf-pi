@@ -72,6 +72,7 @@ echo '{}' | dynamicwf workflow.schema
 authoring. `workflow.validate` показывает ошибки незаконченного draft;
 `workflow.compile` принимает только завершённую корректную схему и возвращает source/hash.
 `workflow.prepare {id,cwd}` сохраняет snapshot и возвращает `{preparedId,planHash,cwd,createdAt,plan}`.
+Снимок фиксирует граф, модели, thinking, skills и generated source и привязывает канонический путь `cwd`; живые файлы, Git HEAD и inode каталога не замораживаются.
 `run.start {preparedId,idempotencyKey,input}` запускает именно его; повтор с тем же
 ключом и входом возвращает тот же run ID. Пересмотр той же задачи — `run.continuation.inspect`
 и `run.continue`, а не новый unrelated start со скопированным JSON. `workflow.prepared {preparedId}` позволяет
@@ -79,6 +80,11 @@ authoring. `workflow.validate` показывает ошибки незакон�
 режимом и каждый раз создаёт новый run; `run.status`, `run.inspect`, `run.events`
 показывают фактическое состояние. `dynamicwf watch --run <id>` открывает компактный монитор: текущая работа,
 история, схема и расход токенов на отдельных вкладках (1/2/3/4), без повторяющихся простыней.
+
+Для постоянной закладки в браузере один раз выполни `dynamicwf ui --install`
+(macOS), затем открывай **http://127.0.0.1:4380/**. Панель запускается при входе
+в систему; старые и новые запуски доступны в одном месте. `dynamicwf ui --run <id>`
+печатает сохраняемую ссылку на запуск. [Настройка панели](docs/browser-ui.md).
 
 `run.pause` дожидается текущих workers, `run.resume` продолжает, `run.cancel`
 прерывает их. Завершённые checkpoints не повторяются при восстановлении.
@@ -112,3 +118,5 @@ npm run probe:workflow -- --provider openai-codex --model gpt-5.6-sol
 [отчёте workflow](docs/research/workflow-live.md).
 
 Проект самостоятельный. Соседний `remote-pi` не является его зависимостью.
+
+[Результаты Grok-кампании и статус переноса исправлений](docs/campaign-harvest.md).

@@ -87,5 +87,5 @@ export async function diagnoseSystem(options: DoctorOptions): Promise<DoctorRepo
     checks.push({ id: "authenticated-models", status: "error", detail: "Model discovery failed; credentials and provider errors are not included" });
   }
   const pureRuns = nodeReady && groupsReady && workspaceExists && workspaceReads && state.status === "ok";
-  return { cwd, store, checks, models, issues, readyFor: { pureRuns, agentRuns: pureRuns && models.length > 0, grok: pureRuns && models.some(model => model.provider === "xai-auth"), workspaceWrites: pureRuns && workspaceWrites } };
+  return { cwd, store, checks, models, issues, readyFor: { pureRuns, agentRuns: pureRuns && models.length > 0, grok: pureRuns && models.some(model => model.provider === "xai"), workspaceWrites: pureRuns && workspaceWrites } };
 }

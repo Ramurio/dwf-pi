@@ -68,7 +68,7 @@ function evidence(a: ActivationRecord): string {
   if (a.metadata.collectionSummary) return collectionEvidence(a);
   return a.status === "succeeded" ? "готово" : statusNames[a.status] ?? a.status;
 }
-function collectionEvidence(a: ActivationRecord): string {
+export function collectionEvidence(a: ActivationRecord): string {
   const summary = a.metadata.collectionSummary;
   if (!summary || typeof summary !== "object" || Array.isArray(summary)) return "";
   return `собрано: ${summary.total} · успешно: ${summary.succeeded} · ошибок: ${summary.failed}`;

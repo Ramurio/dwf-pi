@@ -45,13 +45,13 @@ test('status filtering requires observed HTTP facts and preserves explicitly sel
 test('native SDK retries selected statuses once per attempt, honors the server floor, and stops on 401',{timeout:15000},async()=>fixture(policy,async({store,runtime,directory,token})=>{
   const modelRuntime=await ModelRuntime.create({credentials:new InMemoryCredentialStore(),modelsStore:new InMemoryModelsStore(),modelsPath:null,refreshOnCreate:false,allowModelNetwork:false});
   modelRuntime.registerProvider('offline-provider',{api:'openai-responses',baseUrl:'https://offline.invalid/v1',apiKey:'OFFLINE',models:[{id:'fixture',name:'Fixture',reasoning:false,input:['text'],contextWindow:10000,maxTokens:1000,cost:{input:0,output:0,cacheRead:0,cacheWrite:0}}]});
-  const requests:number[]=[];
+  const requests:number[]=[],unavailableAttempts:number[]=[];
   const result=await Effect.runPromiseExit(runtime.step(context,()=>Effect.tryPromise({try:async signal=>{
     const activation=store.listActivations('run-policy')[0]!;store.startUsage('run-policy',token,activation.key);
     await executePiWorker({version:1,config:store.get('run-policy').plan.agents.main!.worker!,task:'Offline task',input:null,cwd:directory,resourceDirectory:join(directory,`resources-${activation.attempt}`),sessionDirectory:join(directory,'sessions')},{modelRuntime,signal,providerFetch:async()=>{
       requests.push(Date.now());const status=[429,503,401][requests.length-1]??500;
       return new Response(JSON.stringify({error:{message:'PRIVATE_RESPONSE'}}),{status,headers:requests.length===1?{'retry-after':'1'}:{}});
-    },onEvent(event){if(event.type==='usage.report')store.recordUsage('run-policy',token,activation.key,String(event.reportId),event.usage,String(event.stopReason));else if(event.type==='usage.settled')store.settleUsage('run-policy',token,activation.key,event.complete===true);}});return null;
+    },onEvent(event){if(event.type==='usage.report')store.recordUsage('run-policy',token,activation.key,String(event.reportId),event.usage,String(event.stopReason));else if(event.type==='usage.unavailable')unavailableAttempts.push(activation.attempt);else if(event.type==='usage.settled')store.settleUsage('run-policy',token,activation.key,event.complete===true);}});return null;
   },catch:error=>error as Error})));
   assert.ok(Exit.isFailure(result));assert.equal(requests.length,3);
   const activation=store.listActivations('run-policy')[0]!,decisions=store.retries('run-policy',activation.key).records,attempts=store.attempts('run-policy',activation.key);
@@ -59,7 +59,11 @@ test('native SDK retries selected statuses once per attempt, honors the server f
   assert.ok(requests[1]!>=decisions[0]!.dueAt!);assert.ok(requests[2]!>=decisions[1]!.dueAt!);
   assert.equal((activation.metadata.failure as any).providerResponse.status,401);assert.equal(activation.attempt,3);
   assert.deepEqual(attempts.records.map(a=>(a.metadata.failure as any).providerResponse.status),[429,503]);
-  assert.equal(store.usageReports('run-policy').reports.length,3);assert.ok(attempts.records.every(a=>a.accounting.complete===false));
+  // HTTP error bodies supply no usage: SDK zero placeholders are not token reports.
+  assert.equal(store.usageReports('run-policy').reports.length,0);
+  assert.deepEqual(unavailableAttempts,[1,2,3]);
+  assert.ok(attempts.records.every(a=>a.accounting.complete===false));
+  assert.equal(attempts.current.accounting.complete,false);
   assert.doesNotMatch(JSON.stringify(decisions),/PRIVATE_RESPONSE/);
 }));
 

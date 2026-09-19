@@ -1,5 +1,6 @@
 import { text } from "node:stream/consumers";
 import { parseArgs } from "node:util";
+import { AuthoringError, RevisionConflictError } from "./authoring.js";
 import { WorkflowService, serviceToolNames } from "./service.js";
 import { ExecutionFailure } from "./execution-failure.js";
 
@@ -26,6 +27,8 @@ try {
     name: failure.name, message: failure.message,
     ...(failure instanceof ExecutionFailure ? { failure: failure.failure } : {}),
     ...("issues" in failure ? { issues: failure.issues } : {}),
+    ...(failure instanceof AuthoringError && typeof failure.operationIndex === "number" ? { operationIndex: failure.operationIndex } : {}),
+    ...(failure instanceof RevisionConflictError ? { expectedRevision: failure.expectedRevision, actualRevision: failure.actualRevision } : {}),
   } }));
   process.exitCode = 1;
 } finally { service?.close(); }

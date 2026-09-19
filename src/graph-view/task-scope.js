@@ -146,7 +146,7 @@ export function activationTarget(activation, currentRunId) {
     runId: activation.runId ?? currentRunId ?? null,
     graphId: activation.graphId ?? null,
     nodeId: activation.node?.id ?? activation.nodeId ?? null,
-    scope: "",
+    scope: activation.scope ?? "",
   };
 }
 

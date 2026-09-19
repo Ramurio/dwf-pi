@@ -26,6 +26,28 @@ Define each block's job, input, structured output, and next transitions:
 
 The runtime supplies scopes and visit identities for nested work. Each `map` child receives the raw array item as its `input`; its outputs return in input order. Each `parallel` child receives its configured input expression and returns under its child ID.
 
+### Minimal node and entry examples
+
+A `transform` evaluates its `value` expression; `expr` is not a node field. For example, this patch operation returns the input unchanged:
+
+```json
+{"op":"addNode","graphId":"main","node":{"id":"echo","kind":"transform","value":{"op":"ref","path":["input"]}}}
+```
+
+A `map` names the child graph with `graphId` and the array expression with `items`. Create and populate the child graph `item` before validating the complete workflow:
+
+```json
+{"op":"addNode","graphId":"main","node":{"id":"each","kind":"map","graphId":"item","items":{"op":"ref","path":["input"]}}}
+```
+
+Set an explicit entry with `nodeId`, not `entry`:
+
+```json
+{"op":"setEntry","graphId":"main","nodeId":"echo"}
+```
+
+These are individual operations for `workflow.patch.operations`, not complete workflows. Connect the nodes to a `finish` and validate the whole graph. When saving a large CLI schema response for read/grep tools, format it as multiline JSON; a single long line can be truncated. Keep the complete schema available and read the relevant node/operation definitions.
+
 ## Finish versus legacy end
 
 `finish` returns `value` and declares `decision` (`accepted`, `rejected`, `inconclusive`), a nonempty `reason` expression, and an `evidence` expression producing an array. The root finish determines the task outcome; child decisions remain local. Legacy `end` returns data; only its explicit `accepted` boolean supplies legacy acceptance. Technical `succeeded` is not acceptance.

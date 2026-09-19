@@ -8,7 +8,9 @@ Inspect the actual interface with `catalog.list`, `catalog.describe {"name":"rev
 
 `system.doctor {}` diagnoses local prerequisites without inference. It does not run models.
 
-`catalog.models {"refresh":true}` explicitly refreshes the Grok account catalog when needed. Startup uses cached authenticated model data and does not refresh implicitly. A stale cache is a previous authenticated observation, not proof of current account entitlement. Account switches should refresh before starting new runs. Historical IDs in notes or older docs are not proof of availability.
+Grok uses pi's built-in `xai` provider, authenticated through `/login xai` → **Use a subscription**. Use `xai/grok-4.6` when present in the catalog; no `pi-xai-oauth` plugin is required. `catalog.models {"refresh":true}` explicitly refreshes the native xAI catalog. Ordinary startup stays cache-only. A listed model is not proof of account entitlement to every request.
+
+The retired `xai-auth` provider is not silently aliased. Historical frozen runs remain readable but require an explicit continuation to change provider; inspect partial effects before resuming work.
 
 ## Capabilities and modalities
 

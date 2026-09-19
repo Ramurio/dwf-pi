@@ -398,7 +398,7 @@ export class RunController {
     const start = { preparedId: request.preparedId, idempotencyKey: request.idempotencyKey, operation: continuationKind };
     const canonical = canonicalContinuationRequest(request);
     const existing = this.store.findStart(start, request.input, canonical);
-    if (existing) return this.completeStart(existing.id);
+    if (existing) return this.store.get(existing.id);
     const verified = verifyExecutionPlan(plan);
     if (preparedExecutionId(verified.hash, cwd) !== request.preparedId) throw new Error("Prepared start identity mismatch");
     const workspace = await executionWorkspace(cwd);
@@ -417,7 +417,7 @@ export class RunController {
     };
     let inspection;
     try { inspection = await inspect(); }
-    catch (error) { return this.completeStart(existingAfterRace(error).id); }
+    catch (error) { return this.store.get(existingAfterRace(error).id); }
     const writerBlockers = continuationWriterBlockers(this.store.listActivations(request.source.runId), request.dispositions);
     if (writerBlockers.length) throw new Error(`Continuation is blocked: ${writerBlockers.map(item => item.code).join(", ")}`);
     const gitBlockers = await this.continuationGitBlockers(request.source.runId);
@@ -435,14 +435,16 @@ export class RunController {
       return resolveReuseBinding({ binding, target, sourceRun, sourceActivation, sourcePlanHash: sourceRun.plan.hash, input: request.input, producer });
     });
     try { inspection = await inspect(); }
-    catch (error) { return this.completeStart(existingAfterRace(error).id); }
+    catch (error) { return this.store.get(existingAfterRace(error).id); }
     const paused = inspection.desired === "paused" || inspection.status === "paused";
+    const id = `run-${randomUUID()}`;
     let run;
     try {
       run = this.store.createContinuation({
-        id: `run-${randomUUID()}`, plan: verified, cwd: workspace, start, request, reused, paused,
+        id, plan: verified, cwd: workspace, start, request, reused, paused,
       });
-    } catch (error) { run = existingAfterRace(error); }
+    } catch (error) { return this.store.get(existingAfterRace(error).id); }
+    if (run.id !== id) return this.store.get(run.id);
     return this.completeStart(run.id);
   }
 }

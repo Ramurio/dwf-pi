@@ -1,15 +1,26 @@
-# Grok subscription provider
+# Grok through native pi xAI OAuth
 
-`createWorkflowModelRuntime()` extends the pinned pi 0.85 `ModelRuntime` with a native `xai-auth` provider when that OAuth credential is configured. It uses pi's own xAI OAuth implementation, including credential-store locking and token refresh. Existing Codex providers and auth paths remain native pi. Missing/unsupported optional Grok adapters produce catalog diagnostics and do not prevent native Codex execution; an explicitly requested `xai-auth` worker fails with a safe adapter error. No credential enters the graph, worker request or public model catalog.
+Dynamicwf uses pi's built-in `xai` provider. No `pi-xai-oauth` extension or custom
+transport bridge is loaded. Authenticate in pi with `/login xai` → **Use a subscription**.
+For Grok 4.6 configure `{ "provider": "xai", "id": "grok-4.6" }`; `xhigh` and image
+capabilities come from the installed native pi catalog. `catalog.models {}` shows
+credential-backed available models; `catalog.models {"refresh":true}` explicitly
+refreshes the native xAI catalog. Ordinary startup remains cache-only.
 
-The bridge requires project-local `@earendil-works/pi-ai`, `pi-coding-agent` and `pi-agent-core` **0.85.1**, direct dependency `jiti@2.7.0`, and the locally installed `pi-xai-oauth@1.5.2` helper package. Its default location is `~/.pi/agent/npm/node_modules/pi-xai-oauth`; callers can supply an explicit package root. Identity, version and SHA-256 of the reviewed helper import closure are checked before importing helpers and again at lazy transport load. A same-version file change is `adapter-content-mismatch`. The package's peer range excludes pi 0.85, so the integration is supported by this project's explicit transport contract tests, not by a claim of upstream compatibility. This milestone does not install or enable any global extension.
+The worker uses the same native provider as pi. Its frozen tool allowlist,
+`submit_result` contract, session continuation, image guards and usage accounting
+remain in force. Serialized native xAI reasoning effort is observed at the fetch
+boundary; configured thinking is not substituted for observed effort.
 
-Only catalog/model helpers load during discovery. The provider imports `responses.ts` lazily on its first stream. The extension entrypoint, global tools, session hooks, settings and prompt resources are never loaded. Jiti's global module cache is disabled and each provider pins its private model helper instance across catalog and transport. The older transport temporarily wraps `globalThis.fetch`; the bridge serializes transport lifetimes within a process to avoid overlapping wrappers from separate provider instances. Workflow workers are independent processes and still run concurrently.
+The retired provider ID `xai-auth` is not an alias for `xai`. Old runs and their
+frozen plans remain readable, including historical adapter identities. Executing
+an old worker fails before dispatch with migration guidance. To continue a failed
+task with the new provider, author an explicit continuation after inspecting any
+partial writes; do not alter the original plan or blindly repeat its effects.
 
-`discoverWorkflowModels()` exports authenticated model IDs and supported pi thinking levels. `discoverWorkflowCatalog()` additionally returns safe `issues: string[]`; its explicit `refresh: true` option requests an authenticated Grok catalog refresh. Startup uses cached authenticated model data and never performs a model catalog network request. Missing caches and curated fallback data produce an empty subscription catalog. A stale cache is explicitly a previous authenticated observation, not proof of current account entitlement. An explicit `runtime.refresh({ providers: ["xai-auth"], allowNetwork: true, force: true })` can request current account data; startup never does this implicitly. Account switches should refresh before starting new runs.
-
-A subscription label does not identify a concrete Heavy model. On 2026-09-08 initial discovery restored `stale-cache`; an explicitly authorized authenticated refresh then reported source `remote` without loading transport. Available IDs remained `grok-4.6`, `grok-4.5`, `grok-4.3`, `grok-4.5-latest`, `grok-build-latest`, and `grok-composer-2.5-fast`. The refreshed account catalog contained no Heavy ID. No Heavy entitlement was established and no alias was invented.
-
-The bridge forwards the actual serialized request reasoning effort into pi's `providerThinkingLevel`; it does not substitute the requested setting as evidence of what was sent. Grok 4.6 `xhigh` is sent as `xhigh`. PNG/JPEG tool-result images use the helper conversion/compaction path and native `resizeImage`. Alternate-model vision routing is not enabled. Text-only or unknown-image routes wrap `read` so an unexpected image becomes a recoverable tool error instead of destroying the session. SDK/provider failures receive safe public messages; tests check that credential-bearing transport exceptions do not leak the test credential into results or events.
-
-Verification: `node --import tsx --test tests/xai-provider.test.ts`. Ten offline tests use the installed reviewed helper sources, fake OAuth credentials, temporary catalog fixtures and fake fetch. They exercise actual pi 0.85 Responses SSE parsing, tool arguments, reasoning payload, usage, a complete `executePiWorker` submission, cache-only discovery, missing entitlement fallback, transport-error scrubbing, private catalogs, concurrent fetch-wrapper restoration, prompt cancellation while queued, and native Codex availability when the optional adapter is absent. Installed-helper tests explicitly skip if the reviewed local package is absent. These automated tests perform no live inference. A separate explicitly authorized live probe passed through `executePiWorker`: `xai-auth/grok-4.6`, requested thinking `low`, observed `providerThinkingLevel: low`, exactly one `submit_result` tool call returning the required random nonce and integer 42. One assistant message ended with `toolUse`; reported usage was input 426, output 133, total 687 (total includes provider accounting beyond input/output), cost 0.001714. The probe used tools `[]`, no skills or extensions, a temporary workspace and the strict schema; temporary transcripts were removed. This proves the tested Grok 4.6 path, not a Heavy tier.
+Offline verification: `tests/native-xai.test.ts` and `tests/repair-core.test.ts`
+exercise native catalog discovery, Responses tool calls, PNG/JPEG transport,
+resizing, xhigh payloads, continued sessions, capability drift and HTTP failure
+accounting without an installed extension. `npm run test:repair:live` makes real
+native xAI calls using temporary image fixtures and publishes sanitized evidence
+under `scratch/repair-live-latest.json` by default.

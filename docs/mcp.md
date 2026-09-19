@@ -58,13 +58,17 @@ protocol messages.
 MCP tool names replace the shared service's dots with underscores. For example,
 `workflow_patch` dispatches `workflow.patch` and `run_start` dispatches `run.start`.
 Underscores also fit hosts that restrict model function names. There are no alternate
-business semantics between the transports.
+business semantics between the transports. `mcpToolDefinitions` maps each current
+`serviceToolNames` entry one-to-one; count that export (currently 39 names) rather
+than an older inventory. `tools/list` is the live list. Adapter `--help` writes
+usage to stderr and does not enumerate tools.
 
 | MCP tool family | Available names |
 | --- | --- |
-| Roles | `catalog_list`, `catalog_describe` |
+| Roles | `catalog_list`, `catalog_describe`, `catalog_models` |
+| Diagnosis | `system_doctor` |
 | Authoring | `workflow_schema`, `workflow_create`, `workflow_list`, `workflow_inspect`, `workflow_patch`, `workflow_validate`, `workflow_compile`, `workflow_prepare`, `workflow_prepared` |
-| Execution | `run_start`, `run_status`, `run_list`, `run_inspect`, `run_events`, `run_attempts`, `run_pause`, `run_resume`, `run_cancel`, `run_continuation_inspect`, `run_continue`, `task_inspect`, `task_usage` |
+| Execution | `run_start`, `run_status`, `run_list`, `run_inspect`, `run_events`, `run_usage`, `run_attempts`, `run_pause`, `run_resume`, `run_cancel`, `run_waits`, `run_resolve`, `run_trace`, `run_collections`, `run_retries`, `run_recovery`, `run_reconcile`, `run_reconciliations`, `run_continuation_inspect`, `run_continue`, `task_inspect`, `task_usage` |
 | Presets | `preset_save`, `preset_list`, `preset_inspect`, `preset_run` |
 
 Every tool advertises a closed object input schema, with required fields and field
@@ -81,7 +85,9 @@ Request fields and execution behavior are documented in
 [service.md](service.md). Preset scope defaults to project on save; reads without
 explicit scope resolve project names before global names. Preset revisions are
 immutable hashes. `preset_run` starts a fresh run from the stored frozen plan with
-new optional input.
+new optional input and does not reuse prior outputs. `run_continue` creates a
+successor for the same user task; do not `run_start` an unrelated replacement that
+copies saved JSON.
 
 ## Result envelope
 
@@ -124,9 +130,13 @@ Cancelling an MCP request or closing its transport is not a substitute for the
 
 The MCP host's permission UI does not create an OS sandbox for pi workers or check
 blocks. Frozen role tool/permission settings and the current limitations documented
-in [service.md](service.md) still apply. Failed/interrupted external effects are not
-silently retried. No inference, loop bounds or scheduling logic are implemented in
-this adapter.
+in [service.md](service.md) still apply. Preparation freezes plan bytes and the
+canonical workspace path, not live cwd contents, Git HEAD or directory inode.
+Failed/interrupted external effects are not silently retried: use `run_recovery`
+then `run_reconcile` on the same run, or `run_continuation_inspect` then
+`run_continue` for a revised graph of the same task. Keyed start/continue retries
+return the same run; they are not an exact-once guarantee of worker side effects.
+No inference, loop bounds or scheduling logic are implemented in this adapter.
 
 ## Verification
 

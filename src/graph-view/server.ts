@@ -52,6 +52,7 @@ export async function startGraphServer(
   filename: string,
   runId?: string,
   port = 0,
+  options: { stable?: boolean; managerKey?: string; storeId?: string } = {},
 ) {
   const files = new Map(
     await Promise.all(
@@ -88,7 +89,7 @@ export async function startGraphServer(
       return;
     }
     const url = new URL(request.url ?? "/", `http://${expected}`),
-      prefix = `/${token}/`;
+      prefix = options.stable ? "/" : `/${token}/`;
     if (!url.pathname.startsWith(prefix)) {
       response.writeHead(404).end();
       return;
@@ -100,6 +101,40 @@ export async function startGraphServer(
       });
       response.end(JSON.stringify(value));
     };
+    if (options.stable) {
+      // The management key is kept in a private local file, never in page URLs.
+      if (name.startsWith("__dynamicwf/")) {
+        if (!options.managerKey || request.headers["x-dynamicwf-manager"] !== options.managerKey || request.headers.origin) {
+          json({ error: "Local manager authentication required" }, 403); return;
+        }
+        if (name === "__dynamicwf/identity" && request.method === "GET") {
+          json({ service: "dynamicwf-dashboard", version: 1, storeId: options.storeId }); return;
+        }
+        if (name === "__dynamicwf/stop" && request.method === "POST") {
+          json({ stopped: true });
+          server.close(); server.closeIdleConnections(); return;
+        }
+        json({ error: "Unknown management request" }, 404); return;
+      }
+      const cookieName = `dynamicwf_view_${(server.address() as { port: number }).port}`;
+      const authenticated = (request.headers.cookie ?? "").split(";").some(part => part.trim() === `${cookieName}=${token}`);
+      const site = request.headers["sec-fetch-site"];
+      const navigation = name === "index.html" && request.method === "GET" &&
+        request.headers["sec-fetch-mode"] === "navigate" && request.headers["sec-fetch-dest"] === "document";
+      if ((!navigation && site && site !== "none" && site !== "same-origin") ||
+          (request.headers.origin && request.headers.origin !== `http://${expected}`)) {
+        json({ error: "Open the dashboard directly on this computer" }, 403); return;
+      }
+      if (name === "index.html" && request.method === "GET") {
+        // Only a top-level local navigation can establish a browser session.
+        if (!navigation) {
+          json({ error: "Open the dashboard in a browser tab" }, 403); return;
+        }
+        response.setHeader("Set-Cookie", `${cookieName}=${token}; Path=/; HttpOnly; SameSite=Strict`);
+      } else if (!authenticated) {
+        json({ error: "Dashboard restarted; reload this page" }, 401); return;
+      }
+    }
     try {
       if (request.method === "POST" && ["control", "resolve", "reconcile"].includes(name)) {
         if (
@@ -279,7 +314,7 @@ export async function startGraphServer(
     throw error;
   }
   return {
-    url: `http://127.0.0.1:${(server.address() as { port: number }).port}/${token}/`,
+    url: `http://127.0.0.1:${(server.address() as { port: number }).port}${options.stable ? "/" : `/${token}/`}`,
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.close((error) => (error ? reject(error) : resolve()));
