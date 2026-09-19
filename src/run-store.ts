@@ -25,6 +25,13 @@ import {
 
 export type RunStatus = "queued" | "running" | "waiting" | "pausing" | "paused" | "cancelling" | "cancelled" | "succeeded" | "failed" | "interrupted";
 export type DesiredRunStatus = "running" | "paused" | "cancelled";
+/** Atomic control-state admission refusal; no activation has been started. */
+export class RunNotAcceptingWork extends Error {
+  constructor(readonly desired: DesiredRunStatus, readonly status: RunStatus) {
+    super(`Run is not accepting work: ${desired}/${status}`);
+    this.name = "RunNotAcceptingWork";
+  }
+}
 export interface RunRecord {
   id: string;
   plan: ExecutionPlan;
@@ -445,7 +452,7 @@ export class RunStore {
   beginActivation(id: string, token: string, context: RuntimeContext, options: { kind: string; sideEffect: boolean; reconciliation?: string }): ActivationRecord {
     return this.transaction(() => {
       const run = this.owned(id, token);
-      if (run.desired !== "running" || !["running", "waiting"].includes(run.status)) throw new Error(`Run is not accepting work: ${run.desired}/${run.status}`);
+      if (run.desired !== "running" || !["running", "waiting"].includes(run.status)) throw new RunNotAcceptingWork(run.desired, run.status);
       const key = activationKey(context);
       const old = this.getActivation(id, key);
       if (old && (old.kind !== options.kind || old.sideEffect !== options.sideEffect)) throw new Error(`Activation definition changed: ${key}`);
