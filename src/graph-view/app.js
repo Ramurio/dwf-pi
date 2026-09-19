@@ -568,7 +568,7 @@ function renderInspector() {
   const outgoing = selectedGraph().edges.filter((e) => e.from === node.id);
   if (node.retryPolicy) aside.append(el("p", "notice", `Повторы по политике: ${node.retryPolicy.codes.join(", ")} · задержка ${number(node.retryPolicy.delayMs)} мс · ${node.retryPolicy.maxAttempts === undefined ? "без лимита попыток" : `всего попыток до ${node.retryPolicy.maxAttempts}`}. Допускаются только подтверждённые not-started / read-only ошибки.`));
   if (node.retryPolicy?.provider) aside.append(el("p","muted",`Ошибки провайдера: ${node.retryPolicy.provider.statuses ? `только HTTP ${node.retryPolicy.provider.statuses.join(", ")}; без HTTP-статуса повтор не допускается` : "без фильтра HTTP-статусов"}. Retry-After: ${node.retryPolicy.provider.retryAfter === "honor" ? "учитывается как минимальная задержка" : "не изменяет задержку политики"}.`));
-  if (state.transition?.context.graphId === state.graph && state.transition.decision.from === node.id) {
+  if (state.transition?.context.graphId === state.graph && state.transition.decision.from === node.id && JSON.stringify(state.transition.context.scope) === state.scope) {
     aside.append(el("h3", "", "ВЫБРАННЫЙ ПЕРЕХОД"), transitionDetails(state.transition));
   }
   if (outgoing.length) {
@@ -1477,12 +1477,14 @@ $("search").addEventListener("input", renderRuns);
 for (const b of document.querySelectorAll("[data-tab]"))
   b.addEventListener("click", () => setTab(b.dataset.tab));
 $("graph-select").addEventListener("change", () => {
+  state.transition = null;
   state.graph = $("graph-select").value;
   state.scope = "";
   state.node = null;
   renderPanel();
 });
 $("scope-select").addEventListener("change", () => {
+  state.transition = null;
   state.scope = $("scope-select").value;
   renderPanel();
 });
