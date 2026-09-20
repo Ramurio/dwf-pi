@@ -10,6 +10,7 @@ test("public patch requires id while internal patch excludes it", async () => {
   try {
     const schemas = await service.dispatch("workflow.schema") as any;
     assert.deepEqual(schemas.patch, PublicDraftPatchSchema);
+    assert.deepEqual(portableInputSchema(PublicDraftPatchSchema), PublicDraftPatchSchema);
     assert.ok(schemas.patch.required.includes("id"));
     assert.equal(schemas.patch.additionalProperties, false);
     const internal = { expectedRevision: 1, operations: [{ op: "addGraph", graphId: "child" }] };
@@ -22,6 +23,13 @@ test("public patch requires id while internal patch excludes it", async () => {
     assert.throws(() => privateValidate({ id: "demo", ...internal }));
     await service.dispatch("workflow.create", { id: "demo", name: "Demo" });
     await service.dispatch("workflow.patch", { id: "demo", ...internal });
+    const value = { $id: "data", $ref: "Thing", $defs: { nested: [{ $ref: "literal" }] } };
+    const node = { id: "done", kind: "end", value: { op: "literal", value } };
+    const request = { id: "demo", expectedRevision: 2, operations: [{ op: "addNode", graphId: "main", node }] };
+    validate(request);
+    await service.dispatch("workflow.patch", request);
+    const inspected = await service.dispatch("workflow.inspect", { id: "demo" }) as any;
+    assert.deepEqual(inspected.graphs.main.nodes, [node]);
     await assert.rejects(service.dispatch("workflow.patch", internal));
   } finally { service.close(); }
 });

@@ -164,3 +164,23 @@ test("MCP startup help/errors do not emit banners on protocol stdout", () => {
     assert.ok(child.stderr.length > 0);
   }
 });
+
+test("every advertised schema accepts representative arguments without dispatch", () => {
+  const hash = "a".repeat(64);
+  const preparedId = `prepared-${hash}`;
+  const cases: Record<string, Record<string, unknown>> = {};
+  for (const name of ["catalog.list", "catalog.models", "system.doctor", "workflow.schema", "workflow.list", "run.list", "preset.list"]) cases[name] = {};
+  for (const name of ["workflow.inspect", "workflow.validate", "workflow.compile", "workflow.prepare", "run.start", "run.status", "run.inspect", "run.events", "run.usage", "run.waits", "run.trace", "run.pause", "run.resume", "run.cancel", "run.reconciliations", "run.continuation.inspect", "task.inspect", "task.usage"]) cases[name] = { id: "demo" };
+  for (const name of ["run.recovery", "run.retries", "run.collections", "run.attempts"]) cases[name] = { id: "demo", key: "main/done" };
+  cases["catalog.describe"] = { name: "general" };
+  cases["workflow.create"] = { id: "demo", name: "Demo" };
+  cases["workflow.patch"] = { id: "demo", expectedRevision: 1, operations: [{ op: "addGraph", graphId: "child" }] };
+  cases["workflow.prepared"] = { preparedId };
+  cases["run.resolve"] = { id: "demo", waitId: "wait", response: { $ref: "data" } };
+  cases["preset.save"] = { id: "demo", name: "example" };
+  cases["preset.inspect"] = cases["preset.run"] = { name: "example" };
+  cases["run.reconcile"] = { id: "demo", key: "main/done", attempt: 1, checkpoint: hash, workspaceDigest: hash, decisionId: "decision", action: "accept", actor: "reviewer", reason: "verified", evidence: ["offline"], output: null };
+  cases["run.continue"] = { preparedId, idempotencyKey: "continuation", source: { runId: "demo", checkpoint: hash, planHash: hash }, actor: "reviewer", reason: "revised", evidence: ["offline"], workspaceDigest: hash };
+  assert.deepEqual(Object.keys(cases).sort(), [...serviceToolNames].sort());
+  for (const tool of mcpToolDefinitions) assert.doesNotThrow(() => createOutputValidator(tool.inputSchema)(cases[tool.serviceTool]), tool.serviceTool);
+});
