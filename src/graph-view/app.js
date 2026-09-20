@@ -995,14 +995,17 @@ function renderGraph() {
   }
   for (const node of graph.nodes) {
     const pos = layout.positions.get(node.id),
+      selected = node.id === state.node,
       g = svgEl("g", {
-        class: `graph-node ${node.status}${attention(node) ? " attention" : ""}${node.id === state.node ? " selected" : ""}`,
+        class: `graph-node ${node.status}${attention(node) ? " attention" : ""}${selected ? " selected" : ""}`,
         transform: `translate(${pos.x} ${pos.y})`,
         tabindex: 0,
         role: "button",
+        "aria-pressed": String(selected),
         "aria-label": `${title(node)}: ${node.id}, ${names[node.status] ?? node.status}`,
       });
     g.append(
+      svgEl("title", {}, `${title(node)}: ${node.id}`),
       svgEl("rect", {
         class: "node-box",
         width: pos.width,
