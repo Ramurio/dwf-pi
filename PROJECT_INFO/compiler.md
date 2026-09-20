@@ -58,4 +58,4 @@ node, parentNodeId, visit, parentVisit, worktree, graph, childGraphId
 runtime и выполняет модуль из внешней runs directory. Произвольные данные графа
 не становятся импортами. Pi workers проверяют structured output, capabilities
 и settlement. Журнал не обещает exactly-once для внешних эффектов: неопределённый
-результат после crash нельзя повторять автоматически. См. `docs/run-journal.md`.
+результат после crash нельзя повторять автоматически. См. [run-journal.md](run-journal.md).

@@ -1,6 +1,6 @@
 # Учёт расхода
 
-Начиная с обновления 2026-09-10 новые workers отправляют `usage.report` после
+Workers отправляют `usage.report` после
 `message_end` каждого ответа модели. Это происходит до проверки `submit_result`,
 review binding и итогового checkpoint. Записи сохраняются в отдельном SQLite ledger.
 
@@ -56,9 +56,3 @@ task totals; выбор связанного запуска той же зада
 delivery, stale owner, rollback при ошибке event insert; CLI service/MCP schema и
 browser HTTP pagination. Эти проверки не расходуют подписку.
 
-2026-09-10: 65/65 targeted tests (`run-store`, `pi-worker`, `monitor`, `graph-view`,
-`mcp`, `usage-pages`), TypeScript и синтаксис браузерного JS прошли. В настоящем
-in-app browser проверены failed fixture с total=1210, неполными cache/reasoning,
-раскрытие двух ответов и сохранение раскрытия после перехода История→Токены.
-Поздний ответ, смена run, повтор после ошибки и недопущение одновременных запросов
-также проверены в тесте состояния страниц. Все данные fixture локальные и синтетические.

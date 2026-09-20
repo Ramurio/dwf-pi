@@ -55,22 +55,23 @@ Prepare the inspected snapshot, then start from that handle. Do not use the draf
 Use the same `--store` on every command if the journal is not the default.
 
 ```sh
-node -e 'const fs=require("node:fs"); process.stdout.write(JSON.stringify({id:"review-council",cwd:process.cwd()}));' | dynamicwf workflow.prepare > prepare-response.json
-node -e 'const e=JSON.parse(require("node:fs").readFileSync("prepare-response.json","utf8")); if(!e.ok) throw new Error(e.error.message); process.stdout.write(e.result.preparedId+"\n");'
+mkdir -p scratch/council
+node -e 'const fs=require("node:fs"); process.stdout.write(JSON.stringify({id:"review-council",cwd:process.cwd()}));' | dynamicwf workflow.prepare > scratch/council/prepare-response.json
+node -e 'const e=JSON.parse(require("node:fs").readFileSync("scratch/council/prepare-response.json","utf8")); if(!e.ok) throw new Error(e.error.message); process.stdout.write(e.result.preparedId+"\n");'
 ```
 
-Inspect `prepare-response.json` `result.plan`. Choose a stable `idempotencyKey` before
+Inspect `scratch/council/prepare-response.json` `result.plan`. Choose a stable `idempotencyKey` before
 sending. Save a start request that contains only that `preparedId`, `input`, and the key:
 
 ```sh
-node -e 'const fs=require("node:fs"); const prep=JSON.parse(fs.readFileSync("prepare-response.json","utf8")); if(!prep.ok) throw new Error(prep.error.message); const request={preparedId:prep.result.preparedId,idempotencyKey:"review-council-attempt-1",input:JSON.parse(fs.readFileSync("examples/council.input.json","utf8"))}; fs.writeFileSync("start-request.json", JSON.stringify(request));'
-dynamicwf run.start < start-request.json > start-response.json
-node -e 'const fs=require("node:fs"); const start=JSON.parse(fs.readFileSync("start-response.json","utf8")); if(!start.ok) throw new Error(start.error.message); const id=start.result.id; process.stdout.write(id+"\n"); process.stdout.write("dynamicwf watch --run "+JSON.stringify(id)+"\n");'
+node -e 'const fs=require("node:fs"); const prep=JSON.parse(fs.readFileSync("scratch/council/prepare-response.json","utf8")); if(!prep.ok) throw new Error(prep.error.message); const request={preparedId:prep.result.preparedId,idempotencyKey:"review-council-attempt-1",input:JSON.parse(fs.readFileSync("examples/council.input.json","utf8"))}; fs.writeFileSync("scratch/council/start-request.json", JSON.stringify(request));'
+dynamicwf run.start < scratch/council/start-request.json > scratch/council/start-response.json
+node -e 'const fs=require("node:fs"); const start=JSON.parse(fs.readFileSync("scratch/council/start-response.json","utf8")); if(!start.ok) throw new Error(start.error.message); const id=start.result.id; process.stdout.write(id+"\n"); process.stdout.write("dynamicwf watch --run "+JSON.stringify(id)+"\n");'
 ```
 
 Print the real `result.id` and that quoted watch command immediately, before waiting
 for completion (add `--store` to the watch line when used). A lost response is retried
-with the unchanged `start-request.json`. A new intended run needs a new key. Inspect
+with the unchanged `scratch/council/start-request.json`. A new intended run needs a new key. Inspect
 the result with `run.status` / `run.inspect`. A successful run means the council
 computation finished; inspect `taskOutcome` and `output.accepted` / `output.decision`
 to determine whether the artifact was approved. A computation can succeed with

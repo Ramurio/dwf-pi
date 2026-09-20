@@ -10,3 +10,4 @@ coverage/
 .dynamicwf/state.sqlite*
 *.tsbuildinfo
 scratch/
+*.log

@@ -1,122 +1,108 @@
 # dynamicwf-pi
 
-Динамические агентные workflow на pi: агент собирает блоки и связи через инструменты,
-а система проверяет схему и машинно генерирует исполняемый TypeScript + Effect.
-Один переносимый skill объясняет интерфейс любому совместимому harness.
+Собирайте агентные workflow из блоков и связей, запускайте независимых pi workers
+и наблюдайте результат в браузере или терминале. Поддерживаются условия, циклы
+доработки по ревью, параллельные ветки, динамический fan-out и вложенные графы.
+Закрытие чата, harness или окна мониторинга не останавливает workflow.
 
-## Состояние
+## Установка
 
-Работают графовый authoring, девять ролей, машинная генерация TS + Effect и отдельный
-supervisor с pi workers. Есть условия, циклы, динамический fan-out, вложенные графы,
-pause/resume/cancel, durable journal, CLI/MCP, переносимый skill, терминальный watch
-и проектные/глобальные пресеты. `dynamicwf ui` запускает локальный браузерный
-монитор с графом, историей, токенами и управлением запусками. Граф и настройки фиксируются до запуска; закрытие
-клиента не останавливает выполнение.
-
-Настоящий Codex прошёл review→repair→review с паузой и возобновлением из другого
-клиента; Grok 4.6 проверен отдельным вызовом. Heavy ID не обнаружен в обновлённом
-каталоге аккаунта. Поддержка локальная, POSIX; модель выбирается из реального pi
-каталога. По умолчанию нет лимитов стоимости, итераций или обязательных согласований.
-
-- [Требования и критерии приёмки](docs/requirements.md)
-- [Вопросы и открытые решения](docs/questions.md)
-- [Ответы пользователя и принятые решения](docs/decisions.md)
-- [Разбор проекта и приоритеты развития — 2026-09-10](docs/project-review-2026-09-10.md)
-- [Архитектурное предложение](docs/architecture-proposal.md)
-- [Итоги и сравнительные исследования](docs/research/README.md)
-- [Результаты реализации и проверок](docs/progress.md)
-- [Контракт графа](docs/graph-contract.md), [операции authoring](docs/authoring.md), [компилятор](docs/compiler.md)
-- [CLI/service](docs/service.md), [MCP](docs/mcp.md), [установка и skill](docs/setup.md)
-- [Диагностика и модели](docs/doctor.md), [Grok provider](docs/grok-provider.md)
-- [Браузерный интерфейс](docs/browser-ui.md), [Пресеты](docs/presets.md), [терминальный watch](docs/watch.md), [council из четырёх reviewers](docs/examples.md), [переносимый research-trio](skills/dynamic-workflows/recipes/research-trio/README.md)
-- [Execution plan](docs/execution-plan.md), [журнал](docs/run-journal.md), [pi worker](docs/pi-worker.md)
-- [Явные результаты и сохраняемое ожидание](docs/outcomes-and-waits.md): `finish`, `await`, ответ из CLI/MCP/браузера и восстановление.
-- [Общая проекция состояния](docs/observation.md): одинаковые outcome, waiting и liveness в CLI/MCP/watch/browser.
-- [Фактические переходы](docs/routing-trace.md): причины выбора ветки, страницы трассы и связь с графом.
-- [Git worktree и интеграция](docs/workspaces.md), [live coding-проверка](docs/workspaces-live.md), [live MCP council](docs/council-live.md)
-
-## Проверить локально
-
-Требуется Node >=22.19.0; текущая проверенная среда — Node 26.8.1.
+Нужны **Node >=22.19.0**, Git и локальная POSIX-среда (macOS/Linux).
+В каталоге репозитория выполните:
 
 ```sh
 npm ci
-npm run typecheck
-npm test
 npm run setup
 dynamicwf system.doctor
 dynamicwf catalog.models
-dynamicwf ui
 ```
 
-Установка создаёт ссылки на команду в `~/.local/bin` и skill в `~/.agents/skills`.
-Если bin directory отсутствует в PATH, используй напечатанный абсолютный путь.
-Harness может прочитать [SKILL.md](skills/dynamic-workflows/SKILL.md) напрямую или
-подключить `dynamicwf mcp` как stdio server. Специфичные настройки harness не меняются.
-Стандартный граф трёх независимых исследователей и отдельного синтезатора — в
-[recipes/research-trio](skills/dynamic-workflows/recipes/research-trio/README.md);
-он копируется из установленного skill и не требует `examples/` или `src/`.
+Setup создаёт ссылки `~/.local/bin/dynamicwf` и
+`~/.agents/skills/dynamic-workflows`. Добавьте `~/.local/bin` в PATH, если он ещё
+не там. Checkout и `node_modules` остаются установленным приложением.
+Авторизация моделей берётся из локального pi; setup её не создаёт.
+Выбирайте точные provider/model/thinking из `catalog.models`, а не название подписки.
+[Другие пути установки и подключение harness](PROJECT_INFO/setup.md).
 
-CLI принимает один JSON-запрос через stdin и возвращает один JSON-ответ.
-Без установки команда доступна как `npm run --silent cli -- <tool>`.
-По умолчанию черновики и run journal хранятся в `~/.dynamicwf/state.sqlite`; путь можно задать
-через `DYNAMICWF_HOME` или `--store /path/state.sqlite`.
+## Дать задачу агенту
+
+Агенту нужен установленный skill [dynamic-workflows](skills/dynamic-workflows/SKILL.md)
+и доступ к shell или MCP. Например:
+
+> Используй dynamic-workflows. Собери граф: планирование, реализация в отдельном
+> worktree, тесты, независимое ревью и доработка до одобрения. Модели выбери из
+> каталога. После старта сразу дай run ID и команду watch. Сохранять пресет не нужно.
+
+Для трёх независимых исследователей с общим итогом есть готовый
+[research-trio](skills/dynamic-workflows/recipes/research-trio/README.md).
+Другой пример — [council reviewers](PROJECT_INFO/examples.md).
+Граф создаётся инструментами до запуска; писать scheduler или JS-оркестрацию не нужно.
+
+CLI принимает один JSON-запрос через stdin. MCP запускается командой
+`dynamicwf mcp` и предоставляет тот же интерфейс.
 
 ```sh
-echo '{"id":"demo","name":"My workflow"}' | dynamicwf workflow.create
-echo '{"id":"demo"}' | dynamicwf workflow.inspect
-echo '{}' | dynamicwf workflow.schema
+dynamicwf workflow.create <<'JSON'
+{"id":"my-flow","name":"My workflow"}
+JSON
+
+dynamicwf workflow.schema <<'JSON'
+{}
+JSON
 ```
 
-Примеры операций addNode/connect и цикл review→repair находятся в документации
-authoring. `workflow.validate` показывает ошибки незаконченного draft;
-`workflow.compile` принимает только завершённую корректную схему и возвращает source/hash.
-`workflow.prepare {id,cwd}` сохраняет snapshot и возвращает `{preparedId,planHash,cwd,createdAt,plan}`.
-Снимок фиксирует граф, модели, thinking, skills и generated source и привязывает канонический путь `cwd`; живые файлы, Git HEAD и inode каталога не замораживаются.
-`run.start {preparedId,idempotencyKey,input}` запускает именно его; повтор с тем же
-ключом и входом возвращает тот же run ID. Пересмотр той же задачи — `run.continuation.inspect`
-и `run.continue`, а не новый unrelated start со скопированным JSON. `workflow.prepared {preparedId}` позволяет
-снова прочитать snapshot. Старт `{id,cwd,input}` напрямую из draft остаётся отдельным
-режимом и каждый раз создаёт новый run; `run.status`, `run.inspect`, `run.events`
-показывают фактическое состояние. `dynamicwf watch --run <id>` открывает компактный монитор: текущая работа,
-история, схема и расход токенов на отдельных вкладках (1/2/3/4), без повторяющихся простыней.
+После добавления узлов и проверки графа `workflow.prepare` фиксирует настройки
+и возвращает `preparedId`. `run.start` с этим ID и заранее выбранным
+`idempotencyKey` запускает план; повторная доставка того же запроса возвращает
+тот же запуск. [Порядок запуска](PROJECT_INFO/prepared-start.md).
 
-Для постоянной закладки в браузере один раз выполни `dynamicwf ui --install`
-(macOS), затем открывай **http://127.0.0.1:4380/**. Панель запускается при входе
-в систему; старые и новые запуски доступны в одном месте. `dynamicwf ui --run <id>`
-печатает сохраняемую ссылку на запуск. [Настройка панели](docs/browser-ui.md).
-
-`run.pause` дожидается текущих workers, `run.resume` продолжает, `run.cancel`
-прерывает их. Завершённые checkpoints не повторяются при восстановлении.
-Неопределённые внешние эффекты после crash не запускаются заново молча.
-`run.recovery` связывает инспекцию с точной попыткой, checkpoint и файлами;
-`run.reconcile` сохраняет обоснованное принятие результата или одноразовое разрешение
-повтора. Решение готовит тот же запуск к `run.resume`, сохраняя историю, расход и
-операторскую паузу. `run.reconciliations` и браузер показывают автора, основания и
-факт применения. Контракт и оставшиеся Git-сценарии: [reconciliation](docs/reconciliation.md).
-После инспекции решение можно заполнить прямо в браузере; сохранение и продолжение
-запуска остаются отдельными действиями.
-`preset.save {id:runId,name,scope}` сохраняет успешный план; `preset.run` повторяет
-его с новым input и новыми сессиями. Все запросы — JSON, не код оркестрации.
-
-Permission profiles ограничивают набор tools; это не OS sandbox. Выданный shell
-работает с правами локального пользователя. Review verdict привязан к переданной
-версии артефакта; автор обязан указать реальную версию проверяемых данных.
-Для параллельных coding-веток используй `worktree`, для слияния одобренных результатов
-— явный `integrate`. Исходный и целевой workspace должны быть чистыми Git roots;
-конфликт не считается успешной интеграцией. Ветки и результаты сохраняются.
-
-Live probe не входит в `npm test` и требует явно указать доступную модель:
+## Смотреть и управлять
 
 ```sh
-npm run probe:pi -- --provider openai-codex --model gpt-5.6-sol
-npm run probe:workflow -- --provider openai-codex --model gpt-5.6-sol
+dynamicwf ui                    # открыть/найти фоновую панель
+dynamicwf ui --install          # на macOS: запуск панели при входе в систему
+dynamicwf watch --run <run-id>   # терминальный монитор
 ```
 
-Результат выполненного live probe и границы его доказательства — в
-[отчёте pi](docs/research/pi-live.md); сквозной запуск — в
-[отчёте workflow](docs/research/workflow-live.md).
+Постоянная закладка по умолчанию: **http://127.0.0.1:4380/**.
+В панели доступны старые и новые запуски, граф, история, фактические переходы,
+токены, причины остановки и ответы на ожидания. `dynamicwf ui --run <run-id>`
+печатает ссылку на конкретный запуск. [Настройка панели](PROJECT_INFO/browser-ui.md).
 
-Проект самостоятельный. Соседний `remote-pi` не является его зависимостью.
+```sh
+dynamicwf run.list <<'JSON'
+{}
+JSON
 
-[Результаты Grok-кампании и статус переноса исправлений](docs/campaign-harvest.md).
+dynamicwf run.pause <<'JSON'
+{"id":"run-ID"}
+JSON
+```
+
+Для продолжения используйте `run.resume`, для отмены — `run.cancel` с тем же JSON.
+Пауза дожидается текущих workers и запрещает новую работу; отмена прерывает workers.
+Закрытие watch или вкладки только отключает просмотр.
+
+По умолчанию данные хранятся в `~/.dynamicwf/state.sqlite`.
+`DYNAMICWF_HOME` меняет каталог состояния, `--store /path/state.sqlite` — журнал.
+Во всех командах одного запуска используйте одну базу.
+
+## Результаты и ограничения
+
+- Статус `succeeded` означает завершение графа. Принятие задачи определяется
+  отдельно по `taskOutcome.decision`: `accepted`, `rejected` или `inconclusive`.
+- Токены — сохранённые отчёты SDK. Неизвестный расход не считается нулём;
+  эти числа не являются счётом или остатком подписки.
+- После аварии неопределённые внешние действия не повторяются молча.
+  Используйте [инспекцию и reconciliation](PROJECT_INFO/reconciliation.md).
+- Граф работающего запуска неизменяем. Для пересмотра той же задачи существует
+  связанное продолжение; старый результат и история сохраняются.
+- Параллельная запись кода требует отдельных worktrees; слияние — явный `integrate`.
+- Tool permissions и worktrees не являются OS sandbox: shell имеет права пользователя.
+- По умолчанию нет скрытых лимитов итераций, стоимости, времени или обязательных
+  человеческих согласований. Политика задаётся графом.
+- Пресеты сохраняются только явно из принятого запуска; доступны проектная и
+  глобальная библиотеки. [Работа с пресетами](PROJECT_INFO/presets.md).
+
+[PROJECT_INFO: архитектура, контракты, разработка и важные ограничения](PROJECT_INFO/README.md).
+Проект самостоятельный и не зависит от соседнего remote-pi.
