@@ -28,6 +28,13 @@ export const AgentConfigSchema = Type.Object({
 export type AgentConfig = Static<typeof AgentConfigSchema>;
 export interface RoleDefinition { readonly name: RoleName; readonly description: string; readonly defaults: AgentConfig }
 
+/** The SDK advertises selected skills only when their entry files can be read. */
+export function skillToolIssue(skills: readonly unknown[], tools: readonly string[]): string | undefined {
+  if (skills.length && !tools.some(tool => tool === "read" || tool === "bash")) {
+    return "Selected skills require the read or bash tool to load SKILL.md; configure a reading tool or remove the selected skills";
+  }
+}
+
 const reviewerOutputSchema = {
   type: "object", additionalProperties: false,
   required: ["decision", "summary", "findings", "artifactRevision"],
@@ -83,5 +90,7 @@ export function resolveAgentConfig(roleName: RoleName, overrides: AgentConfig = 
   if (config.permission === "read-only" && config.tools?.some((tool) => ["bash", "write", "edit"].includes(tool))) {
     throw new Error("read-only permission cannot grant bash, write or edit (including role defaults)");
   }
+  const skillIssue = skillToolIssue(config.skills ?? [], config.tools ?? []);
+  if (skillIssue) throw new Error(skillIssue);
   return deepFreeze(structuredClone(config));
 }

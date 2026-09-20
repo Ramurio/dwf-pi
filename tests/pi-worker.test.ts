@@ -2,7 +2,7 @@ import { ExecutionFailure } from "../src/execution-failure.js";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
@@ -270,15 +270,42 @@ test("frozen resources exclude discovered project context and skills", async t =
   await writeFile(join(f.request.cwd, ".pi", "APPEND_SYSTEM.md"), "POISON_APPEND");
   await writeFile(join(f.request.cwd, ".pi", "skills", "poison", "SKILL.md"), "---\nname: poison\ndescription: unwanted\n---\nPOISON_SKILL");
   const text = "---\nname: selected\ndescription: frozen selected skill\n---\nFROZEN_SKILL_BODY";
+  f.request.config.tools = ["read"];
   f.request.config.skills = [{ name: "selected", hash: "test", files: [{ path: "SKILL.md", base64: Buffer.from(text).toString("base64"), executable: false }, { path: "scripts/check.sh", base64: Buffer.from("echo frozen\n").toString("base64"), executable: true }] }];
   await executePiWorker(f.request, f.options);
   assert.doesNotMatch(f.calls[0]?.systemPrompt ?? "", /POISON/);
   assert.match(f.calls[0]?.systemPrompt ?? "", /FROZEN_PROMPT/);
+  assert.match(f.calls[0]?.systemPrompt ?? "", /frozen selected skill/);
+  assert.doesNotMatch(f.calls[0]?.systemPrompt ?? "", /FROZEN_SKILL_BODY/);
   assert.equal(await readFile(join(f.request.resourceDirectory, "selected", "SKILL.md"), "utf8"), text);
+});
+
+for (const tools of [[], ["grep"]] as const) test(`inaccessible frozen skills with tools ${JSON.stringify(tools)} fail before resources, auth or dispatch`, async t => {
+  const f = await fixture(t, [() => submit()]);
+  const text = "---\nname: selected\ndescription: frozen selected skill\n---\nFROZEN_SKILL_BODY";
+  f.request.config.tools = [...tools];
+  f.request.config.skills = [{ name: "selected", hash: "test", files: [{ path: "SKILL.md", base64: Buffer.from(text).toString("base64"), executable: false }] }];
+  let runtimeAdmissions = 0;
+  await assert.rejects(executePiWorker(f.request, {
+    ...f.options, get modelRuntime() { runtimeAdmissions++; return f.options.modelRuntime!; },
+  }), (error: unknown) => {
+    assert.ok(error instanceof ExecutionFailure);
+    assert.equal(error.failure.code, "configuration");
+    assert.equal(error.failure.phase, "setup");
+    assert.equal(error.failure.effects, "not-started");
+    assert.match(error.message, /skills require.*read.*bash/i);
+    return true;
+  });
+  assert.equal(runtimeAdmissions, 0);
+  assert.equal(f.calls.length, 0);
+  assert.deepEqual(f.events, []);
+  await assert.rejects(lstat(f.request.resourceDirectory), { code: "ENOENT" });
+  await assert.rejects(lstat(f.request.sessionDirectory), { code: "ENOENT" });
 });
 
 for (const path of ["../escape", "/escape", "nested/../../escape", "nested\\escape", "nested//escape"]) test(`reject unsafe snapshot path ${path}`, async t => {
   const f = await fixture(t, []); f.request.config.skills = [{ name: "bad", hash: "test", files: [{ path: "SKILL.md", base64: "", executable: false }, { path, base64: "", executable: false }] }];
+  f.request.config.tools = ["read"];
   await assert.rejects(executePiWorker(f.request, f.options), /Unsafe frozen skill path/); assert.equal(f.calls.length, 0);
 });
 test("reject symlink resource directory", async t => {
@@ -355,25 +382,41 @@ test("a closed supervisor output pipe cancels bootstrap without an uncaught EPIP
   assert.doesNotMatch(stderr, /Unhandled 'error' event|Error: write EPIPE/);
 });
 
-for (const alias of [undefined, "declared-alias"]) test(`frozen skill prepared from ${alias ? "declared alias" : "directory fallback"} runs through actual SDK`, async t => {
-  const f = await fixture(t, [() => submit()]);
+for (const alias of [undefined, "declared-alias"]) for (const tool of ["read", "bash"] as const) test(`frozen skill from ${alias ? "declared alias" : "directory fallback"} is read by actual SDK ${tool} after deleting its source`, async t => {
+  const f = await fixture(t, [context => {
+    assert.match(context.systemPrompt ?? "", /A selected frozen skill/);
+    assert.doesNotMatch(context.systemPrompt ?? "", /FROZEN_SKILL_BODY_ANSWER_42/);
+    const skillPath = context.systemPrompt?.match(/<location>([^<]+)<\/location>/)?.[1];
+    assert.equal(skillPath, join(f.request.resourceDirectory, alias ?? "original-directory", "SKILL.md"));
+    return reply([{ type: "toolCall", id: "read-selected-skill", name: tool, arguments: tool === "read"
+      ? { path: skillPath } : { command: `cat -- '${skillPath}'` } }], "toolUse");
+  }, context => {
+    const result = context.messages.find(message => message.role === "toolResult" && message.toolCallId === "read-selected-skill");
+    assert.ok(result?.role === "toolResult");
+    assert.equal(result.isError, false);
+    assert.match(JSON.stringify(result.content), /FROZEN_SKILL_BODY_ANSWER_42/);
+    return submit();
+  }]);
   const skillDirectory = join(f.request.cwd, "original-directory");
   await mkdir(skillDirectory);
-  const content = `---\n${alias ? `name: ${alias}\n` : ""}description: A selected frozen skill\n---\nInspect assigned input.`;
+  const content = `---\n${alias ? `name: ${alias}\n` : ""}description: A selected frozen skill\n---\nFROZEN_SKILL_BODY_ANSWER_42`;
   await writeFile(join(skillDirectory, "SKILL.md"), content);
   const { prepareExecutionPlan } = await import("../src/execution-plan.js");
   const plan = await prepareExecutionPlan({ schemaVersion: 1, id: "skills", name: "Skills", revision: 1, entryGraph: "main", graphs: { main: { entry: "work", nodes: [
-    { id: "work", kind: "agent", role: "general", task: { op: "literal", value: "Submit result" }, config: { skills: ["original-directory"], thinking: "off", tools: [], outputSchema: f.request.config.outputSchema } },
+    { id: "work", kind: "agent", role: "general", task: { op: "literal", value: "Submit result" }, config: { skills: ["original-directory"], thinking: "off", tools: [tool], permission: tool === "bash" ? "workspace-write" : "read-only", outputSchema: f.request.config.outputSchema } },
     { id: "done", kind: "end", value: { op: "ref", path: ["nodes", "work"] } },
   ], edges: [{ from: "work", to: "done" }] } } }, { cwd: f.request.cwd, availableModels: [{ provider, id: modelId, thinkingLevels: ["off"] }] });
   f.request.config = plan.agents.main!.work!;
   await rm(skillDirectory, { recursive: true });
   assert.deepEqual((await executePiWorker(f.request, f.options)).output, { answer: 42 });
+  assert.equal(f.calls.length, 2);
+  assert.deepEqual(f.calls[0]!.tools!.map(item => item.name), [tool, "submit_result"]);
   assert.equal(await readFile(join(f.request.resourceDirectory, alias ?? "original-directory", "SKILL.md"), "utf8"), content);
 });
 
 test("worker rejects unsafe skill names before filesystem admission", async t => {
   const f = await fixture(t, []);
+  f.request.config.tools = ["read"];
   f.request.config.skills = [{ name: "../escape", hash: "test", files: [{ path: "SKILL.md", base64: "", executable: false }] }];
   await assert.rejects(executePiWorker(f.request, f.options), /Unsafe frozen skill name/);
 });

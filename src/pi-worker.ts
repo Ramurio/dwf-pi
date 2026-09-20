@@ -7,7 +7,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { TSchema } from "typebox";
 import { Check } from "typebox/value";
-import { OutputRepairSchema, toolNames } from "./catalog.js";
+import { OutputRepairSchema, skillToolIssue, toolNames } from "./catalog.js";
 import { outputFailureMessages, type OutputFailureCause, type OutputRepairProgress } from "./output-repair.js";
 import type { Json } from "./graph.js";
 import type { PiWorkerMessage, PiWorkerRequest, PiWorkerResult } from "./execution-types.js";
@@ -111,6 +111,8 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
   if (!Check(OutputRepairSchema, repairPolicy)) throw executionFailure("configuration","setup","not-started","Invalid frozen output repair policy");
   if (config.tools.some(tool => !toolNames.includes(tool))) throw executionFailure("configuration","setup","not-started","Unknown pi worker tool");
   if (config.permission === "read-only" && config.tools.some(tool => ["bash", "write", "edit"].includes(tool))) throw executionFailure("configuration","setup","not-started","read-only worker cannot grant mutation tools");
+  const skillIssue = skillToolIssue(config.skills, config.tools);
+  if (skillIssue) throw executionFailure("configuration","setup","not-started",skillIssue);
   if (request.sessionFile && config.session !== "continue-node") throw executionFailure("configuration","setup","not-started","Fresh worker cannot restore a prior session");
   let validateOutput: ReturnType<typeof createOutputValidator>;
   try { validateOutput = createOutputValidator(config.outputSchema); }

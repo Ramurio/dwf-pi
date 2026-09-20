@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { lstat, readdir, readFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
-import { resolveAgentConfig, type AgentConfig } from "./catalog.js";
+import { resolveAgentConfig, skillToolIssue, type AgentConfig } from "./catalog.js";
 import { compileWorkflow, compilerVersion, type CompilerVersion } from "./compiler.js";
 import { assertParallelWriterIsolation } from "./workspaces.js";
 import { runtimeVersion, type ExecutionPlan, type FrozenAgent, type SkillSnapshot } from "./execution-types.js";
@@ -122,6 +122,8 @@ function verifyAgent(value: unknown, location: string, runtime: string): void {
   const { skills, capabilities: _capabilities, adapterIdentity: _adapter, reasoning: _reasoning, ...config } = agent;
   resolveAgentConfig("general", { ...config, skills: [] } as AgentConfig);
   for (const key of ["model", "thinking", "systemPrompt", "tools", "session", "permission", "outputSchema"]) if (agent[key] === undefined) throw new Error(`${location}: missing ${key}`);
+  const skillIssue = skillToolIssue(skills, agent.tools as FrozenAgent["tools"]);
+  if (skillIssue) throw new Error(`${location}: ${skillIssue}`);
   createOutputValidator(object(agent.outputSchema, `${location}.outputSchema`));
   const names = new Set<string>();
   for (const value of skills) {
