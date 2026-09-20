@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Dynamicwf · Workflows</title>
+    <title>Dynamicwf · Запуски</title>
     <link rel="stylesheet" href="style.css" />
     <script type="module" src="app.js"></script>
   </head>
@@ -26,7 +26,7 @@
     </aside>
     <main>
       <header class="topbar">
-        <span>WORKFLOW MONITOR</span
+        <span>МОНИТОР ПРОЦЕССОВ</span
         ><span id="connection" role="status">Подключение…</span>
       </header>
       <div id="notice" class="notice" role="alert" hidden></div>
@@ -123,12 +123,12 @@
       <h2>Отменить запуск?</h2>
       <p id="cancel-target"></p>
       <p>
-        Активные workers будут остановлены. Продолжить этот запуск после отмены
+        Активные исполнители будут остановлены. Продолжить этот запуск после отмены
         нельзя.
       </p>
       <div class="controls">
         <button id="cancel-back">Вернуться</button
-        ><button id="cancel-confirm" class="danger">Отменить workflow</button>
+        ><button id="cancel-confirm" class="danger">Отменить запуск</button>
       </div>
     </dialog>
   </body>
