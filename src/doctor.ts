@@ -25,8 +25,8 @@ export interface DoctorOptions {
 }
 const execute = promisify(execFile);
 function supportedNode(version: string): boolean {
-  const parts = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(version);
-  if (!parts) return false;
+  const parts = /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(version);
+  if (!parts || parts[0] !== version) return false;
   return Number(parts[1]) > 22 || Number(parts[1]) === 22 && Number(parts[2]) >= 19;
 }
 async function permitted(path: string, mode: number): Promise<boolean> { try { await access(path, mode); return true; } catch { return false; } }

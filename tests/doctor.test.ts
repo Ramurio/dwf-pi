@@ -37,6 +37,38 @@ test("doctor does not modify existing state content or create SQLite sidecars", 
   assert.equal(result.readyFor.agentRuns, false); assert.equal(result.readyFor.grok, false);
 });
 
+const supportedVersions = [
+  "22.19.0", "22.20.0", "23.0.0", "v22.19.0", "22.19.1",
+  "22.19.0+build.1", "v22.19.0+sha-abc.001", "23.0.0+rc.1",
+];
+const unsupportedVersions = [
+  "22.18.999", "21.0.0", "21.99.99", "21.x", "", "unknown", "22.19",
+  "22.19.0-rc.1", "23.0.0-rc.1", "v24.0.0-nightly.1", "23.0.0-rc.1+build.7",
+  "22.18.999+build.1", "22.19.0+", "22.19.0-", "22.19.0+build..meta",
+  "22.19.0+build.", "22.19.0+build_meta", "22.19.0+build+extra", "22.19.0junk",
+  " 22.19.0", "22.19.0 ", "22.19.0\n", "22.19.0\r\n", "22.19.0+build.1\n",
+  "vv22.19.0", "V22.19.0", "022.19.0", "22.019.0", "22.19.00",
+];
+for (const [versions, supported] of [[supportedVersions, true], [unsupportedVersions, false]] as const) {
+  for (const nodeVersion of versions) {
+    test(`doctor stable Node version ${JSON.stringify(nodeVersion)} is ${supported ? "supported" : "unavailable"}`, async t => {
+      const f = await fixture(t); const stateDirectory = join(f.directory, "state");
+      await mkdir(stateDirectory);
+      const bytes = Buffer.from("existing state must remain unchanged\0"); await writeFile(f.filename, bytes);
+      const before = await readdir(stateDirectory); const rootBefore = await readdir(f.directory);
+      const result = await diagnoseSystem({ ...f, nodeVersion, platform: "linux", availableModels: models });
+      assert.equal(result.store, f.filename);
+      assert.deepEqual(result.models, models);
+      assert.deepEqual(result.issues, []);
+      assert.deepEqual(await readFile(f.filename), bytes);
+      assert.deepEqual(await readdir(stateDirectory), before);
+      assert.deepEqual(await readdir(f.directory), rootBefore);
+      assert.equal(result.checks.find(check => check.id === "node")!.status, supported ? "ok" : "unavailable");
+      assert.deepEqual(result.readyFor, { pureRuns: supported, agentRuns: supported, grok: supported, workspaceWrites: supported });
+    });
+  }
+}
+
 test("doctor distinguishes unsupported Node, platform, missing workspace and nonpersistent state", async t => {
   const f = await fixture(t);
   const oldNode = await diagnoseSystem({ ...f, availableModels: models, nodeVersion: "22.18.0", platform: "linux" });
