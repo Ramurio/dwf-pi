@@ -12,21 +12,43 @@ export interface TokenUsage {
   partialFields?: BreakdownField[];
 }
 const nonnegative = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
+const invalidField = Symbol("invalid usage field");
+/** Absent optional fields are allowed, inherited/accessor/hidden fields are not. */
+function ownUsageField(value: object, name: string): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(value, name);
+  if (!descriptor) return name in value ? invalidField : undefined;
+  return descriptor.enumerable && Object.hasOwn(descriptor, "value") ? descriptor.value : invalidField;
+}
 export function parseUsage(value: unknown): TokenUsage | undefined {
   if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
-  const usage = value as Record<string, unknown>;
-  if (!nonnegative(usage.input) || !nonnegative(usage.output) || !nonnegative(usage.totalTokens)) return undefined;
-  const result: TokenUsage = { input: usage.input, output: usage.output, totalTokens: usage.totalTokens };
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return undefined;
+  const input = ownUsageField(value, "input"), output = ownUsageField(value, "output"), totalTokens = ownUsageField(value, "totalTokens");
+  if (!nonnegative(input) || !nonnegative(output) || !nonnegative(totalTokens)) return undefined;
+  const result: TokenUsage = { input, output, totalTokens };
   for (const name of breakdownFields) {
-    if (usage[name] !== undefined) {
-      if (!nonnegative(usage[name])) return undefined;
-      result[name] = usage[name];
+    const field = ownUsageField(value, name);
+    if (field !== undefined) {
+      if (!nonnegative(field)) return undefined;
+      result[name] = field;
     }
   }
-  if (usage.partialFields !== undefined) {
-    if (!Array.isArray(usage.partialFields) || new Set(usage.partialFields).size !== usage.partialFields.length ||
-      usage.partialFields.some(name => !breakdownFields.includes(name) || result[name as BreakdownField] === undefined)) return undefined;
-    if (usage.partialFields.length) result.partialFields = [...usage.partialFields];
+  const partial = ownUsageField(value, "partialFields");
+  if (partial !== undefined) {
+    if (!Array.isArray(partial)) return undefined;
+    const length = Object.getOwnPropertyDescriptor(partial, "length");
+    if (!length || !Object.hasOwn(length, "value") || !Number.isSafeInteger(length.value) || length.value < 0) return undefined;
+    const names: BreakdownField[] = [];
+    const seen = new Set<string>();
+    for (let index = 0; index < length.value; index++) {
+      const descriptor = Object.getOwnPropertyDescriptor(partial, String(index));
+      if (!descriptor?.enumerable || !Object.hasOwn(descriptor, "value")) return undefined;
+      const name: unknown = descriptor.value;
+      if (typeof name !== "string" || !breakdownFields.includes(name as BreakdownField) || seen.has(name) || result[name as BreakdownField] === undefined) return undefined;
+      seen.add(name);
+      names.push(name as BreakdownField);
+    }
+    if (names.length) result.partialFields = names;
   }
   return result;
 }

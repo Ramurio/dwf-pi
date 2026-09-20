@@ -95,6 +95,45 @@ test("mixed provider breakdown retains known subtotals across journal reads and 
   });
 });
 
+test("rejected usage leaves ledger, events and projections unchanged before and after accounting", async () => {
+  for (const existing of [false, true]) await withStores((store, second, filename) => {
+    create(store); const { token } = store.reserveLaunch("run");
+    store.beginActivation("run", token, context, { kind: "agent", sideEffect: true });
+    const valid = { input: 1, output: 2, totalTokens: 3, cost: 0 };
+    if (existing) {
+      store.startUsage("run", token, key);
+      store.recordUsage("run", token, key, "1", valid, "stop");
+    }
+    let calls = 0;
+    const accessor = { ...valid };
+    Object.defineProperty(accessor, "input", { get() { calls++; return 1; } });
+    const indices = ["cost"];
+    Object.defineProperty(indices, "0", { get() { calls++; return "cost"; } });
+    const invalid = [accessor, Object.assign(Object.create({}), valid), { ...valid, partialFields: indices }, { ...valid, partialFields: new Array(1) }];
+    const database = new DatabaseSync(filename);
+    try {
+      const snapshot = () => ({
+        reports: second.usageReports("run"), events: second.events("run"),
+        metadata: second.getActivation("run", key)!.metadata,
+        summary: summarizeUsage(second.listActivations("run")),
+        attempts: database.prepare("SELECT * FROM workflow_usage_attempts ORDER BY attempt").all(),
+        ledger: database.prepare("SELECT * FROM workflow_usage_reports ORDER BY seq").all(),
+      });
+      const before = snapshot();
+      for (const value of invalid) {
+        assert.throws(() => store.recordUsage("run", token, key, "2", value, "stop"), /Invalid worker usage report/);
+        assert.deepEqual(snapshot(), before);
+      }
+      assert.equal(calls, 0);
+      store.recordUsage("run", token, key, "2", valid, "stop");
+      store.recordUsage("run", token, key, "2", valid, "stop");
+      assert.equal(second.usageReports("run").reports.length, before.reports.reports.length + 1);
+      assert.equal(second.events("run").filter(event => event.type === "usage.reported").length, Number(existing) + 1);
+      assert.equal(summarizeUsage(second.listActivations("run")).totalTokens, 3 * (Number(existing) + 1));
+    } finally { database.close(); }
+  });
+});
+
 test("response accounting persists before completion, deduplicates delivery and survives failed output", async () => {
   await withStores(async (store, second, filename) => {
     create(store);
