@@ -1,3 +1,4 @@
+import { drainedChild } from "./helpers/drained-child.js";
 import { ExecutionFailure } from "../src/execution-failure.js";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -352,7 +353,7 @@ test("fresh workers cannot accept continuation and read-only cannot grant bash",
 test("worker child emits only NDJSON and terminal error for malformed input", { timeout: 10000 }, async () => {
   const child = spawn(process.execPath, ["--import", "tsx", fileURLToPath(new URL("../src/pi-worker-process.ts", import.meta.url))], { stdio: ["pipe", "pipe", "pipe", "ipc"] });
   let output = ""; child.stdout!.on("data", chunk => { output += chunk.toString(); }); child.stderr!.resume();
-  const exited = new Promise<number | null>((res, rej) => { child.on("error", rej); child.on("close", res); });
+  const exited = drainedChild(child);
   child.stdin!.end("not JSON");
   assert.equal(await exited, 1);
   const messages = output.trim().split("\n").map(line => JSON.parse(line));
@@ -363,7 +364,7 @@ for (const method of ["SIGTERM", "disconnect"] as const) test(`worker child canc
   const child = spawn(process.execPath, ["--import", "tsx", fileURLToPath(new URL("../src/pi-worker-process.ts", import.meta.url))], { stdio: ["pipe", "pipe", "pipe", "ipc"] });
   let output = ""; let cancelled = false;
   child.stdout!.on("data", chunk => { output += chunk.toString(); if (!cancelled && output.includes('"ready"')) { cancelled = true; if (method === "disconnect") child.disconnect(); else child.kill(method); } }); child.stderr!.resume();
-  const exited = new Promise<number | null>((res, rej) => { child.on("error", rej); child.on("exit", res); });
+  const exited = drainedChild(child);
   assert.equal(await exited, 130);
   const messages = output.trim().split("\n").map(line => JSON.parse(line));
   assert.deepEqual(messages.map(message => message.type), ["ready", "error"]);
@@ -376,7 +377,7 @@ test("a closed supervisor output pipe cancels bootstrap without an uncaught EPIP
   child.stderr!.setEncoding("utf8").on("data", data => { stderr += data; });
   child.stdin!.on("error", () => {});
   t.after(() => { if (child.exitCode === null) child.kill("SIGKILL"); });
-  const exited = new Promise<number | null>((resolve, reject) => { child.once("exit", resolve); child.once("error", reject); });
+  const exited = drainedChild(child);
   child.stdout!.destroy();
   assert.equal(await exited, 130);
   assert.doesNotMatch(stderr, /Unhandled 'error' event|Error: write EPIPE/);

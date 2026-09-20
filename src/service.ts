@@ -280,7 +280,10 @@ export class WorkflowService {
         const start = { preparedId: parsed.preparedId, idempotencyKey: parsed.idempotencyKey, operation: continuationKind };
         const controller = this.getController();
         const existing = controller.store.findStart(start, parsed.input, canonicalContinuationRequest(parsed));
-        if (existing) return publicObservation(controller.snapshot(existing.id));
+        if (existing) {
+          await controller.completeStart(existing.id);
+          return publicObservation(controller.snapshot(existing.id));
+        }
         const prepared = this.getPlans().get(parsed.preparedId);
         const run = await controller.continuePrepared(parsed, prepared.plan, prepared.cwd);
         return publicObservation(controller.snapshot(run.id));

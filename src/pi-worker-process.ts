@@ -20,6 +20,7 @@ send({ type: "ready" });
 let executionAdmitted = false;
 try {
   let text = "";
+  process.stdin.setEncoding("utf8");
   for await (const chunk of process.stdin) {
     if (controller.signal.aborted) throw new Error("Pi worker cancelled");
     text += chunk.toString();

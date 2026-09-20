@@ -21,6 +21,7 @@ process.on("disconnect", cancel);
 if (typeof process.send === "function" && !process.connected) cancel();
 try {
   let input = "";
+  process.stdin.setEncoding("utf8");
   for await (const chunk of process.stdin) input += String(chunk);
   if (stopped) throw new Error("Check cancelled before admission");
   const request = JSON.parse(input) as { command: string; args: string[]; cwd: string };

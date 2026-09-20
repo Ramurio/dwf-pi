@@ -451,3 +451,25 @@ test("reasoning provenance survives ledger reads without inventing legacy origin
     assert.throws(()=>store.recordUsage('run',token,key,'1',usage,'stop','high','request-payload'),/conflict/i);
   });
 });
+
+test("automatic SQLite rollback preserves SQLITE_FULL and the previous checkpoint", () => {
+  const store = new RunStore(":memory:");
+  const db = (store as any).database as DatabaseSync;
+  try {
+    create(store); const { token } = store.reserveLaunch("run");
+    store.beginActivation("run", token, context, { kind: "check", sideEffect: true });
+    const before = store.getActivation("run", key), events = store.events("run");
+    const pages = db.prepare("PRAGMA page_count").get()!.page_count;
+    db.exec(`PRAGMA max_page_count=${pages}`);
+    assert.throws(() => store.completeActivation("run", token, key, "x".repeat(256 * 1024)), (error: any) => {
+      assert.equal(error.errcode, 13);
+      assert.match(error.message, /full/);
+      assert.match(error.rollbackError.message, /no transaction/);
+      return true;
+    });
+    assert.deepEqual(store.getActivation("run", key), before); assert.deepEqual(store.events("run"), events);
+    db.exec("PRAGMA max_page_count=100000");
+    store.completeActivation("run", token, key, 42);
+    assert.equal(store.getActivation("run", key)?.output, 42);
+  } finally { store.close(); }
+});

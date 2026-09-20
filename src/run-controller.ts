@@ -27,7 +27,7 @@ export interface UnresolvedWorkerGroup { key: string; attempt: number; groupPid:
 
 const supervisorPath = fileURLToPath(new URL("./supervisor.ts", import.meta.url));
 function commandLine(pid: number): string | undefined {
-  try { return execFileSync("ps", ["-p", String(pid), "-o", "args="], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim() || undefined; }
+  try { return execFileSync("ps", ["-p", String(pid), "-o", "args="], { encoding: "utf8", env: { ...process.env, LC_ALL: process.platform === "darwin" ? "en_US.UTF-8" : "C.UTF-8" }, stdio: ["ignore", "pipe", "pipe"] }).trim() || undefined; }
   catch (error) {
     const detail = error as { status?: number; stderr?: Buffer | string; stdout?: Buffer | string };
     if (detail.status === 1 && !String(detail.stderr ?? "").trim() && !String(detail.stdout ?? "").trim()) return undefined;
@@ -64,7 +64,7 @@ function matchesSupervisor(line: string, run: RunRecord, filename: string): bool
 }
 
 function processInventory(): string[] {
-  return execFileSync("ps", ["-ax", "-o", "pid=,args="], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).split("\n");
+  return execFileSync("ps", ["-ax", "-o", "pid=,args="], { encoding: "utf8", env: { ...process.env, LC_ALL: process.platform === "darwin" ? "en_US.UTF-8" : "C.UTF-8" }, stdio: ["ignore", "pipe", "pipe"] }).split("\n");
 }
 function matchingPids(lines: readonly string[], marker: string, script: string): number[] {
   return lines.filter(line => matchesCommand(line, marker, script))
@@ -123,7 +123,9 @@ export class RunController {
   }
   /** Finish only the create-before-reserve gap. A duplicate start never resumes interrupted work. */
   async completeStart(id: string): Promise<RunRecord> {
-    await this.launch(id, true);
+    if (this.store.fence(id)) return this.store.get(id);
+    try { await this.launch(id, true); }
+    catch (error) { if (!this.store.fence(id)) throw error; }
     return this.store.get(id);
   }
   private async observeContinuationWorkspace(id: string) {
@@ -414,7 +416,7 @@ export class RunController {
     const start = { preparedId: request.preparedId, idempotencyKey: request.idempotencyKey, operation: continuationKind };
     const canonical = canonicalContinuationRequest(request);
     const existing = this.store.findStart(start, request.input, canonical);
-    if (existing) return this.store.get(existing.id);
+    if (existing) return this.completeStart(existing.id);
     const verified = verifyExecutionPlan(plan);
     if (preparedExecutionId(verified.hash, cwd) !== request.preparedId) throw new Error("Prepared start identity mismatch");
     const workspace = await executionWorkspace(cwd);
@@ -433,7 +435,7 @@ export class RunController {
     };
     let inspection;
     try { inspection = await inspect(); }
-    catch (error) { return this.store.get(existingAfterRace(error).id); }
+    catch (error) { return this.completeStart(existingAfterRace(error).id); }
     const writerBlockers = continuationWriterBlockers(this.store.listActivations(request.source.runId), request.dispositions);
     if (writerBlockers.length) throw new Error(`Continuation is blocked: ${writerBlockers.map(item => item.code).join(", ")}`);
     const gitBlockers = await this.continuationGitBlockers(request.source.runId);
@@ -451,7 +453,7 @@ export class RunController {
       return resolveReuseBinding({ binding, target, sourceRun, sourceActivation, sourcePlanHash: sourceRun.plan.hash, input: request.input, producer });
     });
     try { inspection = await inspect(); }
-    catch (error) { return this.store.get(existingAfterRace(error).id); }
+    catch (error) { return this.completeStart(existingAfterRace(error).id); }
     const paused = inspection.desired === "paused" || inspection.status === "paused";
     const id = `run-${randomUUID()}`;
     let run;
@@ -459,8 +461,8 @@ export class RunController {
       run = this.store.createContinuation({
         id, plan: verified, cwd: workspace, start, request, reused, paused,
       });
-    } catch (error) { return this.store.get(existingAfterRace(error).id); }
-    if (run.id !== id) return this.store.get(run.id);
+    } catch (error) { return this.completeStart(existingAfterRace(error).id); }
+    if (run.id !== id) return this.completeStart(run.id);
     return this.completeStart(run.id);
   }
 }

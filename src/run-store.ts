@@ -243,7 +243,16 @@ export class RunStore {
   private transaction<T>(body: () => T, mode: "write" | "read" = "write"): T {
     this.database.exec(mode === "write" ? "BEGIN IMMEDIATE" : "BEGIN");
     try { const result = body(); this.database.exec("COMMIT"); return result; }
-    catch (error) { this.database.exec("ROLLBACK"); throw error; }
+    catch (error) {
+      // SQLite can roll back automatically (e.g. SQLITE_FULL). Never replace
+      // the storage failure with "no transaction is active" from cleanup.
+      try { this.database.exec("ROLLBACK"); } catch (rollbackError) {
+        if (error instanceof Error && Object.isExtensible(error) && !Object.hasOwn(error, "rollbackError")) {
+          Object.defineProperty(error, "rollbackError", { value: rollbackError });
+        }
+      }
+      throw error;
+    }
   }
   private event(id: string, type: string, payload: Json): void {
     this.database.prepare("INSERT INTO workflow_run_events(run_id,type,payload,at) VALUES(?,?,?,?)")

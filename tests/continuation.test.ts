@@ -143,6 +143,11 @@ test("exact continue redelivery returns the same run before rereading the worksp
   await wait(c, first.id, "succeeded");
   const again = await s.dispatch("run.continue", { ...request, input: { z: 1 } }) as { id: string; status: string };
   assert.equal(again.id, first.id);
+  const beforeReplay = c.store.events(original.id);
+  const sourceAgain = await s.dispatch("run.start", { preparedId: prepared.preparedId, idempotencyKey: "o", input: { z: 1 } }) as { id: string };
+  assert.equal(sourceAgain.id, original.id);
+  assert.deepEqual(c.store.events(original.id), beforeReplay);
+  await assert.rejects(c.control(original.id, "resume"), /continuation/);
   await assert.rejects(s.dispatch("run.continue", { ...request, reason: "changed" }), /idempotency conflict/);
   await assert.rejects(s.dispatch("run.start", { preparedId: prepared.preparedId, idempotencyKey: "same-continue", input: { z: 1 } }), /operation/);
 }));
@@ -740,4 +745,30 @@ test("first admission revalidates source Git ownership after a paused continuati
   git(seeded.allocation.path, "checkout", "-B", "moved-after-receipt");
   await assert.rejects(s.dispatch("run.resume", { id: target.id }), /unresolved-worktree-ownership/);
   assert.equal(c.store.listActivations(target.id).length, 0);
+}));
+
+test("redelivery finishes a committed continuation before its first reservation exactly once", { timeout: 30_000 }, async () => fixture(async (s, c, directory, filename) => {
+  await author(s, "sourceGap", [planNode, done]);
+  const sourcePlan = await s.dispatch("workflow.prepare", { id: "sourceGap" }) as PreparedExecution;
+  const source = await s.dispatch("run.start", { preparedId: sourcePlan.preparedId, idempotencyKey: "gap-source" }) as { id: string };
+  await wait(c, source.id, "succeeded");
+  await author(s, "targetGap", [writeOk, { id: "done", kind: "end", value: { op: "literal", value: true } }]);
+  const targetPlan = await s.dispatch("workflow.prepare", { id: "targetGap" }) as PreparedExecution;
+  const inspection = await c.continuationInspect(source.id);
+  const request = { preparedId: targetPlan.preparedId, idempotencyKey: "gap-cont", actor: "test", reason: "gap", evidence: ["source complete"], source: { runId: source.id, checkpoint: inspection.checkpoint, planHash: inspection.planHash }, workspaceDigest: inspection.workspace!.digest };
+  const original = RunController.prototype.completeStart;
+  RunController.prototype.completeStart = async function(id) {
+    if (this.store.receiptForTarget(id)) throw new Error("injected create-before-reserve");
+    return original.call(this, id);
+  };
+  try { await assert.rejects(s.dispatch("run.continue", request), /create-before-reserve/); }
+  finally { RunController.prototype.completeStart = original; }
+  const fresh = new WorkflowService(filename, { cwd: directory, availableModels: [] });
+  try {
+    const results = await Promise.all([fresh.dispatch("run.continue", request), s.dispatch("run.continue", request)]) as { id: string }[];
+    assert.equal(results[0]!.id, results[1]!.id);
+    await wait(c, results[0]!.id, "succeeded");
+    assert.equal(await readFile(join(directory, "effects"), "utf8"), "continued\n");
+    assert.equal(c.store.events(results[0]!.id).filter(event => event.type === "run.reserved").length, 1);
+  } finally { fresh.close(); }
 }));
