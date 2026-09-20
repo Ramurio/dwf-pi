@@ -611,7 +611,7 @@ export class RunStore {
       this.database.prepare("UPDATE workflow_waits SET status='resolved',response=?,resolved_by=?,resolved_at=? WHERE run_id=? AND id=?")
         .run(JSON.stringify(valid), resolvedBy, Date.now(), id, waitId);
       const activation = this.getActivation(id, wait.key);
-      if (activation?.kind === "await" && activation.metadata.waitId === waitId) {
+      if (activation?.kind === "await" && activation.status === "running" && activation.metadata.waitId === waitId) {
         const metadata = { ...activation.metadata, waitResolved: true };
         this.database.prepare("UPDATE workflow_activations SET metadata=? WHERE run_id=? AND activation_key=?")
           .run(JSON.stringify(metadata), id, wait.key);
