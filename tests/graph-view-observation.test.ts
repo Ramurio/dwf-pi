@@ -73,6 +73,157 @@ async function replay(script: string, fixtures: Record<string, unknown> = {}) {
     window: { addEventListener() {} }, ResizeObserver: class { observe() {} }, fetch() { throw new Error("Unexpected request"); } });
 }
 
+test("late 401 from background task, trace, usage and inspection reads cannot reload a new visit", async () => {
+  for (const kind of ["task", "trace", "tokens", "attempts", "recovery", "reconciliations"]) for (const returnToSource of [false, true]) await replay(`
+    let finish, reloads = 0; const requests = [];
+    const prefix = {task:'task-usage?',trace:'trace?',tokens:'usage?',attempts:'attempts?',recovery:'recovery?',reconciliations:'reconciliations?'}[kind];
+    window.location = {reload(){reloads++;}};
+    globalThis.fetch = path => {
+      requests.push(path);
+      if (path.startsWith(prefix)) return new Promise(resolve => {finish=resolve;});
+      if (path.startsWith('reconciliations?')) return Promise.resolve({ok:true,status:200,json:async()=>[]});
+      if (path.startsWith('snapshot?')) return Promise.resolve({ok:true,status:200,json:async()=>path.endsWith(other.id)?other:base});
+      throw Error('Unexpected request: '+path);
+    };
+    let work;
+    if (kind === 'task') {
+      state.tab='tokens'; renderTokens();
+      work=buttons().find(b=>b.textContent==='Вся задача').listeners.get('click')[0](new Event('click'));
+    } else if (kind === 'trace') {
+      state.run.trace={supported:true,count:1,failed:0,lastSeq:1}; state.tab='trace'; renderTrace();
+    } else if (kind === 'tokens') {
+      state.tab='tokens'; renderTokens();
+      work=buttons().find(b=>b.textContent==='Показать исходные отчёты ответов').listeners.get('click')[0](new Event('click'));
+    } else {
+      const box=el('div'), activation={key:'key-operation',attempt:1,status:'failed'};
+      if (kind==='attempts') renderAttempts(box,activation);
+      else if (kind==='recovery') renderRecovery(box,activation);
+      else renderReconciliations(box,activation);
+      const label={attempts:'Попытки: 1',recovery:'Проверить состояние для восстановления',reconciliations:'Решения о восстановлении'}[kind];
+      work=descendants(box).find(b=>b.tagName==='button'&&b.textContent===label).listeners.get('click')[0](new Event('click'));
+    }
+    state.tab='now'; await selectRun(other.id,'none'); if (returnToSource) await selectRun(base.id,'none');
+    fields()[0].value='CURRENT_DRAFT'; fields()[0].dispatchEvent(new Event('input')); notice('CURRENT_NOTICE');
+    const before=requests.length;
+    finish({ok:false,status:401}); await work;
+    for(let i=0;i<12;i++) await Promise.resolve(); // Drain the trace renderer's automatic page load.
+    assert.equal(reloads,0,kind);
+    assert.equal(requests.length,before);
+    assert.equal(fields()[0].value,'CURRENT_DRAFT');
+    assert.equal($('notice').textContent,'CURRENT_NOTICE');
+  `, { kind, returnToSource, base: { ...snapshot(), lineage: { taskId: "task-a" } },
+    other: { ...snapshot({ id: "run-other" }, [{ ...waiting("other"), runId: "run-other" }]), lineage: { taskId: "task-b" } } });
+});
+
+test("background usage responses and decoding errors still settle into their original cache after navigation", async () => {
+  for (const mode of ["success", "decoding", "failure", "invalid-json", "401"]) await replay(`
+    let finish, finishBody, rejectBody, bodyStarted, reloads=0;
+    const requests=[], bodyReady=new Promise(resolve=>{bodyStarted=resolve;});
+    window.location={reload(){reloads++;}};
+    globalThis.fetch=path=>{
+      requests.push(path);
+      if(path.startsWith('usage?'))return new Promise(resolve=>{finish=resolve;});
+      return Promise.resolve({ok:true,status:200,json:async()=>path.endsWith(other.id)?other:base});
+    };
+    state.tab='tokens';renderTokens();
+    const loading=buttons().find(b=>b.textContent==='Показать исходные отчёты ответов').listeners.get('click')[0](new Event('click'));
+    if(mode==='decoding'||mode==='failure'||mode==='invalid-json'){
+      finish({ok:mode!=='failure',status:mode==='failure'?400:200,json:()=>new Promise((resolve,reject)=>{finishBody=resolve;rejectBody=reject;bodyStarted();})});await bodyReady;
+    }
+    state.tab='now';await selectRun(other.id,'none');
+    fields()[0].value='OTHER_DRAFT';fields()[0].dispatchEvent(new Event('input'));notice('OTHER_NOTICE');
+    const page={reports:[{seq:7,key:'key-correctness',attempt:1,reportId:'original',usage:{input:1,output:2,totalTokens:3},stopReason:'stop'}],nextAfter:7,hasMore:false};
+    if(mode==='401')finish({ok:false,status:401});
+    else if(mode==='failure')finishBody({error:'ORIGINAL_HTTP_BODY_ERROR'});
+    else if(mode==='invalid-json')rejectBody(new SyntaxError('ORIGINAL_INVALID_JSON'));
+    else if(mode==='decoding')finishBody(page);
+    else finish({ok:true,status:200,json:async()=>page});
+    await loading;
+    const cached=usagePages.get(base.id);
+    assert.equal(cached.loading,false);assert.equal(reloads,0);
+    if(mode==='success'||mode==='decoding'){
+      assert.equal(JSON.stringify(cached.reports),JSON.stringify(page.reports));assert.equal(cached.cursor,7);assert.equal(cached.error,null);
+    }else{
+      assert.equal(cached.reports.length,0);assert.equal(cached.cursor,0);
+      assert.match(cached.error,mode==='401'?/Сессия панели изменилась/:mode==='invalid-json'?/ORIGINAL_INVALID_JSON/:/ORIGINAL_HTTP_BODY_ERROR/);
+      assert.doesNotMatch(cached.error,/Восстанавливаем подключение/);
+    }
+    assert.equal(usagePages.get(other.id).reports.length,0);
+    assert.equal(fields()[0].value,'OTHER_DRAFT');assert.equal($('notice').textContent,'OTHER_NOTICE');
+    assert.equal(requests.filter(path=>path.startsWith('usage?')).length,1);
+    await selectRun(base.id,'none');state.tab='tokens';renderTokens();
+    if(cached.error){
+      assert.ok($('content-panel').textContent.includes(cached.error));
+      assert.doesNotMatch($('content-panel').textContent,/Восстанавливаем подключение/);
+    }
+  `, { mode, other: snapshot({ id: "run-other" }, [{ ...waiting("other"), runId: "run-other" }]) });
+});
+
+test("late recovery receipts remain usable without changing another visit or repeating the decision", async () => {
+  for (const mode of ["success", "decoding", "401", "failure"]) for (const returnToSource of [false, true]) await replay(`
+    let finish,fail,finishBody,bodyStarted,reloads=0;
+    const requests=[],bodyReady=new Promise(resolve=>{bodyStarted=resolve;});
+    window.location={reload(){reloads++;}};
+    globalThis.fetch=(path,options)=>{
+      requests.push({path,body:options?.body});
+      if(path==='reconcile')return new Promise((resolve,reject)=>{finish=resolve;fail=reject;});
+      if(path.startsWith('snapshot?'))return Promise.resolve({ok:true,status:200,json:async()=>path.endsWith(other.id)?other:base});
+      throw Error('Unexpected request: '+path);
+    };
+    const box=el('div'),activation={key:'key-operation',attempt:1,status:'failed'};
+    const inspection={value:{attempt:1,checkpoint:'checkpoint',workspace:{digest:'workspace'}},records:[]};
+    renderRecoveryForm(box,activation,inspection,async()=>{});
+    const identity=JSON.stringify([base.id,activation.key,1]),draft=recoveryDrafts.get(identity);
+    Object.assign(draft,{action:'retry',actor:'Fixture reviewer',reason:'Verified fixture',evidence:'No outside effects'});
+    const sending=descendants(box).find(b=>b.tagName==='button'&&b.textContent==='Сохранить решение').listeners.get('click')[0](new Event('click'));
+    if(mode==='decoding'){
+      finish({ok:true,status:200,json:()=>new Promise(resolve=>{finishBody=resolve;bodyStarted();})});await bodyReady;
+    }
+    await selectRun(other.id,'none');if(returnToSource)await selectRun(base.id,'none');
+    fields()[0].value='CURRENT_DRAFT';fields()[0].dispatchEvent(new Event('input'));notice('CURRENT_NOTICE');
+    const before=requests.length,request=JSON.parse(requests.find(r=>r.path==='reconcile').body),receipt={request,createdAt:3};
+    if(mode==='401')finish({ok:false,status:401});
+    else if(mode==='failure')fail(Error('ORIGINAL_RECONCILE_FAILURE'));
+    else if(mode==='decoding')finishBody(receipt);
+    else finish({ok:true,status:200,json:async()=>receipt});
+    await sending;
+    assert.equal(reloads,0);assert.equal(requests.length,before);
+    assert.equal(fields()[0].value,'CURRENT_DRAFT');assert.equal($('notice').textContent,'CURRENT_NOTICE');
+    assert.equal(requests.filter(r=>r.path==='reconcile').length,1);
+    assert.equal(draft.request.decisionId,request.decisionId);assert.equal(draft.busy,false);
+    if(mode==='success'||mode==='decoding'){
+      assert.deepEqual(draft.receipt,receipt);
+      assert.deepEqual(reconciliationRecords.get(JSON.stringify([base.id,activation.key])).value,[receipt]);
+    }else{
+      assert.equal(draft.receipt,null);
+      assert.match(draft.error,mode==='401'?/Сессия панели изменилась/:/ORIGINAL_RECONCILE_FAILURE/);
+    }
+  `, { mode, returnToSource, crypto: { randomUUID: () => "fixture-decision-id" }, base: snapshot({ status: "paused", desired: "paused" }),
+    other: snapshot({ id: "run-other" }, [{ ...waiting("other"), runId: "run-other" }]) });
+});
+
+test("current recovery replies still refresh the run and current 401 still reloads", async () => {
+  for(const unauthorized of [false,true])await replay(`
+    let reloads=0;const requests=[];window.location={reload(){reloads++;}};
+    globalThis.fetch=async(path,options)=>{
+      requests.push({path,body:options?.body});
+      if(path==='reconcile')return unauthorized?{ok:false,status:401}:{ok:true,status:200,json:async()=>({request:JSON.parse(options.body),createdAt:3})};
+      return {ok:true,status:200,json:async()=>base};
+    };
+    const box=el('div'),activation={key:'key-operation',attempt:1,status:'failed'};
+    renderRecoveryForm(box,activation,{value:{attempt:1,checkpoint:'checkpoint',workspace:{digest:'workspace'}},records:[]},async()=>{});
+    const draft=recoveryDrafts.get(JSON.stringify([base.id,activation.key,1]));
+    Object.assign(draft,{action:'retry',actor:'Fixture reviewer',reason:'Verified fixture',evidence:'No outside effects'});
+    await descendants(box).find(b=>b.tagName==='button'&&b.textContent==='Сохранить решение').listeners.get('click')[0](new Event('click'));
+    assert.equal(reloads,unauthorized?1:0);
+    assert.equal(requests.filter(r=>r.path==='reconcile').length,1);
+    assert.equal(requests.filter(r=>r.path.startsWith('snapshot?')).length,unauthorized?0:1);
+    assert.equal(draft.busy,false);assert.equal(draft.request.decisionId,'fixture-decision-id');
+    if(unauthorized)assert.match(draft.error,/Восстанавливаем подключение/);else assert.equal(draft.receipt.request.decisionId,'fixture-decision-id');
+  `,{unauthorized,crypto:{randomUUID:()=>"fixture-decision-id"},base:snapshot({status:"paused",desired:"paused"})});
+});
+
+
 test("same-run snapshots cannot restore an older wait/status or replace a current connection message", async () => {
   await replay(`
     const pending = [];

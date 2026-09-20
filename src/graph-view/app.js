@@ -163,9 +163,13 @@ function notice(message) {
   $("notice").hidden = !message;
 }
 async function api(path, options, isCurrent = () => true) {
+  const selectedRun = state.id, selection = state.runSelection;
   const response = await fetch(path, { cache: "no-store", ...options });
   if (!isCurrent()) return;
   if (response.status === 401) {
+    // Background pages and recovery receipts still settle in their own caches,
+    // but an expired session response cannot reload a different run visit.
+    if (state.id !== selectedRun || state.runSelection !== selection) throw new Error("Сессия панели изменилась. Обнови данные, чтобы продолжить.");
     // A viewer restart rotates the local session; the bookmark itself stays valid.
     window.location.reload();
     throw new Error("Восстанавливаем подключение к панели…");
@@ -716,6 +720,7 @@ function renderRecoveryForm(container, activation, inspection, inspectState) {
   card.append(el("p", "muted", "Сохранение решения не запускает работу и не снимает паузу."));
   const submit = button(draft.busy ? "Сохраняем решение…" : draft.request ? "Повторить отправку того же решения" : "Сохранить решение", async () => {
     if (draft.busy) return;
+    const selection = state.runSelection;
     draft.error = null;
     try {
       if (!draft.request) {
@@ -731,7 +736,7 @@ function renderRecoveryForm(container, activation, inspection, inspectState) {
       const records = [...(inspection.records ?? []).filter(record => record.request.decisionId !== draft.receipt.request.decisionId).map(record => record.request.decisionId === draft.receipt.request.supersedes ? { ...record, supersededBy: draft.receipt.request.decisionId } : record), draft.receipt];
       recoveryInspections.set(JSON.stringify([id, activation.key]), { ...inspection, records });
       reconciliationRecords.set(JSON.stringify([id, activation.key]), { value: records, at: Date.now(), saved: true });
-      if (state.id === id) { notice("Решение о восстановлении сохранено. Запуск продолжится по отдельной команде."); await refreshSnapshot(); }
+      if (state.id === id && state.runSelection === selection) { notice("Решение о восстановлении сохранено. Запуск продолжится по отдельной команде."); await refreshSnapshot(); }
     } catch (error) { draft.error = error.message; }
     finally { draft.busy = false; if (state.id === id) renderInspector(); }
   }, "child-button");
