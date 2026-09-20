@@ -84,15 +84,9 @@ export function evaluate(expression: Expr, scope: ExpressionScope): Json {
 
 /** Conditions take priority in authoring order; fallback applies only if none match. */
 export function chooseEdge(nodeId: string, edges: readonly Edge[], scope: ExpressionScope): string {
-  const outgoing = edges.filter(edge => edge.from === nodeId);
-  const fallbacks = outgoing.filter(edge => edge.when === undefined);
-  if (fallbacks.length > 1) throw new ExpressionError(`Multiple fallback edges from ${nodeId}`);
-  for (const edge of outgoing) {
-    if (edge.when !== undefined && boolean(evaluate(edge.when, scope))) return edge.to;
-  }
-  const fallback = fallbacks[0];
-  if (fallback) return fallback.to;
-  throw new ExpressionError(`No matching outgoing edge from ${nodeId}`);
+  const result = routeEdge(nodeId, edges, scope);
+  if (!result.ok) throw result.thrown;
+  return result.to;
 }
 
 export interface EdgeEvaluation { edgeIndex: number; to: string; result: "true" | "false" | "not-evaluated" | "fallback" | "error" }
@@ -102,25 +96,39 @@ export interface RoutingDecision {
 }
 /** Records evaluation order and short-circuiting without persisting raw input values. */
 export function explainEdge(nodeId: string, edges: readonly Edge[], scope: ExpressionScope): RoutingDecision {
+  return routeEdge(nodeId, edges, scope).decision;
+}
+
+type RoutingResult =
+  | { ok: true; decision: RoutingDecision; to: string }
+  | { ok: false; decision: RoutingDecision; thrown: unknown };
+
+// Keep the original thrown value outside the JSON trace, including falsy values.
+function routeEdge(nodeId: string, edges: readonly Edge[], scope: ExpressionScope): RoutingResult {
   const outgoing = edges.map((edge, edgeIndex) => ({ edge, edgeIndex })).filter(({ edge }) => edge.from === nodeId);
   const trace: RoutingDecision = { version: 1, from: nodeId, edgeIndex: null, to: null, reason: "no-match", error: null,
     evaluations: outgoing.map(({ edge, edgeIndex }) => ({ edgeIndex, to: edge.to, result: "not-evaluated" })) };
   const fallbacks = outgoing.filter(({ edge }) => edge.when === undefined);
-  if (fallbacks.length > 1) { trace.reason = "error"; trace.error = `Multiple fallback edges from ${nodeId}`; return trace; }
+  if (fallbacks.length > 1) { trace.reason = "error"; trace.error = `Multiple fallback edges from ${nodeId}`;
+    return { ok: false, decision: trace, thrown: new ExpressionError(trace.error) }; }
   for (const [i, { edge, edgeIndex }] of outgoing.entries()) {
     if (edge.when === undefined) continue;
     try {
       const matched = boolean(evaluate(edge.when, scope));
       trace.evaluations[i]!.result = matched ? "true" : "false";
-      if (matched) { trace.edgeIndex = edgeIndex; trace.to = edge.to; trace.reason = "condition"; return trace; }
+      if (matched) { trace.edgeIndex = edgeIndex; trace.to = edge.to; trace.reason = "condition";
+        return { ok: true, decision: trace, to: edge.to }; }
     } catch (error) {
       trace.evaluations[i]!.result = "error"; trace.reason = "error";
-      trace.error = error instanceof Error ? error.message : "Condition evaluation failed"; return trace;
+      trace.error = error instanceof Error ? error.message : "Condition evaluation failed";
+      return { ok: false, decision: trace, thrown: error };
     }
   }
   if (fallbacks[0]) {
     const { edge, edgeIndex } = fallbacks[0]; trace.edgeIndex = edgeIndex; trace.to = edge.to; trace.reason = "fallback";
     trace.evaluations.find(e => e.edgeIndex === edgeIndex)!.result = "fallback";
-  } else trace.error = `No matching outgoing edge from ${nodeId}`;
-  return trace;
+    return { ok: true, decision: trace, to: edge.to };
+  }
+  trace.error = `No matching outgoing edge from ${nodeId}`;
+  return { ok: false, decision: trace, thrown: new ExpressionError(trace.error) };
 }
