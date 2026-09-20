@@ -156,7 +156,7 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
       await runtime.getAuth(model, { ...(options.signal ? { signal: options.signal } : {}) });
     } catch (error) {
       if (!options.signal?.aborted && isModelsAuthError(error)) {
-        throw executionFailure("provider", "setup", "not-started", "Provider authentication failed before a request was sent; re-authenticate with local pi. Stored credentials were not replaced.", { diagnostic: { dispatch: "not-dispatched" } });
+        throw executionFailure("provider", "setup", "not-started", "Provider authentication failed before a request was sent; re-authenticate with local pi.", { diagnostic: { dispatch: "not-dispatched" } });
       }
       throw error;
     }
@@ -273,11 +273,13 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
         if (["error","aborted"].includes(event.message.stopReason)) failedResponse = currentResponse.value;
         const usage = parseUsage({ ...event.message.usage, cost: event.message.usage.cost?.total });
         const reportId = String(++reportIndex);
-        if (usage && hasProviderReportedUsage(usage, event.message.stopReason)) {
+        if (usage && (event.message.usageReported === true || event.message.usageReported !== false && hasProviderReportedUsage(usage, event.message.stopReason))) {
           reports.push(usage);
           const observedEffort = typeof event.message.providerThinkingLevel === "string" ? event.message.providerThinkingLevel
             : lastObservation?.sentReasoning ?? (lastObservation?.dispatch === "not-dispatched" || lastObservation?.dispatch === "unknown" ? "unknown" : "unknown");
-          options.onEvent?.({ type: "usage.report", reportId, usage, stopReason: event.message.stopReason, observedEffort });
+          const observedEffortSource = typeof event.message.providerThinkingLevel === "string" ? "sdk-message"
+            : lastObservation?.sentReasoning ? "request-payload" : "unknown";
+          options.onEvent?.({ type: "usage.report", reportId, usage, stopReason: event.message.stopReason, observedEffort, observedEffortSource });
         } else options.onEvent?.({ type: "usage.unavailable", reportId });
       }
     });

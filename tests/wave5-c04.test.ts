@@ -14,7 +14,7 @@ const modelId = "offline-oauth";
 const accessSecret = "A0_TEST_ACCESS_NO_SECRET";
 const refreshSecret = "RT0_TEST_REFRESH_NO_SECRET";
 const fixtureDetail = "invalid_grant FIXTURE";
-const closedAuthMessage = "Provider authentication failed before a request was sent; re-authenticate with local pi. Stored credentials were not replaced.";
+const closedAuthMessage = "Provider authentication failed before a request was sent; re-authenticate with local pi.";
 
 async function fixture(t: TestContext, refreshToken: (credentials: OAuthCredentials) => Promise<OAuthCredentials>) {
   const directory = await mkdtemp(join(tmpdir(), "dynamicwf-wave5-c04-"));

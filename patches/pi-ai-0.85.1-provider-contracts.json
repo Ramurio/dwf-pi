@@ -1,0 +1,21 @@
+{
+  "version": "0.85.1",
+  "files": {
+    "dist/api/bedrock-converse-stream.js": [
+      "13d6fec97d08f4303714aca50f3113ba0263706e961fc220ccb1cc023c520e6b",
+      "f9671ad975ed8f22531c97ea30429a5612a3f45e11e8726d1644b17e28bc7fc3"
+    ],
+    "dist/api/openai-completions.js": [
+      "1e2097ced37cf0e21aa5711297eecc77916de8a4ed81a9019bc7d97b22825fa3",
+      "cd71c7b0b9253780813bcb39d20219eed9c803189cf16e45f6db7fdb274a3bb8"
+    ],
+    "dist/api/openai-responses-shared.js": [
+      "b5d9f001e97bfafa8dfeef2e292f923c39f77fa8aef014132bf3530760f222e3",
+      "a71b6755d84413770f096a4ba7d7651643f6741b498942c3ea8c37c2ed676054"
+    ],
+    "dist/types.d.ts": [
+      "8c11014ea6c454bf60c7c22b65cdb00bebd834e4e9ebb07d3f0fffb6a58ea78a",
+      "c79ae83907a9be907727855af291bfdc2f74b7a6cd539b3c2e54e52b3926ba10"
+    ]
+  }
+}

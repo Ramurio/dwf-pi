@@ -25,6 +25,8 @@ Dynamicwf — локальная среда исполнения графовы�
 - `npm ci`, `npm run typecheck`, `npm test`. Node >=22.19.0; зависимости закреплены в lockfile.
 - Скрипт postinstall применяет сохранённое в Git исправление `bash`-сигналов к SDK 0.85.1.
   При `--ignore-scripts` выполните `node scripts/apply-sdk-bash-signal.mjs`.
+  Дополнительно `node scripts/apply-sdk-provider-contracts.mjs` сохраняет отсутствие
+  скрытых Bedrock-повторов и происхождение usage. Оба скрипта входят в postinstall.
   Не редактируйте node_modules вручную.
 - Граф — артефакт оркестрации. Следуйте [skill](skills/dynamic-workflows/SKILL.md):
   подготовка → запуск с ключом идемпотентности; сразу сообщайте ID запуска.
