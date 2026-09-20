@@ -8,7 +8,9 @@ import { fileURLToPath } from "node:url";
 import { prepareExecutionPlan, verifyExecutionPlan, type AvailableExecutionModel } from "../src/execution-plan.js";
 import { createOutputValidator, defaultOutputSchema } from "../src/output-schema.js";
 import type { AgentConfig } from "../src/catalog.js";
-import type { WorkflowDefinition } from "../src/graph.js";
+import { WorkflowValidationError, type WorkflowDefinition } from "../src/graph.js";
+
+import { invalidSchemaCases, prepareSchemaCaseIds, validSchemaCases } from "./helpers/schema-cases.js";
 
 const models: AvailableExecutionModel[] = [
   { provider: "example", id: "basic", thinkingLevels: ["off"] },
@@ -98,7 +100,7 @@ test("plan freezes concrete model, role defaults, schema and generated code inde
   assert.deepEqual(await prepareExecutionPlan(workflow(), options), plan);
 });
 test("explicit prompt replaces role prompt and output schema is frozen", async () => {
-  const schema = { type: "object", properties: { answer: { type: "integer" } }, required: ["answer"] };
+  const schema = { ...structuredClone(validSchemaCases["answer-override"].schema), required: [...validSchemaCases["answer-override"].schema.required] };
   const plan = await prepareExecutionPlan(workflow({ systemPrompt: "Assigned custom prompt", outputSchema: schema }), options);
   schema.required.push("other");
   assert.equal(plan.agents.main!.work!.systemPrompt, "Assigned custom prompt");
@@ -208,28 +210,55 @@ test("tampered source, hash, version, agent set, frozen config and resource trav
   assert.throws(() => verifyExecutionPlan(rehash(resource)), /resource path/);
 });
 test("structured output validates JSON Schema 2020, draft7 local refs and arbitrary literal ref keys", () => {
-  const validate = createOutputValidator({ type: "object", properties: { count: { $ref: "#/$defs/count" } }, required: ["count"], additionalProperties: false, $defs: { count: { type: "integer", minimum: 1 } } });
+  const validate = createOutputValidator(validSchemaCases["local-ref"].schema);
   assert.deepEqual(validate({ count: 2 }), { count: 2 });
   assert.throws(() => validate({ count: "2" }), /Invalid structured output/);
   assert.throws(() => validate({ count: 0 }), /Invalid structured output/);
   assert.throws(() => validate({ count: 2, extra: true }), /Invalid structured output/);
-  const draft7 = createOutputValidator({ $schema: "http://json-schema.org/draft-07/schema#", type: "object", properties: { tuple: { type: "array", items: [{ type: "number" }], additionalItems: false } } });
+  const draft7 = createOutputValidator(validSchemaCases["draft7-tuple"].schema);
   assert.deepEqual(draft7({ tuple: [2] }), { tuple: [2] });
-  const literal = createOutputValidator({ type: "object", const: { $ref: "https://literal.example" } });
+  const literal = createOutputValidator(validSchemaCases["literal-ref"].schema);
   assert.deepEqual(literal({ $ref: "https://literal.example" }), { $ref: "https://literal.example" });
 });
+test("invalid output schemas fail direct compilation with independent diagnostics", () => {
+  for (const [id, { schema, message }] of Object.entries(invalidSchemaCases)) {
+    assert.throws(() => createOutputValidator(schema), { message }, id);
+  }
+  createOutputValidator(validSchemaCases["answer-override"].schema);
+});
 test("invalid, remote, async and unknown keyword output schemas fail before inference", async () => {
-  for (const schema of [
-    { type: "array" }, { type: "object", typo: true }, { type: "object", properties: { x: { type: "banana" } } },
-    { type: "object", $ref: "https://remote.example/schema" }, { type: "object", $async: true },
-    { type: "object", $schema: "https://unsupported.example" },
-  ]) {
-    assert.throws(() => createOutputValidator(schema));
-    await assert.rejects(prepareExecutionPlan(workflow({ outputSchema: schema }), options));
+  for (const id of prepareSchemaCaseIds) {
+    const { schema, message } = invalidSchemaCases[id];
+    let modelReads = 0;
+    await assert.rejects(prepareExecutionPlan(workflow({ outputSchema: schema }), {
+      cwd: options.cwd,
+      get availableModels() { modelReads++; return models; },
+    }), (error: unknown) => {
+      assert.ok(error instanceof WorkflowValidationError, id);
+      assert.deepEqual(error.issues, [{ path: "$.graphs.main.nodes[0].config.outputSchema", message }], id);
+      return true;
+    });
+    assert.equal(modelReads, 0, id);
   }
 });
+test("schema fixtures are deeply frozen and mutable copies are independent", () => {
+  function assertFrozen(value: unknown): void {
+    if (value !== null && typeof value === "object") {
+      assert.ok(Object.isFrozen(value));
+      Object.values(value).forEach(assertFrozen);
+    }
+  }
+  [invalidSchemaCases, validSchemaCases, prepareSchemaCaseIds].forEach(assertFrozen);
+  const original = validSchemaCases["answer-override"].schema;
+  const copy = { ...structuredClone(original), properties: { answer: { ...original.properties.answer } }, required: [...original.required] };
+  copy.required.push("other");
+  copy.properties.answer.type = "string";
+  assert.deepEqual(original.required, ["answer"]);
+  assert.equal(original.properties.answer.type, "integer");
+  assert.notEqual(copy.properties, original.properties);
+});
 test("output validation neither coerces, inserts defaults, strips fields nor accepts exotic JS values", () => {
-  const validate = createOutputValidator({ type: "object", properties: { count: { type: "integer", default: 3 } }, required: ["count"], additionalProperties: false });
+  const validate = createOutputValidator(validSchemaCases["count-with-default"].schema);
   const missing = {}; assert.throws(() => validate(missing)); assert.deepEqual(missing, {});
   const value = { count: "3" }; assert.throws(() => validate(value)); assert.equal(value.count, "3");
   for (const value of [{ count: NaN }, { count: undefined }, { count: 1n }, new Date(), { count: 1, get hidden() { throw Error("getter invoked"); } }]) assert.throws(() => validate(value), /JSON|data property/);
