@@ -98,8 +98,8 @@ for (const tools of [[], ["grep"]] satisfies AgentConfig["tools"][]) {
   test(`rehashing a frozen inaccessible skill cannot bypass plan verification ${JSON.stringify(tools)}`, async t => {
     const { plan } = await fixture(t);
     const bad = inaccessibleSnapshot(plan, tools);
-    // The authored workflow still has valid default read access. Only the frozen
-    // effective tools differ, and the plan has a correct content hash.
+    // Исходный граф сохраняет доступ к read по умолчанию. Меняются только
+    // зафиксированные инструменты; хеш изменённого плана остаётся корректным.
     assert.equal(validateWorkflow(bad.workflow).valid, true);
     assert.throws(() => verifyExecutionPlan(bad), skillToolError);
   });

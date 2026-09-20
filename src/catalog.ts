@@ -28,7 +28,7 @@ export const AgentConfigSchema = Type.Object({
 export type AgentConfig = Static<typeof AgentConfigSchema>;
 export interface RoleDefinition { readonly name: RoleName; readonly description: string; readonly defaults: AgentConfig }
 
-/** The SDK advertises selected skills only when their entry files can be read. */
+/** SDK показывает выбранные skills только при наличии инструмента для чтения. */
 export function skillToolIssue(skills: readonly unknown[], tools: readonly string[]): string | undefined {
   if (skills.length && !tools.some(tool => tool === "read" || tool === "bash")) {
     return "Selected skills require the read or bash tool to load SKILL.md; configure a reading tool or remove the selected skills";
