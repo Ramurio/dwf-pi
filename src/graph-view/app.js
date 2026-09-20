@@ -482,9 +482,15 @@ function setTab(tab) {
   if (state.run) renderPanel();
 }
 function renderPanel() {
+  // Обновления соседних узлов не сворачивают данные открытого ожидания.
+  for (const details of document.querySelectorAll("details[data-wait-details]")) {
+    const draft = waitDrafts.get(details.dataset.waitDetails);
+    if (draft) draft.detailsOpen = details.open;
+  }
   const focused = document.activeElement;
   const editingWait = focused?.dataset?.waitId;
-  const selection = editingWait ? [focused.selectionStart, focused.selectionEnd] : null;
+  const selection = editingWait ? [focused.selectionStart, focused.selectionEnd, focused.selectionDirection] : null;
+  const scroll = editingWait ? { top: focused.scrollTop, left: focused.scrollLeft } : null;
   $("graph-panel").hidden = state.tab !== "graph";
   $("content-panel").hidden = state.tab === "graph";
   if (state.tab === "graph") renderGraph();
@@ -495,7 +501,10 @@ function renderPanel() {
   renderInspector();
   if (editingWait) {
     const field = document.getElementById(`wait-response-${editingWait}`);
-    if (field) { field.focus({ preventScroll: true }); field.setSelectionRange(...selection); }
+    if (field) {
+      field.focus({ preventScroll: true }); field.setSelectionRange(...selection);
+      field.scrollTop = scroll.top; field.scrollLeft = scroll.left;
+    }
   }
 }
 function selectNode(graphId, id) {
@@ -1133,6 +1142,7 @@ function renderNow() {
     const activation = byKey.get(wait.key);
     card.append(el("p", "muted", activation?.path ?? `Активация: ${wait.key}`), el("p", "muted", `Ожидание: ${wait.id}`));
     const details = el("details");
+    details.dataset.waitDetails = wait.id; details.open = draft.detailsOpen ?? false;
     details.append(el("summary", "", "Данные и формат ответа"), el("pre", "", JSON.stringify({ runId: selectedRun, waitId: wait.id, input: wait.input, responseSchema: wait.responseSchema }, null, 2)));
     card.append(details);
     if (waitBlocker) {

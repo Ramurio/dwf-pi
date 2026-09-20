@@ -29,6 +29,7 @@ const snapshot = (changes: Partial<RunRecord> = {}, waits: WaitRecord[] = [waiti
   graphSnapshot({ ...run, ...changes }, waits.map(wait => activation(wait.id.slice(5))), new Map(), waits);
 
 class Element {
+  id = "";
   children: Element[] = [];
   dataset: Record<string, string> = {};
   attributes: Record<string, string> = {};
@@ -36,6 +37,11 @@ class Element {
   value = "";
   ownText = "";
   open = false;
+  selectionStart = 0;
+  selectionEnd = 0;
+  selectionDirection = "none";
+  scrollTop = 0;
+  scrollLeft = 0;
   listeners = new Map<string, ((event: Event) => unknown)[]>();
   constructor(public tagName = "div") {}
   set textContent(value: string) { this.ownText = String(value); this.children = []; }
@@ -51,6 +57,10 @@ class Element {
   getBoundingClientRect() { return { width: 900, height: 600 }; }
   showModal() { this.open = true; }
   close() { this.open = false; }
+  focus(_options?: unknown) {}
+  setSelectionRange(start: number, end: number, direction = "none") {
+    this.selectionStart = start; this.selectionEnd = end; this.selectionDirection = direction;
+  }
 }
 const source = readFileSync(new URL("../src/graph-view/app.js", import.meta.url), "utf8");
 const boundary = "await refreshRuns();\nlet tick = 0;";
@@ -59,9 +69,19 @@ assert.equal(source.split(boundary).length, 2);
 const app = source.split(boundary)[0]!.replace(/^import[\s\S]*?from "[^"\n]+";\n/gm, "");
 async function replay(script: string, fixtures: Record<string, unknown> = {}) {
   const elements = new Map<string, Element>();
-  const document = { body: new Element("body"), activeElement: null,
-    getElementById(id: string) { if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id)!; },
-    createElement: (tag: string) => new Element(tag), createElementNS: (_ns: string, tag: string) => new Element(tag), querySelectorAll: () => [],
+  const descendants = (node: Element): Element[] => node.children.flatMap(child => [child, ...descendants(child)]);
+  const document = { body: new Element("body"), activeElement: null as Element | null,
+    getElementById(id: string) {
+      const found = [...elements.values()].flatMap(descendants).find(node => node.id === id);
+      if (found) return found;
+      if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id)!;
+    },
+    createElement(tag: string) { const node = new Element(tag); node.focus = () => { document.activeElement = node; }; return node; },
+    createElementNS: (_ns: string, tag: string) => new Element(tag),
+    querySelectorAll(selector: string) {
+      return selector === "details[data-wait-details]"
+        ? [...elements.values()].flatMap(descendants).filter(node => node.tagName === "details" && node.dataset.waitDetails) : [];
+    },
   };
   await runInNewContext(app + `\n(async () => {
     const descendants = node => node.children.flatMap(child => [child, ...descendants(child)]);
@@ -72,6 +92,45 @@ async function replay(script: string, fixtures: Record<string, unknown> = {}) {
   })()`, { ...pages, ...taskScope, layoutGraph, document, Event, assert, base: snapshot(), ...fixtures,
     window: { addEventListener() {} }, ResizeObserver: class { observe() {} }, fetch() { throw new Error("Unexpected request"); } });
 }
+
+test("wait disclosures stay attached to their IDs through updates, reordering and navigation", async () => {
+  await replay(`
+    const details = () => Array.from(descendants($('content-panel')).filter(node => node.tagName === 'details'));
+    globalThis.fetch=async()=>({ok:true,status:200,json:async()=>state.run});
+    renderPanel(); details()[0].open=true;
+    state.run={...state.run,usage:{...state.run.usage,totalTokens:5}};
+    await refreshSnapshot();
+    assert.deepEqual(details().map(node=>node.open),[true,false]);
+    state.run={...state.run,waits:[...state.run.waits].reverse()}; renderPanel();
+    assert.deepEqual(details().map(node=>node.open),[false,true]);
+    details()[1].open=false; renderPanel();
+    assert.deepEqual(details().map(node=>node.open),[false,false]);
+    details()[0].open=true; setTab('history'); setTab('now');
+    assert.deepEqual(details().map(node=>node.open),[true,false]);
+    const original=state.run; state.id=other.id; state.run=other; renderPanel();
+    assert.deepEqual(details().map(node=>node.open),[false]);
+    state.id=original.id; state.run=original; renderPanel();
+    assert.deepEqual(details().map(node=>node.open),[true,false]);
+    state.run={...state.run,waits:[...state.run.waits,newWait]}; renderPanel();
+    assert.deepEqual(details().map(node=>node.open),[true,false,false]);
+  `, { base: snapshot({}, [waiting("correctness"), waiting("security")]),
+    other: snapshot({ id: "run-other" }, [{ ...waiting("other"), runId: "run-other" }]), newWait: waiting("new") });
+});
+
+test("snapshot updates keep wait draft focus, directional selection and scroll position", async () => {
+  await replay(`
+    globalThis.fetch=async()=>({ok:true,status:200,json:async()=>({...base,usage:{...base.usage,totalTokens:5}})});
+    renderPanel(); const field=fields()[0];
+    field.value='line1\\nline2\\nline3'; field.dispatchEvent(new Event('input')); field.focus();
+    field.setSelectionRange(3,12,'backward'); field.scrollTop=70; field.scrollLeft=25;
+    await refreshSnapshot();
+    const updated=fields()[0];
+    assert.notEqual(updated,field); assert.equal(document.activeElement,updated);
+    assert.equal(updated.value,'line1\\nline2\\nline3');
+    assert.deepEqual([updated.selectionStart,updated.selectionEnd,updated.selectionDirection],[3,12,'backward']);
+    assert.deepEqual([updated.scrollTop,updated.scrollLeft],[70,25]);
+  `);
+});
 
 test("late 401 from background task, trace, usage and inspection reads cannot reload a new visit", async () => {
   for (const kind of ["task", "trace", "tokens", "attempts", "recovery", "reconciliations"]) for (const returnToSource of [false, true]) await replay(`
