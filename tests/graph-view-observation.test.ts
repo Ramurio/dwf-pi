@@ -35,6 +35,7 @@ class Element {
   className = "";
   value = "";
   ownText = "";
+  open = false;
   listeners = new Map<string, ((event: Event) => unknown)[]>();
   constructor(public tagName = "div") {}
   set textContent(value: string) { this.ownText = String(value); this.children = []; }
@@ -48,6 +49,8 @@ class Element {
   addEventListener(name: string, fn: (event: Event) => unknown) { this.listeners.set(name, [...(this.listeners.get(name) ?? []), fn]); }
   dispatchEvent(event: Event) { for (const fn of this.listeners.get(event.type) ?? []) fn(event); return !event.defaultPrevented; }
   getBoundingClientRect() { return { width: 900, height: 600 }; }
+  showModal() { this.open = true; }
+  close() { this.open = false; }
 }
 const source = readFileSync(new URL("../src/graph-view/app.js", import.meta.url), "utf8");
 const boundary = "await refreshRuns();\nlet tick = 0;";
@@ -196,6 +199,61 @@ test("a retained answer handler cannot send after its wait becomes unavailable",
   `, { unavailable: [snapshot({ status: "cancelling", desired: "cancelled" }),
     snapshot({ lineage: { taskId: "task-fixture", role: "root", parentRunId: null, successorRunId: "run-successor", launchedWithTask: true } }),
     snapshot({}, [{ ...waiting("correctness"), status: "resolved" }])] });
+});
+
+test("changing runs closes cancellation and an old confirmation cannot cancel the newly selected run", async () => {
+  await replay(`
+    const mutations = [];
+    globalThis.fetch = async (path, options) => {
+      if (path === 'control') { mutations.push(JSON.parse(options.body)); return {ok:true,status:200,json:async()=>({})}; }
+      if (path === 'runs') return {ok:true,status:200,json:async()=>({runs:[base,other]})};
+      return {ok:true,status:200,json:async()=>path.endsWith(other.id) ? other : base};
+    };
+    $('cancel').dispatchEvent(new Event('click'));
+    assert.equal($('cancel-dialog').open, true);
+    assert.ok($('cancel-target').textContent.includes(base.id));
+    await selectRun(other.id, 'none');
+    assert.equal($('cancel-dialog').open, false);
+    $('cancel-confirm').dispatchEvent(new Event('click'));
+    assert.equal(mutations.length, 0);
+    await selectRun(base.id, 'none');
+    $('cancel-confirm').dispatchEvent(new Event('click'));
+    assert.equal(mutations.length, 0);
+    $('cancel').dispatchEvent(new Event('click'));
+    $('cancel-confirm').dispatchEvent(new Event('click'));
+    assert.equal(mutations.length, 1);
+    assert.equal(mutations[0].id, base.id);
+    assert.equal(mutations[0].command, 'cancel');
+  `, { other: snapshot({id:'run-other'}, []) });
+});
+
+test("a delayed control reply or failure cannot replace the next run's feedback", async () => {
+  for (const failure of [false, true]) await replay(`
+    let finishControl, rejectControl, reloads = 0;
+    const mutations = [];
+    window.location = {reload(){ reloads++; }};
+    globalThis.fetch = (path, options) => {
+      if (path === 'control') {
+        mutations.push(JSON.parse(options.body));
+        return new Promise((resolve,reject)=>{finishControl=resolve;rejectControl=reject;});
+      }
+      if (path === 'runs') return Promise.resolve({ok:true,status:200,json:async()=>({runs:[base,other]})});
+      return Promise.resolve({ok:true,status:200,json:async()=>other});
+    };
+    const pendingControl = control('pause');
+    await selectRun(other.id,'none');
+    state.controlError = 'CURRENT_RUN_MESSAGE'; notice(state.controlError);
+    if (failure) rejectControl(new Error('PREVIOUS_RUN_FAILURE'));
+    else finishControl({ok:false,status:401});
+    await pendingControl;
+    assert.equal(state.id, other.id);
+    assert.equal(state.controlError, 'CURRENT_RUN_MESSAGE');
+    assert.equal($('notice').textContent, 'CURRENT_RUN_MESSAGE');
+    assert.equal(reloads, 0);
+    assert.equal(state.busy, false);
+    assert.equal(mutations.length, 1);
+    assert.equal(mutations[0].id, base.id);
+  `, { other: snapshot({id:'run-other'}, []), failure });
 });
 
 test("identical wait questions retain visible scope/ID and independent drafts across reordered snapshots", async () => {

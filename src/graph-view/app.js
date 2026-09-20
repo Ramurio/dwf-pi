@@ -271,6 +271,7 @@ async function selectRun(id, navigation = "push") {
     }
   }
   if (state.id === id) return;
+  closeCancelDialog();
   const selection = ++state.runSelection;
   const { previousTaskId } = beginRunSelection(state, id);
   $("workspace").hidden = true;
@@ -1492,6 +1493,8 @@ async function refreshRuns() {
 }
 async function control(command) {
   if (state.busy || !state.run) return;
+  const id = state.id, selection = state.runSelection;
+  const current = () => state.id === id && state.runSelection === selection;
   state.busy = true;
   state.controlError = null;
   renderHeader();
@@ -1499,18 +1502,27 @@ async function control(command) {
     await api("control", {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Dynamicwf-View": "1" },
-      body: JSON.stringify({ id: state.id, command }),
-    });
+      body: JSON.stringify({ id, command }),
+    }, current);
+    if (!current()) return;
     notice(null);
     await refreshSnapshot();
+    if (!current()) return;
     await refreshRuns();
   } catch (error) {
-    state.controlError = error.message;
-    notice(error.message);
+    if (current()) {
+      state.controlError = error.message;
+      notice(error.message);
+    }
   } finally {
     state.busy = false;
     if (state.run) renderHeader();
   }
+}
+let cancelTarget = null;
+function closeCancelDialog() {
+  cancelTarget = null;
+  if ($("cancel-dialog").open) $("cancel-dialog").close();
 }
 $("search").addEventListener("input", renderRuns);
 for (const b of document.querySelectorAll("[data-tab]"))
@@ -1534,12 +1546,16 @@ $("pause").addEventListener("click", () => control("pause"));
 $("resume").addEventListener("click", () => control("resume"));
 $("cancel").addEventListener("click", () => {
   if (!state.run) return;
+  cancelTarget = { id: state.id, selection: state.runSelection };
   $("cancel-target").textContent = state.run.name + " · " + state.run.id;
   $("cancel-dialog").showModal();
 });
-$("cancel-back").addEventListener("click", () => $("cancel-dialog").close());
+$("cancel-dialog").addEventListener("cancel", () => { cancelTarget = null; });
+$("cancel-back").addEventListener("click", closeCancelDialog);
 $("cancel-confirm").addEventListener("click", () => {
-  $("cancel-dialog").close();
+  const target = cancelTarget;
+  closeCancelDialog();
+  if (!target || target.id !== state.id || target.selection !== state.runSelection) return;
   void control("cancel");
 });
 let drag;
@@ -1586,6 +1602,7 @@ window.addEventListener("popstate", () => {
   const id = new URL(window.location.href).searchParams.get("run");
   if (id) void selectRun(id, "none");
   else {
+    closeCancelDialog();
     beginRunSelection(state, null);
     void refreshRuns();
   }
