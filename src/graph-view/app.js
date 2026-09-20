@@ -167,10 +167,10 @@ async function api(path, options, isCurrent = () => true) {
   const response = await fetch(path, { cache: "no-store", ...options });
   if (!isCurrent()) return;
   if (response.status === 401) {
-    // Background pages and recovery receipts still settle in their own caches,
-    // but an expired session response cannot reload a different run visit.
+    // Фоновые страницы и квитанции остаются в своих кэшах, но запоздалый отказ
+    // доступа не перезагружает другое посещение запуска.
     if (state.id !== selectedRun || state.runSelection !== selection) throw new Error("Сессия панели изменилась. Обнови данные, чтобы продолжить.");
-    // A viewer restart rotates the local session; the bookmark itself stays valid.
+    // Перезапуск панели меняет сеанс доступа; сама закладка остаётся действительной.
     window.location.reload();
     throw new Error("Восстанавливаем подключение к панели…");
   }
