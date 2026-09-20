@@ -4,14 +4,35 @@ import { parseRetryProgress } from "./retry-policy.js";
 
 const structural = new Set(["parallel", "map", "subworkflow", "worktree"]);
 const terminal = new Set(["succeeded", "failed", "cancelled"]);
-function descendant(parent: ActivationRecord, child: ActivationRecord): boolean {
-  const prefix = [...parent.context.scope, "node", parent.context.nodeId, "visit", String(parent.context.visit)];
-  return prefix.every((part, i) => child.context.scope[i] === part);
-}
 export function activeWork(records: readonly ActivationRecord[]): ActivationRecord[] {
-  const active = records.filter(a => a.status === "running");
-  return active.filter(a => !(a.kind === "await" && a.metadata.waiting === true) &&
-    (!structural.has(a.kind) || !records.some(child => child !== a && (child.status === "running" || activationState(child) === "retrying") && descendant(a, child))));
+  type ScopeTrie = Map<string, ScopeTrie>;
+  const occupied: ScopeTrie = new Map();
+  // Every reachable prefix belongs to an occupied scope, including waits and retries
+  // that will not themselves appear in the result. Rebuild on every observation.
+  for (const record of records) {
+    if (record.status !== "running" && activationState(record) !== "retrying") continue;
+    let node = occupied;
+    for (const part of record.context.scope) {
+      let next = node.get(part);
+      if (!next) { next = new Map(); node.set(part, next); }
+      node = next;
+    }
+  }
+  // Expected O(N + S + P), plus retry validation: S occupied scope segments,
+  // P queried prefix segments. Index space O(S); no serialization of prefixes.
+  return records.filter(record => {
+    if (record.status !== "running" || (record.kind === "await" && record.metadata.waiting === true)) return false;
+    if (!structural.has(record.kind)) return true;
+    const prefix = [...record.context.scope, "node", record.context.nodeId, "visit", String(record.context.visit)];
+    let node = occupied;
+    for (const part of prefix) {
+      const next = node.get(part);
+      if (!next) return true;
+      node = next;
+    }
+    // A record cannot hide itself: its own scope is four segments shorter.
+    return false;
+  });
 }
 export function activationState(a: ActivationRecord) {
   if (a.status === "failed" && parseRetryProgress(a.metadata.retry)?.status === "scheduled") return "retrying";
