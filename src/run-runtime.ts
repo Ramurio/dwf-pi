@@ -2,7 +2,7 @@ import { randomUUID, createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Cause, Effect, Exit, Option } from "effect";
-import { executionFailure, failureRecord } from "./execution-failure.js";
+import { executionFailure, failureRecord, ExecutionFailure } from "./execution-failure.js";
 import { parseOutputRepairProgress } from "./output-repair.js";
 import type { OperationRecord } from "./operation-record.js";
 import { groupMembers } from "./process-groups.js";
@@ -20,11 +20,13 @@ import type { Edge } from "./graph.js";
 import { observeRecoveryFiles, recoveryGitDirectories } from "./recovery-files.js";
 import { recoveryRoots } from "./recovery-inspection.js";
 
+import { ProcessCleanupError, withProcessCleanup } from "./process-cleanup.js";
+
 const errorOf = (error: unknown) => error instanceof Error ? error : new Error(String(error));
 const slotKey = (context: RuntimeContext) => JSON.stringify([context.scope, context.graphId, context.nodeId]);
 const digest = (text: string) => createHash("sha256").update(text).digest("hex");
 export function describeFailureCause(cause: Cause.Cause<unknown>) {
-  const error = Option.getOrUndefined(Cause.failureOption(cause));
+  const error = Option.getOrUndefined(Cause.failureOption(cause)) ?? Array.from(Cause.defects(cause)).find(error => error instanceof ExecutionFailure);
   return error instanceof ExpressionError ? executionFailure("expression","execution","read-only",error.message).failure : failureRecord(error, {
     code: Cause.isInterruptedOnly(cause) ? "cancelled" : "unknown",phase:"execution",effects:"unknown",
     message:error instanceof Error ? error.message : "Execution interrupted before a checkpoint",
@@ -35,8 +37,14 @@ export function describeFailureCause(cause: Cause.Cause<unknown>) {
 function processEffect<A>(run: (signal: AbortSignal) => Promise<A>): Effect.Effect<A, Error> {
   return Effect.async<A, Error>((resume, signal) => {
     const promise = run(signal);
-    promise.then(value => resume(Effect.succeed(value)), error => resume(Effect.fail(errorOf(error))));
-    return Effect.promise(() => promise.then(() => undefined, () => undefined));
+    promise.then(value => resume(Effect.succeed(value)), error => resume(error instanceof ProcessCleanupError
+      ? Effect.failCause(error.primary ? Cause.sequential(Cause.fail(error.primary), Cause.fail(error.cleanup)) : Cause.fail(error.cleanup))
+      : Effect.fail(errorOf(error))));
+    return Effect.promise(() => promise.then(() => undefined, error => {
+      // Обычная отмена — ожидаема. Ошибка cleanup должна остаться в Cause
+      // прерванного Effect; promise-finalizer сохраняет её как defect.
+      if (error instanceof ProcessCleanupError) throw error.cleanup;
+    }));
   });
 }
 
@@ -193,7 +201,7 @@ export class JournalRuntime implements WorkflowRuntime {
           const latest = runtime.store.getActivation(runtime.run.id, record.key);
           if (latest?.status === "running" && runtime.store.controlState(runtime.run.id).ownerToken === runtime.token) {
             const failure = Exit.isFailure(exit) ? describeFailureCause(exit.cause) : executionFailure("unknown","execution","unknown","Activation finished without a checkpoint").failure;
-            const causes=Exit.isFailure(exit)?Array.from(Cause.failures(exit.cause),error=>describeFailureCause(Cause.fail(error))):[];
+            const causes=Exit.isFailure(exit)?[...Cause.failures(exit.cause), ...Array.from(Cause.defects(exit.cause)).filter(error => error instanceof ExecutionFailure)].map(error=>describeFailureCause(Cause.fail(error))):[];
             const policy=node.kind === "agent" || node.kind === "check" ? node.retryPolicy : undefined;
             const retryEligible=Exit.isFailure(exit) && !Cause.isInterrupted(exit.cause) && !Cause.isDie(exit.cause) && causes.length>0 && causes.every(cause=>permitsRetry(policy,record.attempt,cause));
             runtime.store.failActivation(runtime.run.id, runtime.token, record.key,
@@ -202,7 +210,10 @@ export class JournalRuntime implements WorkflowRuntime {
               {retryEligible,...((node.kind==="agent" || node.kind==="check") && causes.length>0?{retryCauses:causes}:{})});
           }
         }),
-      ).pipe(Effect.catchAll(error => {
+      ).pipe(Effect.catchAllCause(cause => {
+        if (Cause.isInterrupted(cause) || Cause.isDie(cause)) return Effect.failCause(cause);
+        const errors = Array.from(Cause.failures(cause));
+        const error = errors.length === 1 ? errors[0] : undefined;
         const current = runtime.store.controlState(runtime.run.id);
         // A pause can race the outer gate and resume before this handler runs.
         // Retry admission only, never work that has already started.
@@ -210,7 +221,7 @@ export class JournalRuntime implements WorkflowRuntime {
         if (error instanceof RetryNotReady) return runtime.step(context,work);
         const decision = runtime.store.scheduledRetry(runtime.run.id,activationKey(context));
         if (current.ownerToken === runtime.token && decision && decision.attempt === executedAttempt) return runtime.step(context,work);
-        return Effect.fail(error);
+        return Effect.failCause(cause);
       }));
     }));
   }
@@ -235,7 +246,7 @@ export class JournalRuntime implements WorkflowRuntime {
       this.store.setActivationMetadata(this.run.id,this.token,key,{operation:{kind:"agent",cwd:request.cwd,task,input,sessionDirectory:request.sessionDirectory,resourceDirectory:request.resourceDirectory,...(request.sessionFile?{continuedSessionFile:request.sessionFile}:{})}});
       this.store.startUsage(this.run.id, this.token, key);
       this.checkReviewInput(node, config, input);
-      try {
+      return withProcessCleanup(async () => {
         const result = await runPiProcess(request, {
           signal, identity: workerToken,
           onStarting: workerToken => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid: null, workerToken, workerKind: "pi", workerLaunch: "reserved", cwd: request.cwd, model: { ...config.model }, thinking: config.thinking }),
@@ -267,7 +278,7 @@ export class JournalRuntime implements WorkflowRuntime {
           model: result.model, thinking: result.thinking,
         });
         return output;
-      } finally { this.clearPid(key); }
+      }, () => this.clearPid(key));
     });
   }
   check(context: RuntimeContext, node: Extract<Node, { kind: "check" }>): Effect.Effect<Json, Error> {
@@ -276,13 +287,13 @@ export class JournalRuntime implements WorkflowRuntime {
       const workerToken = randomUUID();
       const cwd = node.cwd ? resolve(this.workspaceCwd(context), node.cwd) : this.workspaceCwd(context);
       this.store.setActivationMetadata(this.run.id,this.token,key,{operation:{kind:"check",cwd,command:node.command,args:[...node.args]}});
-      try {
+      return withProcessCleanup(async () => {
         return await runCheckProcess(node.command, node.args, cwd, {
           signal, identity: workerToken,
           onStarting: workerToken => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid: null, workerToken, workerKind: "check", workerLaunch: "reserved", cwd }),
           onStarted: workerPid => this.store.setActivationMetadata(this.run.id, this.token, key, { workerPid, workerLaunch: "started", workerGroupPid: workerPid, workerGroupState: "pending" }),
         });
-      } finally { this.clearPid(key); }
+      }, () => this.clearPid(key));
     });
   }
   private workspaceCwd(context: RuntimeContext): string {

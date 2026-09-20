@@ -1,3 +1,4 @@
+import { parseFailureCauses } from "./execution-failure.js";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { assertJson, createOutputValidator } from "./output-schema.js";
@@ -399,7 +400,8 @@ export function unknownWriterActivations(activations: readonly ActivationRecord[
     if (record.status === "running" || record.status === "interrupted") return true;
     const failure = record.metadata.failure;
     const effects = failure && typeof failure === "object" && !Array.isArray(failure) ? failure.effects : "unknown";
-    return effects === "unknown" || effects === undefined;
+    const causes = parseFailureCauses(record.metadata.failureCauses);
+    return effects === "unknown" || effects === undefined || !!causes?.some(cause => cause.effects === "unknown");
   });
 }
 

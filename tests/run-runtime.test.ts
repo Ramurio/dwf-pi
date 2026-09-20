@@ -1,9 +1,11 @@
+import { executionFailure, ExecutionFailure } from "../src/execution-failure.js";
+import { unknownWriterActivations } from "../src/lineage.js";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
-import { Effect, Exit } from "effect";
+import { Cause, Effect, Exit, FiberId } from "effect";
 import { JournalRuntime } from "../src/run-runtime.js";
 import { RunStore, activationKey } from "../src/run-store.js";
 import type { ExecutionPlan } from "../src/execution-types.js";
@@ -105,4 +107,55 @@ test("a resume racing pause marking must not fail the runtime", async t => {
   f.store.markPaused = (id, token) => { f.store.requestControl(id, "resume"); actual(id, token); };
   assert.doesNotThrow(() => f.runtime.updatePause());
   assert.equal(f.store.get("run").status, "running");
+});
+
+test("step preserves every cause before collect instead of converting dangerous mixtures to data", async t => {
+  const f = await fixture(t);
+  const ordinary = executionFailure("output", "output", "read-only", "ordinary");
+  const secondary = [Cause.fail(executionFailure("process", "cleanup", "unknown", "cleanup failed")), Cause.fail(executionFailure("interrupted", "execution", "unknown", "interrupted")), Cause.interrupt(FiberId.none), Cause.die(new Error("defect"))];
+  for (const [i, cause] of secondary.entries()) {
+    const current = { ...context, visit: i };
+    const result = await Effect.runPromiseExit(f.runtime.collect(current, `case${i}`, () => f.runtime.step(current, () => Effect.failCause(Cause.parallel(Cause.fail(ordinary), cause)))));
+    assert.ok(Exit.isFailure(result));
+    assert.match(Cause.pretty(result.cause), /ordinary/);
+    assert.equal(f.store.collection("run", activationKey(current), `case${i}`), undefined);
+  }
+});
+
+test("failed check plus cleanup checkpoint fault retains both causes and blocks collection", async t => {
+  const node = { id: "work", kind: "check", command: "/dynamicwf-missing", args: [] } as const;
+  const f = await fixture(t, { ...node, args: [] });
+  const original = f.store.setActivationMetadata.bind(f.store);
+  f.store.setActivationMetadata = (id, token, key, metadata) => {
+    if (metadata.workerLaunch === "settled") throw new Error("injected cleanup storage fault");
+    return original(id, token, key, metadata);
+  };
+  const result = await Effect.runPromiseExit(f.runtime.collect(context, "failed", () => f.runtime.step(context, () => f.runtime.check(context, { ...node, args: [] }))));
+  assert.ok(Exit.isFailure(result));
+  const causes = Array.from(Cause.failures(result.cause)) as ExecutionFailure[];
+  assert.equal(causes.length, 2);
+  assert.equal(causes[0]!.failure.phase, "setup"); assert.equal(causes[1]!.failure.phase, "cleanup");
+  const record = f.store.getActivation("run", key)!;
+  assert.equal(record.metadata.workerGroupState, "pending");
+  assert.equal((record.metadata.failureCauses as any[]).length, 2);
+  assert.equal(unknownWriterActivations([record]).length, 1, "secondary unknown effects require continuation disposition");
+  assert.equal(f.store.collection("run", key, "failed"), undefined);
+});
+
+test("interrupt waits for cleanup and retains its failure diagnostic", { timeout: 15000 }, async t => {
+  const node: Extract<Node, { kind: "check" }> = { id: "work", kind: "check", command: process.execPath, args: ["-e", "setInterval(()=>{},1000)"] };
+  const f = await fixture(t, node);
+  const original = f.store.setActivationMetadata.bind(f.store);
+  f.store.setActivationMetadata = (id, token, key, metadata) => {
+    if (metadata.workerLaunch === "settled") throw new Error("injected cleanup fault");
+    return original(id, token, key, metadata);
+  };
+  const controller = new AbortController();
+  const running = Effect.runPromiseExit(f.runtime.step(context, () => f.runtime.check(context, node)), { signal: controller.signal });
+  t.after(async () => { controller.abort(); await running; });
+  await until(() => typeof f.store.getActivation("run", key)?.metadata.workerPid === "number");
+  controller.abort(); const result = await running;
+  assert.ok(Exit.isFailure(result)); assert.equal(Cause.isInterrupted(result.cause), true);
+  assert.ok(Array.from(Cause.defects(result.cause)).some(error => error instanceof ExecutionFailure && error.failure.phase === "cleanup"));
+  assert.equal((f.store.getActivation("run", key)!.metadata.failure as any).phase, "cleanup");
 });
