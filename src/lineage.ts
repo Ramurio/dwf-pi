@@ -241,7 +241,7 @@ export function parseContinuationRequest(value: unknown): ContinuationRequest {
   if (["runId", "checkpoint", "planHash"].some(key => !Object.hasOwn(sourceValue, key)) || Object.keys(sourceValue).some(key => !["runId", "checkpoint", "planHash"].includes(key))) {
     throw new Error("Invalid continuation source fields");
   }
-  if (!sha256.test(String(sourceValue.checkpoint)) || !sha256.test(String(sourceValue.planHash))) throw new Error("Invalid continuation source checkpoint or plan hash");
+  if (typeof sourceValue.checkpoint !== "string" || typeof sourceValue.planHash !== "string" || !sha256.test(sourceValue.checkpoint) || !sha256.test(sourceValue.planHash)) throw new Error("Invalid continuation source checkpoint or plan hash");
   if (!Array.isArray(value.evidence) || !value.evidence.length) throw new Error("Continuation requires nonempty evidence");
   assertJson(value.evidence);
   const input = Object.hasOwn(value, "input") ? value.input as Json : null;
@@ -251,12 +251,12 @@ export function parseContinuationRequest(value: unknown): ContinuationRequest {
   return {
     preparedId: prepared,
     idempotencyKey: nonempty(value.idempotencyKey, "idempotencyKey"),
-    source: { runId: id(sourceValue.runId, "source.runId"), checkpoint: String(sourceValue.checkpoint), planHash: String(sourceValue.planHash) },
+    source: { runId: id(sourceValue.runId, "source.runId"), checkpoint: sourceValue.checkpoint, planHash: sourceValue.planHash },
     actor: nonempty(value.actor, "actor"),
     reason: nonempty(value.reason, "reason"),
     evidence: structuredClone(value.evidence) as Json[],
     input,
-    reuse: bindingList(value.reuse ?? []),
+    reuse: bindingList(value.reuse === undefined ? [] : value.reuse),
     dispositions: dispositionList(value.dispositions),
     workspaceDigest,
   };

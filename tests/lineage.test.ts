@@ -154,3 +154,12 @@ test("running or interrupted side-effect activations require retain-effects even
   const running = { runId: "run-a", key: "k", context: { graphId: "main", nodeId: "write", scope: [], visit: 0 }, kind: "check", sideEffect: true, status: "running", attempt: 1, ownerToken: "", startedAt: 0, finishedAt: null, metadata: {} } as unknown as ActivationRecord;
   assert.equal(continuationWriterBlockers([running], [])[0]?.code, "writer-disposition-required");
 });
+
+test("continuation never coerces JSON arrays or null into schema-valid fields", () => {
+  for (const field of ["checkpoint", "planHash"]) for (const value of [[digest], [[digest]], 42, null]) {
+    assert.throws(() => parseContinuationRequest({ ...base, source: { ...base.source, [field]: value } }), /checkpoint or plan hash/);
+  }
+  assert.throws(() => parseContinuationRequest({ ...base, reuse: null }), /reuse bindings/);
+  assert.deepEqual(parseContinuationRequest(base).reuse, []);
+  assert.deepEqual(parseContinuationRequest({ ...base, reuse: [] }).reuse, []);
+});

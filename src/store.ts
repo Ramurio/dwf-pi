@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { openWorkflowDatabase } from "./sqlite.js";
-import { applyPatch, createDraft } from "./authoring.js";
+import { applyPatch, createDraft, RevisionConflictError } from "./authoring.js";
 import type { WorkflowDefinition } from "./graph.js";
 
 export class DraftStore {
@@ -46,7 +46,7 @@ export class DraftStore {
     const saved = this.database.prepare(
       "UPDATE workflow_drafts SET revision = ?, document = ? WHERE id = ? AND revision = ?",
     ).run(result.workflow.revision, JSON.stringify(result.workflow), id, previous.revision);
-    if (Number(saved.changes) !== 1) throw new Error(`Revision conflict while saving workflow: ${id}`);
+    if (Number(saved.changes) !== 1) throw new RevisionConflictError(request.expectedRevision, this.get(id).revision);
     return result;
   }
 }

@@ -84,11 +84,12 @@ function jsonIssue(value: unknown, path = "$", ancestors = new Set<object>()): V
   if (typeof value === "number" && Number.isFinite(value)) return;
   if (typeof value !== "object") return { path, message: "Expected a JSON value" };
   if (ancestors.has(value)) return { path, message: "Cyclic object is not JSON" };
+  if (Array.isArray(value) && Object.getPrototypeOf(value) !== Array.prototype) return { path, message: "Expected a plain JSON array" };
   if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) return { path, message: "Expected a plain JSON object" };
   ancestors.add(value);
   if (Object.getOwnPropertySymbols(value).length) return { path, message: "Symbol keys are not JSON" };
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  if (Array.isArray(value) && Object.keys(value).length !== value.length) return { path, message: "Sparse or extended array is not JSON" };
+  if (Array.isArray(value) && (Object.keys(value).length !== value.length || Object.keys(value).some((key, index) => key !== String(index)))) return { path, message: "Sparse or extended array is not JSON" };
   for (const [key, descriptor] of Object.entries(descriptors)) {
     if (Array.isArray(value) && key === "length") continue;
     if (!descriptor.enumerable || !Object.hasOwn(descriptor, "value")) return { path: `${path}.${key}`, message: "Only enumerable JSON data properties are allowed" };

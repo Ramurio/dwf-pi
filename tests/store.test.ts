@@ -73,3 +73,21 @@ test("concurrent CLI initialization waits for SQLite WAL/schema locks", async ()
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test("SQLite CAS race reports expected and actual revisions", () => {
+  const store = new DraftStore(":memory:");
+  try {
+    store.create({ id: "race", name: "CAS" });
+    const original = store.get.bind(store);
+    let injected = false;
+    store.get = id => {
+      const previous = original(id);
+      if (!injected) { injected = true; store.patch(id, { expectedRevision: 1, operations: [{ op: "addGraph", graphId: "winner" }] }); }
+      return previous;
+    };
+    assert.throws(() => store.patch("race", { expectedRevision: 1, operations: [{ op: "addGraph", graphId: "loser" }] }),
+      { name: "RevisionConflictError", expectedRevision: 1, actualRevision: 2 });
+    assert.ok(original("race").graphs.winner);
+    assert.equal(original("race").graphs.loser, undefined);
+  } finally { store.close(); }
+});

@@ -166,3 +166,18 @@ test("public inspection and events exclude stored process ownership tokens", asy
     assert.equal(inspect.includes("private-process-fence"), false); assert.equal(events.includes("private-process-fence"), false);
   } finally { store.close(); service.close(); await rm(cwd, { recursive: true, force: true }); }
 });
+
+test("closing during prepare prevents reopening lazy stores", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "dynamicwf-close-"));
+  const filename = join(directory, "state.sqlite");
+  const initial = new WorkflowService(filename, { cwd: directory, availableModels: [] });
+  await author(initial); initial.close();
+  const service = new WorkflowService(filename, { cwd: directory, availableModels: [] });
+  try {
+    const pending = service.dispatch("workflow.prepare", { id: "sample" });
+    service.close();
+    await assert.rejects(pending, /service is closed/);
+    assert.equal((service as any).drafts, undefined);
+    assert.equal((service as any).plans, undefined);
+  } finally { service.close(); await rm(directory, { recursive: true, force: true }); }
+});

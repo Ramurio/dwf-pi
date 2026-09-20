@@ -241,3 +241,26 @@ test("invalid graphs fail compilation and non-string agent task fails without in
   if (outcome._tag === "Left") assert.match(outcome.left.message, /Agent task must evaluate to a string/);
   assert.equal(r.steps.length, 1);
 });
+
+test("object field order has identical direct and compiled error precedence", async t => {
+  for (const [missing, invalid] of [["z", "a"], ["2", "10"]]) {
+    const fields = { [missing!]: ref("input", "missing"), [invalid!]: { op: "not", value: ref("input", "flag") } as Expr };
+    const when: Expr = { op: "exists", value: { op: "object", fields } };
+    const edges = [{ from: "start", to: "yes", when }, { from: "start", to: "no" }];
+    const workflow = definition({ main: { entry: "start", nodes: [
+      { id: "start", kind: "branch" }, { id: "yes", kind: "end", value: literal("yes") }, { id: "no", kind: "end", value: literal("no") },
+    ], edges } });
+    const compiled = await load(t, workflow);
+    for (const flag of [1, true]) {
+      const scope = { input: { flag }, nodes: {} };
+      const { runtime } = recorder();
+      if (flag === 1) {
+        assert.throws(() => chooseEdge("start", edges, scope), /boolean/);
+        await assert.rejects(Effect.runPromise(compiled.run(runtime, scope.input)), /boolean/);
+      } else {
+        assert.equal(chooseEdge("start", edges, scope), "no");
+        assert.equal(await Effect.runPromise(compiled.run(runtime, scope.input)), "no");
+      }
+    }
+  }
+});

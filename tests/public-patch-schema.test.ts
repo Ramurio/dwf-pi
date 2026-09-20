@@ -33,3 +33,14 @@ test("public patch requires id while internal patch excludes it", async () => {
     await assert.rejects(service.dispatch("workflow.patch", internal));
   } finally { service.close(); }
 });
+
+test("public draft schema compiles independently after JSON transport", async () => {
+  const service = new WorkflowService(":memory:");
+  try {
+    const schemas = JSON.parse(JSON.stringify(await service.dispatch("workflow.schema")));
+    const validate = createOutputValidator(schemas.draft);
+    const draft = await service.dispatch("workflow.create", { id: "portable", name: "Переносимая схема" });
+    assert.deepEqual(validate(draft), draft);
+    assert.throws(() => validate({ ...(draft as object), extra: true }));
+  } finally { service.close(); }
+});

@@ -1,3 +1,4 @@
+import { portableInputSchema, type InputSchema } from "./public-schema.js";
 import { diagnoseSystem } from "./doctor.js";
 import { discoverWorkflowCatalog } from "./model-runtime.js";
 import { homedir } from "node:os";
@@ -46,15 +47,18 @@ export class WorkflowService {
     this.executionOptions = structuredClone(executionOptions);
   }
   private getDrafts(): DraftStore {
+    if (this.closed) throw new Error("Workflow service is closed");
     if (!this.drafts) this.drafts = new DraftStore(this.filename);
     return this.drafts;
   }
   private getController(): RunController {
+    if (this.closed) throw new Error("Workflow service is closed");
     if (this.filename === ":memory:") throw new Error("Detached runs require a persistent store filename");
     if (!this.controller) this.controller = new RunController(this.filename);
     return this.controller;
   }
   private getPlans(): PreparedPlanStore {
+    if (this.closed) throw new Error("Workflow service is closed");
     if (!this.plans) this.plans = new PreparedPlanStore(this.filename);
     return this.plans;
   }
@@ -90,7 +94,7 @@ export class WorkflowService {
       }
       case "workflow.schema":
         object(request, []);
-        return { workflow: WorkflowSchema, expression: ExprSchema, draft: DraftSchema, create: CreateDraftSchema, patch: PublicDraftPatchSchema };
+        return { workflow: WorkflowSchema, expression: ExprSchema, draft: portableInputSchema(DraftSchema as unknown as InputSchema), create: CreateDraftSchema, patch: PublicDraftPatchSchema };
       case "workflow.create":
         return this.getDrafts().create(request as unknown as Parameters<DraftStore["create"]>[0]);
       case "workflow.list":

@@ -160,3 +160,18 @@ test("review verdict binds to artifact revision and supports honest inconclusive
   workflow.graphs.main!.nodes[0] = { id: "implement", kind: "agent", role: "reviewer", task: literal("review"), config: { tools: ["bash"] } };
   rejected(workflow, /read-only/);
 });
+
+test("graph rejects exotic array prototypes before getters or overridden iteration", () => {
+  let calls = 0;
+  const sparse = Object.assign(new Array(1), { extra: 42 });
+  const proto = Object.create(Array.prototype);
+  Object.defineProperty(proto, "0", { get() { calls++; return 7; } });
+  Object.setPrototypeOf(sparse, proto);
+  const w = base();
+  w.graphs.main!.nodes[2] = { id: "done", kind: "end", value: { op: "literal", value: sparse } };
+  rejected(w, /plain JSON array/);
+  class Exotic extends Array { override entries(): any { calls++; return super.entries(); } }
+  w.graphs.main!.nodes = Exotic.from(base().graphs.main!.nodes) as any;
+  rejected(w, /plain JSON array/);
+  assert.equal(calls, 0);
+});
