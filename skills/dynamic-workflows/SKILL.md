@@ -1,19 +1,31 @@
 ---
 name: dynamic-workflows
-description: Create, run, monitor, pause, and reuse graph-authored workflows with independent pi workers through dynamicwf CLI or MCP. Use for multi-agent pipelines, review loops, conditional routing, parallel work, and dynamic fan-out.
+description: Создавай, запускай, наблюдай, приостанавливай и повторно используй графовые процессы с независимыми исполнителями pi через dynamicwf CLI или MCP. Для многоагентных задач, циклов ревью, условных переходов, параллельной работы и динамического разветвления по данным.
 ---
 
-# Dynamic workflows
+# Графовые процессы
 
-Turn the user's process into blocks and connections. The graph is the orchestration artifact: assemble it before launch; the runtime validates and compiles it to TypeScript + Effect. Do not write scheduler code, JS loops, generated TypeScript, worker-spawning scripts, or a second execution engine. There is no autonomous nested spawning. Task-specific implementation code or a check command is allowed only when that is the work assigned to a node.
+Преврати процесс пользователя в блоки и связи **до запуска**. Граф — артефакт
+оркестрации; среда исполнения проверяет и компилирует его в TypeScript + `Effect`.
+Не пиши планировщик, циклы JS, генерируемый TypeScript, скрипты запуска исполнителей
+или второй движок. Автономного вложенного создания исполнителей нет. Код реализации
+или команда `check` допустимы только как работа, назначенная конкретному узлу.
 
-Pi workers and the supervisor live outside the calling harness. Closing the CLI, MCP connection, or harness does not cancel a run. The same workflow can be controlled from any harness with this skill and a shell or MCP connection.
+Исполнители pi и управляющий процесс supervisor живут вне вызывающего приложения.
+Закрытие CLI/MCP/приложения не отменяет запуск. Управлять им можно из другого приложения
+с этим пакетом инструкций (skill) и командной оболочкой/MCP.
 
-For the standard three independent researchers then a synthesizer, start at [recipes/research-trio/README.md](recipes/research-trio/README.md). Copy those JSON files and follow that launch sequence. That recipe does not require reading `workflow.schema` or the recovery/continuation manuals first.
+Для трёх независимых исследователей с общим итогом начни с
+[рецепта research-trio](recipes/research-trio/README.md): скопируй JSON и следуй порядку.
+Для рецепта не нужно предварительно читать `workflow.schema` и разделы восстановления/продолжения.
 
-## Use the available transport
+## Выбери доступный транспорт
 
-Prefer installed MCP tools when available: CLI `workflow.create` corresponds to MCP `workflow_create`, with the same JSON arguments. Otherwise invoke `dynamicwf <tool>` with one JSON object on stdin; stdout is `{ "ok": true, "result": ... }` or an error envelope. Check `ok`, not only process exit. A quoted heredoc or a JSON file preserves prompts and literal shell characters:
+Предпочитай установленные инструменты MCP: CLI `workflow.create` соответствует MCP
+workflow_create, аргументы JSON одинаковы. Иначе вызывай `dynamicwf <tool>` с одним
+JSON-объектом на stdin. Stdout — `{ "ok": true, "result": ... }` либо оболочка ошибки.
+Проверяй ok, не только выход процесса. Heredoc с маркером в кавычках или JSON-файл
+сохраняет инструкции и буквальные символы оболочки:
 
 ```sh
 dynamicwf workflow.create <<'JSON'
@@ -21,66 +33,92 @@ dynamicwf workflow.create <<'JSON'
 JSON
 ```
 
-Use a consistent `--store /absolute/state.sqlite` if selecting a nondefault journal. Execution `cwd` is a separate field; pass the intended workspace explicitly to `workflow.prepare` when working from a different directory.
+При нестандартном журнале везде используй один `--store /absolute/state.sqlite`.
+`cwd` исполнения — отдельное поле; передавай рабочий каталог явно в `workflow.prepare`,
+если вызываешь команду из другой директории.
 
-## Route
+## Порядок работы
 
-1. Choose CLI or MCP (same JSON arguments).
-2. Choose the task, or a shipped recipe such as [research-trio](recipes/research-trio/README.md).
-3. Configure explicitly from the current catalog: models, thinking, task, `cwd`, and store. Do not substitute an unavailable model or thinking.
-4. `workflow.create`, then `workflow.patch` with `id`, `expectedRevision`, and `operations`. Check `ok`; for patch also `result.validation.valid`.
-5. `workflow.validate`, then `workflow.prepare`. Inspect the prepared `plan`. Keep `preparedId`.
-6. `run.start` with that `preparedId`, the input, and a prechosen `idempotencyKey`. Do not use the draft-id start shortcut. Do not pass `cwd` or `model` on top of `preparedId`.
-7. Immediately give the user the real `result.id` and a ready-to-copy `dynamicwf watch --run <id>` command (include `--store` when used), before waiting.
-8. Observe with `run.status` / `run.inspect`. Read `taskOutcome` to report acceptance. Do not auto-save a preset.
+1. Выбери CLI/MCP и задачу либо поставляемый [рецепт](recipes/research-trio/README.md).
+2. По текущему каталогу явно настрой модели/`thinking`, задание, `cwd` и store.
+   Недоступную модель или уровень рассуждений не подменяй.
+3. `workflow.create` → `workflow.patch` с `id`/`expectedRevision`/`operations`. Проверяй ok,
+   для изменения также `result.validation.valid`.
+4. `workflow.validate` (`result.valid`) → `workflow.prepare`. Изучи `result.plan`, сохрани `preparedId`.
+5. `run.start` с `preparedId`/`input` и **заранее выбранным** `idempotencyKey`. Не используй
+   сокращённый запуск по ID черновика, не добавляй `cwd`/`model` поверх `preparedId`.
+6. Сразу выдай настоящий `result.id` и готовую `dynamicwf watch --run <id>`
+   (с --store, если использован), **до ожидания завершения**.
+7. Наблюдай `run.status`/`inspect`, читай `taskOutcome` для приёмки. Не сохраняй пресет автоматически.
 
-Discover models with `catalog.models {}` and role defaults with `catalog.describe {"name":"..."}`. For non-standard graphs, get exact fields from `workflow.schema {}` after this route — schema is not an entry barrier for the shipped recipe. When to read: [operations.md](references/operations.md) for watch/UI, pause, awaits, attempts, and presets; [authoring.md](references/authoring.md) for expressions, roles, collect, reviews, snapshots, and worktrees; [providers.md](references/providers.md) for catalog, capabilities, and thinking.
+Модели: `catalog.models {}`; настройки роли по умолчанию: `catalog.describe {"name":"..."}`.
+Для нестандартного графа точные поля бери из `workflow.schema {}` после выбора пути;
+не превращай полную схему в барьер для готового рецепта.
 
-`workflow.schema.result.patch` (the `patch` field inside the successful result) is the public request schema, identical to MCP `workflow_patch` in tools/list: it requires `id`, `expectedRevision`, and `operations`, and rejects extra fields. The internal store patch omits `id`; do not use that internal shape as a tool request.
+`workflow.schema.result.patch` — публичная схема запроса, совпадающая с MCP workflow_patch
+в `tools`/`list`: требует `id`/`expectedRevision`/`operations` и запрещает лишние поля.
+Внутреннее изменение хранилища без `id` не подходит запросу инструмента. Оба транспорта
+сохраняют поля исправимых ошибок:
 
-Both transports preserve actionable error fields, for example:
 ```json
 {"ok":false,"error":{"name":"AuthoringError","message":"Node missing not found","operationIndex":1}}
 {"ok":false,"error":{"name":"RevisionConflictError","message":"Revision conflict: expected 1, actual 2","expectedRevision":1,"actualRevision":2}}
 ```
-`operationIndex` is zero-based; the failed patch is atomic. Fix that operation, or inspect/rebase after a revision conflict.
 
-After start, immediately report, for example: “Run `<result.id>` started; first observed status: `<run.status.result.status>`. Watch: `dynamicwf watch --run <result.id> --store /absolute/state.sqlite`.” Substitute actual returned values, not placeholders. Fetch the first status without waiting for completion; a running/waiting status is not a success or acceptance verdict.
+`operationIndex` начинается с нуля, всё неудачное изменение атомарно. Исправь указанную
+операцию; при конфликте версий прочитай текущий черновик и перенеси намеренные изменения,
+не отправляй старый запрос вслепую. Новый черновик обычно имеет `revision` 1; далее
+используй `result.revision`/`result.workflow.revision` либо `workflow.inspect`.
 
-A new draft is usually revision `1`. Take later values from `result.revision` / `result.workflow.revision` (or `workflow.inspect`). On a revision conflict, inspect the latest draft and rebase; do not resend a stale patch blindly.
+После `start` сообщи, например: «Запуск `<result.id>` создан; первый наблюдаемый статус:
+`<run.status.result.status>`. Смотреть: `dynamicwf watch --run <result.id> --store /absolute/state.sqlite`».
+Подставь реальные значения. Получи первый статус сразу, не ожидая завершения;
+`running`/`waiting` не означают успех или приёмку.
 
-`workflow.prepare {"id":"...","cwd":"/absolute/workspace"}` freezes models, thinking, role defaults, skill snapshots, schemas, and generated code into `{preparedId,planHash,cwd,createdAt,plan}`. `workflow.prepared {"preparedId":"..."}` rereads that handle from the same journal. Inspect `plan` before start.
+Подготовка фиксирует модели, уровни рассуждений, настройки ролей, снимки `skills`, схемы
+и сгенерированный код; возвращает `{preparedId,planHash,cwd,createdAt,plan}`.
+`workflow.prepared` перечитывает эту запись из того же журнала без нового чтения черновика/
+skill. Живые файлы `cwd` и Git `head` не заморожены. Сохрани запрос старта только с
+`preparedId`/`input`/ключом до отправки. Потерянный ответ повторяй **тем же запросом**:
+идентичная доставка возвращает тот же запуск даже после завершения, конфликтующий
+план/вход отвергается. Новый намеренный запуск требует нового ключа. Иной каталог/модель
+требует новой подготовки. Старый `run.start` с ID черновика готовит текущий черновик заново
+и создаёт новый запуск каждый раз, не гарантируя просмотренный снимок.
 
-Choose and retain `idempotencyKey` before sending start. Save a start request that contains only `preparedId`, `input`, and that key. Identical delivery retries return the same run, including after completion; a conflicting plan or input fails. A new intended run needs a new key. A lost response is retried with the unchanged request. Start cannot override a prepared workspace or model: prepare again for those changes. The older `run.start {"id":"draft-id",...}` path prepares the current draft again and creates a new run on every call; it cannot guarantee execution of the snapshot you inspected.
+## Обязательные инварианты
 
-## Invariants
+- Граф управляет оркестрацией; модель вызывающего приложения не определяет модель
+  исполнителя. Явные `provider`/`id`/`thinking` не подменяются, недоступный выбор — ошибка подготовки.
+- `session` `fresh` изолирует посещение; `continue-node` продолжает успешные прошлые посещения
+  этого узла в той же области вызова.
+- Разрешения ограничивают инструменты/инструкции, не права ОС. Оболочка имеет доступ
+  шире `cwd`. `read-only` запрещает изменение, но не замораживает файлы и не даёт веб-инструменты.
+  Роль `researcher` сама не предоставляет веб-доступа.
+- `collect` сохраняет ошибки как оболочки результата, не голоса. Проверь `status` до `value`;
+  последующие переходы задаются явно.
+- `succeeded` означает техническое завершение. Корневой `finish`/`taskOutcome` различает
+  `accepted`, `rejected`/`inconclusive`; дочерние решения локальны. Вердикт не обходит условие `finish`.
+- `approve` связан с **реальной** `artifactRevision` и версией критериев при наличии.
+  Не выдумывай идентичность; старый `approve` не одобряет новый артефакт.
+- Нет скрытых лимитов итераций/токенов/времени/параллелизма и обязательного человеческого
+  согласования. Не добавляй произвольных лимитов/этапов одобрения; вырази критерий пользователя.
+- `preset.save` вызывается только явно после `succeeded` **и** `accepted`.
+- Таймаут клиента, закрытая вкладка или старый heartbeat не доказывают смерть запуска.
+  Инспектируй существующий, не запускай дубликат.
 
-These decisions are not optional and are not replaced by a recipe or a worker verdict:
+## Когда читать подробности
 
-- The graph is the orchestration artifact. There is no autonomous nested spawning.
-- The model in the caller's harness does not determine the pi worker's model. Explicit node provider/id/thinking is not silently substituted; an unavailable choice is a prepare error.
-- `session:"fresh"` isolates that visit. `continue-node` continues successful prior visits of that node within its invocation scope.
-- Permission profiles are tool/prompt constraints, not an OS sandbox. A granted shell can access more than the working directory. Read-only denies mutation tools; it does not freeze cwd contents or grant web access. A researcher role does not imply web tools.
-- `failurePolicy:"collect"` preserves failed branches as envelopes. A technical failure is not a vote. Check `status` before reading `value`. Author downstream routing explicitly.
-- Technical `succeeded` means the graph finished. Root `finish` / `taskOutcome.decision` distinguishes `accepted` from `succeeded`. Child decisions remain local. A synthesizer or reviewer verdict cannot bypass the authored finish guard.
-- Review `approve` is bound to the real `artifactRevision` (and criteria revision when present). Do not fabricate revision identity. An old approve cannot approve new work.
-- There are no automatic iteration, token, wall-time, or concurrency caps and no implicit human-approval gate. Do not add arbitrary limits or approval steps. Express the user's actual completion criterion.
-- `preset.save` is explicit and only after technical `succeeded` and task outcome `accepted`. There is no automatic preset save.
-- Closing the harness does not stop execution. A caller timeout, closed tab, or stale heartbeat does not prove the run died; inspect the existing run rather than starting a duplicate.
-
-## When to read
-
-| Situation | Read |
+| Ситуация | Документ внутри skill |
 | --- | --- |
-| Non-standard authoring: expressions, lazy feedback, roles/config, review loops, collect, snapshots, worktrees | [references/authoring.md](references/authoring.md) |
-| Watch/UI, status/inspect/events/trace, pause/resume/cancel, awaits, attempts, explicit presets | [references/operations.md](references/operations.md) |
-| Before repeating an uncertain effect, inspecting failures, output repair, automatic retry, or reconcile | [references/recovery.md](references/recovery.md) |
-| Before continuing a revised task or reusing succeeded outputs | [references/continuation.md](references/continuation.md) |
-| Catalog/doctor, capabilities/modalities, credentials/adapter, requested vs resolved vs observed thinking | [references/providers.md](references/providers.md) |
-| Per-response and task-level token accounting | [references/usage.md](references/usage.md) |
+| Нестандартный граф, выражения/обратная связь, роли, сбор ветвей, ревью, снимки, рабочие деревья | [создание графа](references/authoring.md) |
+| Терминал/браузер, статус/события/трасса, управление, ожидания, попытки, пресеты | [операции](references/operations.md) |
+| Неопределённые эффекты, инспекция ошибок, исправление формата/повторы/восстановление, процессы | [восстановление](references/recovery.md) |
+| Изменённая задача или повторное использование успешного выхода | [продолжение](references/continuation.md) |
+| Каталог/диагностика, модальности, авторизация, запрошенный/разрешённый/наблюдаемый `thinking` | [провайдеры](references/providers.md) |
+| Токены/стоимость/полнота ответа и задачи | [учёт](references/usage.md) |
 
-Do not replace a failed or incomplete run by preparing a new graph and starting an unrelated run that silently copies saved JSON. When to read: [continuation.md](references/continuation.md).
-
-After a crash, a side-effect worker whose output was not committed is uncertain. Do not rerun it implicitly. When to read: [recovery.md](references/recovery.md) before any reconcile, retry, or accept.
-
-Report the actual run state, result, relevant evidence, and any unresolved work. A valid graph, a spawned supervisor, and a succeeded workflow are different outcomes; only the last proves that run completed. Then read `taskOutcome` to say whether the task was accepted.
+Не заменяй неудачный/незавершённый запуск несвязанным `start` со скопированным JSON:
+читай продолжение. После аварии исполнитель с незаписанным результатом мог уже сделать
+внешнюю запись: до `accept`/`retry`/`reconcile` читай восстановление, не повторяй молча.
+В отчёте различай валидный граф, созданный supervisor, завершённый запуск и принятую
+задачу; указывай фактическое состояние, результат, доказательства и незавершённую работу.

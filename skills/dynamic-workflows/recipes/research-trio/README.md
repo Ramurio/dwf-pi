@@ -1,12 +1,18 @@
-# Three independent researchers and a synthesizer
+# Три независимых исследователя и общий итог
 
-Portable authoring requests for a small graph: three isolated `researcher` branches in `parallel` with `failurePolicy:"collect"`, then a separate `synthesizer`, then a root `finish`. Copy these JSON files into your workspace and edit the copies. Do not write user parameters, CLI envelopes, or journal files back into the skill.
+Переносимые запросы создания небольшого графа: три изолированных `researcher` в `parallel`
+с `failurePolicy` `collect`, затем отдельный `synthesizer` и корневой `finish`. Скопируй JSON
+в рабочий каталог и редактируй **копии**, не записывай пользовательские параметры,
+ответы CLI или журнал обратно в skill.
 
-This recipe has no web tool. Researchers may read only files reachable from the prepare `cwd` with `read`, `grep`, `find` and `ls`.
+В рецепте нет веб-инструментов. Исследователи читают локальные файлы относительно `cwd`
+подготовки через `read`/`grep`/`find`/`ls`; это не изоляция ОС, разрешения инструментов не
+запрещают доступ к иным путям, доступным аккаунту.
 
-## Copy from the installed skill
+## Копирование из установленного skill
 
-Work from any directory. `SKILL` is the skill tree your harness actually uses (setup symlink or a copied directory), not `examples/` or `src/` in a checkout.
+Работай из любого каталога. SKILL — фактическое дерево инструкций приложения (ссылка
+установщика или копия), не examples/src репозитория:
 
 ```sh
 SKILL="${DYNAMICWF_SKILL:-$HOME/.agents/skills/dynamic-workflows}"
@@ -15,26 +21,31 @@ STORE="${STORE:-$PWD/research-trio.sqlite}"
 cp "$RECIPE/create.json" "$RECIPE/patch.json" "$RECIPE/input.json" .
 ```
 
-CLI stdout is `{ "ok": true, "result": ... }` or `{ "ok": false, "error": ... }`. Check `ok` after every command. `workflow.patch` also requires `result.validation.valid`. `workflow.validate` requires `result.valid`.
+Stdout CLI — `{ "ok": true, "result": ... }` либо `{ "ok": false, "error": ... }`.
+Проверяй ok после каждой команды; для `patch` ещё `result.validation.valid`,
+для `validate` — `result.valid`.
 
-## Settings to fill
+## Что заполнить
 
-| What | Exact place | Notes |
+| Параметр | Точное место | Примечание |
 | --- | --- | --- |
-| Draft id | `create.json` `id`, then the same `id` in later requests | Shipped value is `research-trio`. |
-| Researcher 1 model/thinking | `patch.json` node `researcher-1` / `investigate` / `config` | `model.provider`, `model.id`, `thinking`. |
-| Researcher 2 model/thinking | `patch.json` node `researcher-2` / `investigate` / `config` | Same fields; may differ from the other nodes. |
-| Researcher 3 model/thinking | `patch.json` node `researcher-3` / `investigate` / `config` | Same fields; may differ from the other nodes. |
-| Synthesizer model/thinking | `patch.json` node `main` / `aggregate` / `config` | Same fields; may differ from the researchers. |
-| Question, criteria, sources, r1/r2/r3 assignments, synthesis assignment | `input.json` | Each branch receives shared `question`/`criteria`/`sources` plus only its own assignment. |
-| Workspace | `workflow.prepare` `cwd` | Directory that contains the local sources you listed. |
-| Journal | `--store` on every command | Absolute path if you leave this cwd. |
+| ID черновика | create.json `id` и тот же `id` дальнейших запросов | Поставляется research-trio |
+| Модель/`thinking` исследователя 1 | patch.json, граф researcher-1, узел `investigate`, `config` | Поля `model.provider`, `model.id`, `thinking` |
+| Модель/`thinking` исследователя 2 | patch.json, граф researcher-2, узел `investigate`, `config` | Те же поля, могут отличаться |
+| Модель/`thinking` исследователя 3 | patch.json, граф researcher-3, узел `investigate`, `config` | Те же поля, могут отличаться |
+| Модель/`thinking` обобщающего агента | patch.json, граф `main`, узел `aggregate`, `config` | Те же поля, могут отличаться |
+| Вопрос, критерии, источники, задания r1/r2/r3 и обобщение | input.json | Ветка получает общие `question`/`criteria`/`sources` и только своё `assignment` |
+| Рабочий каталог | `workflow.prepare` `cwd` | Каталог с выбранными локальными источниками |
+| Журнал | --store каждой команды | Абсолютный путь при смене `cwd` |
 
-`thinking: "high"` in the shipped patch is a syntactically valid example, not a claim that your selected model supports it. After `catalog.models` and `catalog.describe`, replace provider, model id and thinking on all four configs with values from the current catalog. Historical Grok IDs in repository docs are not proof of availability. An unfilled or unavailable model/thinking fails `workflow.prepare`; it does not fall back.
+`thinking` high в поставляемом изменении — синтаксический пример, не гарантия поддержки
+моделью. После `catalog.models`/describe замени `provider`, ID модели и `thinking` **во всех
+четырёх `config`** актуальными значениями. ID примера не доказывает доступность.
+Незаполненная/недоступная модель или `thinking` даёт ошибку подготовки, не запасной выбор.
+Не добавляй в рецепт повторы/исправление формата, лимиты параллелизма/итераций/времени
+или обязательные этапы согласования.
 
-Do not add retry policies, output-repair policies, concurrency caps, iteration/time limits or approval gates to this recipe.
-
-## Catalog, then author, then prepare
+## Каталог → граф → подготовка
 
 ```sh
 dynamicwf catalog.models --store "$STORE" <<'JSON'
@@ -50,7 +61,7 @@ dynamicwf catalog.describe --store "$STORE" <<'JSON'
 JSON
 ```
 
-Edit the four `config` objects and `input.json`, then:
+Измени четыре `config` и input.json, затем:
 
 ```sh
 dynamicwf workflow.create --store "$STORE" < create.json > create-response.json
@@ -61,7 +72,9 @@ dynamicwf workflow.patch --store "$STORE" < patch.live.json > patch-response.jso
 node -e 'const e=JSON.parse(require("node:fs").readFileSync("patch-response.json","utf8")); if(!e.ok) throw new Error(e.error.message); if(!e.result.validation.valid) throw new Error(JSON.stringify(e.result.validation)); process.stdout.write("revision "+e.result.workflow.revision+"\n");'
 ```
 
-A new draft is usually revision `1`. Do not resend `patch.json` with a stale `expectedRevision`. If create returned another value, or you already patched, take `result.revision` / `result.workflow.revision` (or `workflow.inspect`) and rebase; a conflict means inspect the draft instead of forcing the old patch.
+Новый черновик обычно `revision` 1. Не отправляй patch.json с устаревшим `expectedRevision`.
+Бери актуальную `result.revision`/`result.workflow.revision` либо `workflow.inspect` и
+переноси изменения; конфликт требует инспекции, не принудительной отправки старого запроса.
 
 ```sh
 dynamicwf workflow.validate --store "$STORE" <<'JSON'
@@ -69,18 +82,21 @@ dynamicwf workflow.validate --store "$STORE" <<'JSON'
 JSON
 ```
 
-Confirm `ok` and `result.valid`. Then prepare the workspace that holds the sources (this cwd in the example):
+Проверь ok и `result.valid`. Подготовь рабочий каталог с источниками (здесь текущий `cwd`):
 
 ```sh
 node -e 'const fs=require("node:fs"); process.stdout.write(JSON.stringify({id:"research-trio",cwd:process.cwd()}));' | dynamicwf workflow.prepare --store "$STORE" > prepare-response.json
 node -e 'const e=JSON.parse(require("node:fs").readFileSync("prepare-response.json","utf8")); if(!e.ok) throw new Error(e.error.message); process.stdout.write(e.result.preparedId+"\n"+e.result.planHash+"\n");'
 ```
 
-Inspect `prepare-response.json` `result.plan`: four distinct chosen models/thinking, `session:"fresh"`, `permission:"read-only"`, tools `read`/`grep`/`find`/`ls`. `workflow.prepared {"preparedId":"..."}` rereads the same handle from this journal.
+Изучи `result.plan` в prepare-response.json: четыре явно выбранные конфигурации `model`/`thinking`
+(модели могут совпадать), `session` `fresh`, `permission` `read-only`, только `read`/`grep`/`find`/`ls`.
+`workflow.prepared {"preparedId":"..."}` перечитает эту запись из того же журнала.
 
-## Start from the prepared handle
+## Запуск подготовленного плана
 
-Choose a stable `idempotencyKey` before sending. Save a start request that contains only `preparedId` from the prepare result, `input`, and that key. Do not use the draft-id start shortcut. Do not add `cwd` or `model` on top of `preparedId`.
+Заранее выбери устойчивый `idempotencyKey` и сохрани запрос только с `preparedId`/`input`/ключом.
+Не используй сокращение с ID черновика, не добавляй `cwd`/`model` поверх `preparedId`.
 
 ```sh
 node -e 'const fs=require("node:fs"); const prep=JSON.parse(fs.readFileSync("prepare-response.json","utf8")); if(!prep.ok) throw new Error(prep.error.message); const request={preparedId:prep.result.preparedId,idempotencyKey:"research-trio-attempt-1",input:JSON.parse(fs.readFileSync("input.json","utf8"))}; fs.writeFileSync("start-request.json", JSON.stringify(request));'
@@ -88,15 +104,29 @@ dynamicwf run.start --store "$STORE" < start-request.json > start-response.json
 node -e 'const fs=require("node:fs"); const start=JSON.parse(fs.readFileSync("start-response.json","utf8")); if(!start.ok) throw new Error(start.error.message); const id=start.result.id; const store=process.argv[1]; const q=s=>"\x27"+String(s).replace(/\x27/g,"\x27\\\x27\x27")+"\x27"; process.stdout.write(id+"\n"); process.stdout.write("dynamicwf watch --run "+q(id)+" --store "+q(store)+"\n");' "$STORE"
 ```
 
-Print the real `result.id` and that quoted watch command immediately, before waiting for completion. A lost response is retried with the unchanged `start-request.json`. A new intended run needs a new key and a new start-request file.
+Выдай настоящий `result.id` и команду watch с корректным экранированием **сразу**, до
+ожидания завершения. Потерянный ответ повторяй тем же start-request.json. Новое намеренное
+выполнение требует нового ключа и нового файла запроса.
 
 ```sh
 node -e 'const fs=require("node:fs"); process.stdout.write(JSON.stringify({id:JSON.parse(fs.readFileSync("start-response.json","utf8")).result.id}));' | dynamicwf run.status --store "$STORE"
 node -e 'const fs=require("node:fs"); process.stdout.write(JSON.stringify({id:JSON.parse(fs.readFileSync("start-response.json","utf8")).result.id}));' | dynamicwf run.inspect --store "$STORE"
 ```
 
-Technical `succeeded` means the graph finished. Read `taskOutcome.decision`, `reason` and `evidence`. `accepted` requires three succeeded collect envelopes, three `complete` researcher reports, and a synthesizer `accepted` that still passes the finish guard. A failed branch, an `inconclusive` report, or an `inconclusive` synthesis finishes `inconclusive`. If the synthesizer itself fails, the run stays `failed` and the collected envelopes remain in the journal. Do not save a preset in this ordinary sequence.
+`succeeded` означает техническое завершение. Читай `taskOutcome.decision`/`reason`/`evidence`.
+`accepted` требует трёх оболочек `collect` со статусом `succeeded`, трёх отчётов `researcher`
+со значением `complete` и `accepted` от `synthesizer`, проходящего условие `finish`.
+Неудачная ветвь, `inconclusive` отчёт или обобщение ведут к `finish` `inconclusive`.
+Если сам `synthesizer` падает, запуск остаётся `failed`, а собранные оболочки сохраняются
+в журнале. Не сохраняй пресет автоматически.
 
-## Result
+## Форма результата
 
-`main.research` is `parallel`/`collect` children `r1`/`r2`/`r3` on graphs `researcher-1`/`researcher-2`/`researcher-3`. Each child graph is an independent fresh read-only researcher plus `end`. `main.aggregate` is a separate synthesizer. A conditional edge goes to finish `accepted`; the fallback is finish `inconclusive`. Researcher output is `decision` (`complete`|`inconclusive`), `summary`, `findings`, `evidence`, `uncertainties`. Synthesizer output is `decision` (`accepted`|`inconclusive`), `summary`, `reason`, `evidence`, `disagreements`, `uncertainties`. The finish `value` repeats `decision`/`accepted` from the chosen finish node and keeps the raw named reports plus the synthesis object. The synthesis verdict is data, not a bypass of the guard.
+`main.research` — `parallel`/`collect` с `children` r1/r2/r3 на researcher-1/2/3. Каждый ребёнок —
+независимый `researcher` с новой сессией, только чтением и `end`. `main.aggregate` — отдельный
+`synthesizer`. Условное ребро ведёт к `finish` `accepted`, запасное — к `finish` `inconclusive`.
+Выход `researcher`: `decision` `complete`/`inconclusive`, `summary`, `findings`, `evidence`, `uncertainties`.
+Выход `synthesizer`: `decision` `accepted`/`inconclusive`, `summary`, `reason`, `evidence`, `disagreements`,
+`uncertainties`. `value` завершения повторяет `decision`/`accepted` **выбранного `finish`**,
+сохраняет исходные именованные отчёты и объект `synthesis`. Вердикт `synthesizer` — данные,
+не обход условия. Общие инварианты — [SKILL](../../SKILL.md).

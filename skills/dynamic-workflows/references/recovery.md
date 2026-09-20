@@ -1,49 +1,137 @@
-# Recovery
+# Восстановление
 
-Read this before repeating an uncertain effect, accepting a failed operation's output, authorizing automatic retry, or signaling processes. Inspection is not authorization. A caller timeout, stale heartbeat, or closed harness does not prove the run died.
+Читай **до** повторения неопределённого эффекта, принятия неудачного выхода, автоматического
+повтора или сигнала процессам. Инспекция не разрешает действий. Таймаут клиента,
+старый heartbeat или закрытое приложение не доказывают смерть запуска. Для изменённого
+графа той же задачи — [продолжение](continuation.md), но оно не заменяет разрешение
+исходной неопределённой операции через `reconcile`.
 
-For a revised graph of the same user task, use [continuation.md](continuation.md). Continuation does not replace reconcile for an uncertain original operation.
+## Намерение, `started` и `settled` — не завершённый эффект
 
-## Intent, start, and settled are not completion
+`metadata.operation` содержит фактические `task`/`input` агента и намеченные сессию/ресурсы,
+команду/аргументы `check`, источник/`childResult` `worktree` либо назначение/источники/прогресс
+`integrate`. Это намерение/наблюдения: слияние могло завершиться до контрольной точки.
+Проверяй реальные файлы/процессы. Новая попытка архивирует происхождение операции/
+сессии/исполнителя; отсутствующие старые факты остаются неизвестными.
 
-When present, `metadata.operation` records the actual agent task/input and intended session/resource directories, check command/argv, worktree source/child result, or integration target/sources and merge progress. These are recorded intent and observations, not proof that an external operation completed: a merge may finish before its next checkpoint. Inspect real files and processes before drawing that conclusion. A new attempt archives the old operation/session/worker provenance; missing legacy records remain unknown.
+`metadata.workerLaunch` фиксирует `reserved`/`started`/`settled` обёртки. Исполнитель может
+быть жив до записи PID; контроллер ищет резервацию по идентичности процесса.
+`started` не доказывает допуск задания, `settled` — отсутствие всех потомков/внешних
+записей. Не выводи смерть из отсутствующего PID.
 
-`metadata.workerLaunch` records wrapper reservation, observed start, or settlement. A worker can be alive before its PID checkpoint; status checks find new reservations by process identity. `started` does not prove the task began, and `settled` does not certify all descendants or external writes. Use controller observations rather than inferring liveness from a missing PID.
+## Группы процессов
 
-## Process groups
+`run.status`/`inspect` может показать `unresolvedGroups` после выхода исполнителя:
+`key`/`attempt`, PID группы и кандидатов с PID/PPID/`state`, `ownership` `unverified`.
+Они блокируют восстановление/успех до наблюдения пустой группы. Номер мог перейти
+чужим процессам: **не сигнализируй по номеру одному** и не стирай точку.
+Проверь реальное происхождение/эффекты. Обычная отмена не убивает неподтверждённых
+кандидатов. «Группы процессов» браузера показывает те же факты и ссылку на задачу.
+Покинувшие группу процессы и отсутствующие старые наблюдения требуют отдельных
+доказательств; пустая группа не означает полное разрешение всех эффектов.
 
-`run.status` / `run.inspect` can report `unresolvedGroups` after a worker exits: activation key/attempt, group PID, and candidate PID/parent/state with `ownership:"unverified"`. These block recovery and success until the group is observed empty. A reused group number can refer to unrelated processes; do not signal them based on that number alone or erase the checkpoint. Inspect actual process provenance and effects. Ordinary cancel does not kill candidates whose ownership is unverified. Browser **Группы процессов** shows the same evidence and links to the task. Processes that escaped the group and missing legacy observations still require separate evidence; an empty group is not complete reconciliation of all external effects.
+## Ошибка и внешние эффекты
 
-## Failure records
+Типизированная `failure` задаёт `code`/`phase`/`effects`: `not-started`/`read-only`/`unknown`.
+Читай конкретную активацию/попытку, не только сводку запуска: ребёнок только для чтения
+не доказывает отсутствие записей всего графа. Наблюдение не разрешает повтор.
+Ошибка вывода может следовать успешной записи: не повторяй пишущий узел только ради JSON.
 
-Structured `failure` records identify the cause, phase, and task-effect state (`not-started`, `read-only`, `unknown`). Read the failing activation/attempt, not only the run summary: a read-only child does not establish that the whole graph made no writes. These observations are not retry authorization. Output failure can follow successful writes; do not rerun a writing worker just to fix its final JSON.
+Отказ провайдера может иметь `providerResponse.status`/`retryAfterMs`, наблюдённые на
+границе запроса. Отсутствие — неизвестность; не извлекай статус из текста и не
+предполагай временный сбой. HTTP 200 не доказывает полный ответ ассистента.
+Составные ошибки `agent`/`check` имеют `metadata.failureCauses`: вторая причина может
+запретить повтор, подходящий по первой. Ненулевой выход `check` и вердикт ревьюера —
+данные графа, не ошибки исполнения.
 
-Provider failures can include `providerResponse.status` and `retryAfterMs`, observed at the request boundary. Absence remains unknown; do not parse error prose to invent a status or assume a temporary failure. HTTP 200 does not prove a complete assistant response. For composite agent/check errors, inspect `metadata.failureCauses`: a later cause can explain why the first apparently matching cause did not trigger retry. Ordinary check exit codes and reviewer verdicts remain graph data.
+## Инспекция перед решением
 
-## Recovery inspection
+`run.recovery {"id":"run-id","key":"activation-key"}` возвращает точные попытку/план,
+`checkpoint`/`eventSeq`, операцию/контракт выхода, препятствия и хеш каталога при остановленной,
+ещё не использованной операции. `key` копируй из `run.inspect`. Завершённый родитель и
+зафиксированная коллекция запечатывают детей. При препятствиях файлы не сканируются.
+Хеш охватывает названные корни/административные данные Git, исключает журнал/ресурсы
+запуска, записывает вложенные ссылки без чтения целей. Он не доказывает внешние эффекты
+или все атрибуты файловой системы; большие каталоги требуют чтения файлов.
+«Проверить состояние для восстановления» даёт те же данные; после изменений обнови инспекцию.
 
-Use `run.recovery {"id":"run-id","key":"activation-key"}` for explicit recovery inspection. It returns the exact attempt/plan, journal checkpoint/event sequence, operation and output contract, blockers, and a workspace content digest when stopped and unconsumed. Completed parents and durable collection items seal their child results. With blockers, files are not scanned. The workspace digest covers named roots and Git administration, excludes the named journal/run resources, and records nested links without following their targets. It does not certify outside effects or every filesystem attribute. Large workspaces require reading their files. Browser **Проверить состояние для восстановления** exposes the same snapshot; refresh after state changes.
+Инспекция не принимает выход и не повторяет работу. Завершённые контрольные точки
+читаются без повторения действий. После аварии с незаписанным выходом внешние эффекты
+неопределённы: инспектируй артефакт, сообщи неопределённость и получи явное разрешение
+до повтора. Не редактируй SQLite/активный граф и не удаляй записи ради обхода.
+Чистые преобразования, ожидания и структурные родители восстанавливаются через точки.
+`worktree` в фазе `children` может подключиться после проверки владения/Git, но неопределённые
+действия ребёнка, выделение дерева или коммит всё ещё требуют `reconcile`. `run.resolve`
+отвечает только `await`. Использованное решение о повторе прерванной попытки не разрешает следующую.
 
-Inspection itself authorizes nothing: it never accepts a result or retries work. Explicit `run.reconcile` records accept/retry decisions and is separately governed. Do not edit SQLite to substitute for it.
+## Явное разрешение через `reconcile`
 
-Completed checkpoints replay without repeating their operations. After a crash, a side-effect worker whose output was not committed is uncertain: its external action may already have happened. Recovery refuses to rerun it implicitly. Inspect the activation and real artifacts, report the uncertainty, and obtain an explicit resolution before repeating the action. Do not edit SQLite or erase checkpoint rows to force a retry. Pure transforms, awaits, and structural parents can recover through completed checkpoints. A worktree in its children phase can reattach after ownership/Git checks; uncertain child writes or interrupted allocation/commit still block recovery. Use `run.reconcile` for explicit recovery decisions; `run.resolve` only answers an await. Manual active-graph mutation is unavailable. An earlier retry decision consumed by the interrupted attempt does not authorize another execution.
+После проверки фактических эффектов и свежей инспекции без препятствий вызови `run.reconcile`
+с точными `id`/`key`/`attempt`/`checkpoint`/`workspaceDigest`, заранее выбранным устойчивым
+`decisionId`, `action` `accept`/`retry`, непустыми `actor`/`reason` и массивом `evidence`.
+`accept` дополнительно требует `output` по зафиксированной схеме и записанной привязке
+ревью к артефакту/критериям. Участник может быть уполномоченным агентом, обязательного
+человеческого этапа нет. `evidence` участника — свидетельство, не машинное доказательство.
+Точная доставка возвращает квитанцию, конфликтующий ID отвергается.
+`run.reconciliations {"id":"run-...","key":"activation-key"}` читает решения и применение/замещение.
 
-## Reconcile
+`accept` создаёт явно восстановленную `succeeded`-точку и архивирует неудачную попытку,
+не вызывая исполнителя и не выдумывая расход SDK. `retry` используется атомарно с **одной**
+новой попыткой после повторной проверки файлов. Устаревший ожидающий повтор заменяется
+только свежим решением с `supersedes:"old-decision-id"`. Применённое нельзя использовать
+снова/заместить. Сохранение решения готовит тот же запуск, **не запускает** его и не
+снимает паузу. После необходимых решений отдельно `run.resume`. `cancelled`/`succeeded`
+и использованные дочерние результаты остаются запечатанными.
 
-For an unconsumed failed operation, first inspect real effects and call `run.recovery`. Reconcile needs real effects and `run.recovery` without blockers. Then call `run.reconcile` with the exact `id`, `key`, `attempt`, `checkpoint`, `workspaceDigest`, a caller-generated stable `decisionId`, `action:"accept"|"retry"`, nonempty `actor`/`reason`, and a nonempty `evidence` array. `accept` additionally requires `output` matching the frozen contract and recorded reviewer artifact/criteria binding. The actor may be an authorized agent; this is not a mandatory human approval step. Exact redelivery returns the existing receipt; conflicting decision identity fails. Use `run.reconciliations {"id":"run-...","key":"activation-key"}` to read decisions and application/supersession facts.
+### Git
 
-Accept creates a visibly reconciled succeeded checkpoint and archives the failed attempt without invoking a worker or inventing SDK usage. Retry is consumed atomically with one next attempt; files are inspected again at admission. A stale pending retry can only be replaced by a fresh inspected decision with `supersedes:"old-decision-id"`. Applied decisions cannot be reused or superseded. Recording a decision prepares the same run but does not launch it or lift pause; explicitly `run.resume` after all required resolutions. Cancelled/succeeded runs and consumed child results remain sealed. Do not change consumed results, SQLite, or the active plan to force recovery.
+Решение проверяет собственные worktrees, хеши/происхождение и результаты детей.
+Если конечный `head` записан, `accept`/`retry` требуют именно его: новый коммит нельзя
+принять со старым `childResult`. Завершённое дерево должно быть чистым и для `retry`.
+Повтор первоначального выделения может восстановить пропавшее собственное дерево
+только `allocating` **до допуска любого ребёнка**: сохранённая ветка ещё на записанном `base`,
+точная незаблокированная регистрация архивируется до адресного удаления/создания.
+Нет общей очистки prune, force/reset или удаления существующего дерева. Изменённые,
+перемещённые, заблокированные, повреждённые регистрации и пропавшие после работы детей
+файлы требуют явного ремонта/свежей инспекции. Не стирай неопределённое состояние Git
+ради прохождения проверки. Частичный `integrate` сохраняет ранние слияния, не откатывая автоматически.
 
-Git decisions verify owned worktrees, current heads/ancestry, and child results. Initial allocation retries can reconstruct a missing owned worktree only while allocating and before any child activation: a retained branch must still match its recorded base; the exact unlocked registration is archived before targeted removal and recreation. No global prune, force, reset, or deletion of an existing worktree is performed. Changed/moved/locked or malformed registrations, and missing files after child work, require explicit repair and fresh inspection. Never erase uncertain Git state just to make recovery pass.
+«Решения о восстановлении» показывает квитанции/доказательства. После инспекции форма
+принимает выход либо разрешает повтор с `actor`/`reason`/`evidence` и явной заменой ожидающего
+решения. Неудачную доставку можно повторить зафиксированным запросом с тем же ID.
+`resume` остаётся отдельным действием.
 
-Browser **Решения о восстановлении** shows receipts/evidence; after inspection its form accepts a result or authorizes a retry with actor/reason/evidence and explicit replacement of a pending decision. Failed delivery can resend the frozen request with the same ID. Saving leaves continuation to the separate resume control.
+## Исправление формата: `submit-only`
 
-## Submit-only output repair
+При создании графа `config.outputRepair:{"mode":"submit-only"}` явно разрешает исправление
+формата в той же сессии **после завершения задания**. Только submit_result остаётся
+активным, исходное задание/записи не повторяются. По умолчанию `disabled`. Скрытого лимита
+раундов нет; положительный `maxRounds` задавай только как намеренную политику.
+Каждый дополнительный ход ассистента — раунд. Ошибки провайдера и смысловое несовпадение
+доказательств в исправление не входят. Пауза дожидается уже активного исполнителя,
+отмена прерывает его. `metadata.outputRepair`/события показывают раунды и диапазоны отчётов
+той же попытки; известные токены исправления входят в суммы. Валидный формат не означает
+одобрение/корректность. Следующее разрешённое посещение `continue-node` возвращает полный
+зафиксированный набор инструментов нового вызова; авария пишущего узла сама его не разрешает.
 
-When authoring an agent, `config.outputRepair: {"mode":"submit-only"}` explicitly enables format repair in the same session after task execution settles. Only `submit_result` remains available; the original task and writes are not repeated. Default is `{"mode":"disabled"}`. There is no implicit round limit; set a positive `maxRounds` only when that bound is part of the intended policy. Each extra assistant turn is one round. Provider errors and semantic evidence mismatches do not enter this loop. A workflow pause drains this already active worker; cancellation aborts it. `metadata.outputRepair` and journal metadata events expose rounds and their usage-report ranges in the same activation attempt. All known repair tokens are included in ordinary totals. Valid format does not establish approval or artifact correctness.
+## Автоматический повтор по политике
 
-## Automatic retry
+Только явная политика узла вне `config`, например:
+`retryPolicy:{"codes":["provider"],"delayMs":5000,"provider":{"statuses":[429,503],"retryAfter":"honor"}}`.
+Без политики повтор выключен. Необязательный положительный `maxAttempts` включает первую
+попытку, без него число не ограничено. **Все** причины должны подходить `codes` и
+подтверждённым `effects` `not-started`/`read-only`. Отмена, прерывание, неизвестные записи и
+ошибки очистки не подходят. `statuses` фильтрует по наблюдаемому HTTP, отсутствие статуса
+тогда запрещает повтор; без фильтра выбрано всё семейство `provider`. `honor` берёт максимум
+настроенной и всех валидных серверных задержек, `ignore`/отсутствие сохраняет настроенную.
+Другие `codes` не затронуты HTTP-фильтром. Не выдумывай `providerResponse` из текста.
 
-Automatic retry is allowed only with an explicit node-level policy and matching reasons/effects. Author `retryPolicy:{"codes":["provider"],"delayMs":5000,"provider":{"statuses":[429,503],"retryAfter":"honor"}}` on an agent or check, outside agent `config`. Absent policy disables retries. Optional positive `maxAttempts` includes the first attempt; omit it for unbounded attempts. Every failure cause must match selected codes and confirmed `not-started`/`read-only` task effects. Cancellation, interruption, unknown writes, and cleanup failures never qualify. Optional `provider.statuses` filters provider errors by observed HTTP status; missing status then denies retry. Without this filter the entire provider family remains selected. `provider.retryAfter:"honor"` takes the maximum of the configured delay and all valid server delays; omitted or `"ignore"` preserves the configured delay. Other selected failure codes are unaffected by the HTTP filter. Do not invent `providerResponse.status` from error text.
-
-A durable decision authorizes one next attempt; pause blocks admission, and recovery retains the original chosen deadline. `run.retries {"id":"run-...","key":"activation-key","after":0}` pages decisions and any recorded composite `causes`; `current` reports separate live progress. Scheduled is not admitted. `run.attempts` and usage retain failed attempts and their tokens. Collect waits for child retries to settle before recording the final result. Whole-worker retries are distinct from submit-only output repair.
+Сохранённое решение разрешает одну следующую попытку. Пауза блокирует допуск, но
+задержка по часам идёт; восстановление сохраняет срок.
+`run.retries {"id":"run-...","key":"activation-key","after":0}` листает решения/составные
+причины, `current` отдельно показывает прогресс. `scheduled` не значит `admitted`.
+История попыток/учёт сохраняют неудачные попытки и токены. `collect` ждёт окончания
+повторов ребёнка перед записью финального результата. Новое ручное решение `reconcile`
+переводит запланированный автоматический повтор этой активации в `abandoned`:
+старое решение не должно допустить лишний запуск. Повтор всего исполнителя отличается
+от исправления формата внутри сессии.
