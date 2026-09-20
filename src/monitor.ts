@@ -36,7 +36,7 @@ export function clipLine(value: string, width: number): string {
   return width > 0 ? `${result}…` : "";
 }
 /** Human path retains invocation and iteration identities without exposing internal scope tuples. */
-export function activationPath(a: ActivationRecord): string {
+export function activationPath(a: ActivationRecord, includeAttempt = true): string {
   const scope = a.context.scope, parts: string[] = [];
   for (let i = 0; i < scope.length;) {
     if (scope[i] === "graph" && i + 1 < scope.length) { i += 2; continue; }
@@ -47,7 +47,7 @@ export function activationPath(a: ActivationRecord): string {
       } else if (scope[i] === "worktree" || scope[i] === "subworkflow") i++;
     } else { parts.push(scope[i]!); i++; }
   }
-  return terminalText([...parts, `${a.context.nodeId} · проход ${a.context.visit + 1}${a.attempt > 1 ? ` · попытка ${a.attempt}` : ""}`].join(" / "), 2_000);
+  return terminalText([...parts, `${a.context.nodeId} · проход ${a.context.visit + 1}${includeAttempt && a.attempt > 1 ? ` · попытка ${a.attempt}` : ""}`].join(" / "), 2_000);
 }
 function evidence(a: ActivationRecord): string {
   const declared = a.metadata.taskOutcome;
@@ -102,10 +102,11 @@ export function monitorBody(run: RunRecord, records: readonly ActivationRecord[]
   const lines = [run.status === "paused" ? "ПАУЗА — новые задачи не запускаются" : "СЕЙЧАС"];
   const taskOutcome = projection.taskOutcome;
   if (taskOutcome) lines.push(`Результат: ${taskOutcome.decision} · ${terminalText(taskOutcome.reason, 500)}`);
-  for (const a of records.filter(a => a.status === "running" && a.metadata.waiting === true)) {
+  for (const a of records.filter(a => activationState(a) === "waiting")) {
     lines.push(`? ${activationPath(a)} — ${terminalText(String(a.metadata.waitReason), 500)}`,
       `  ${a.metadata.waitId} · контракт ответа: dynamicwf run.waits`);
   }
+  for (const a of records.filter(a => activationState(a) === "answered")) lines.push(`✓ ${activationPath(a)} — ответ сохранён${run.desired === "paused" ? " · на паузе" : " · ожидает продолжения"}`);
   if (!active.length) lines.push(terminal.has(run.status) ? "Активных задач нет." : "Ожидание следующего шага.");
   for (const a of records.filter(a=>projection.retryingKeys.includes(a.key))) {
     const retry=parseRetryProgress(a.metadata.retry)!;

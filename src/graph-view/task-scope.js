@@ -102,6 +102,7 @@ export function linkedRunsForView(state) {
 export function viewTokenTotal(state) {
   const taskUsage = taskUsageForView(state);
   if (taskUsage) return taskUsage.summary?.totalTokens ?? null;
+  if (state.usageScope === "task" && state.run?.lineage?.taskId) return null;
   const total = state.run?.usage?.totalTokens;
   return typeof total === "number" ? total : null;
 }

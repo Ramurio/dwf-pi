@@ -43,8 +43,8 @@ test("whole-task totals stay bound to the selected task identity", () => {
       taskUsage: { taskId: "task-linked", summary: { totalTokens: 34 } },
       run: { id: "run-qa-unrelated", lineage: { taskId: "task-unrelated" }, usage: { totalTokens: 7 } },
     }),
-    7,
-    "leftover 34 from another task must not paint under the unrelated header",
+    null,
+    "task scope must not substitute unrelated task data or the run-only subtotal",
   );
   assert.equal(taskUsageForView(state({ usageScope: "run" })), null);
 });

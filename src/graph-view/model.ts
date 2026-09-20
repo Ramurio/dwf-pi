@@ -16,6 +16,18 @@ export function graphSnapshot(
   presentation = projectRun(run, records),
   trace: ReturnType<RunStore["transitionSummary"]> = { supported: false, count: 0, failed: 0, lastSeq: 0, edges: [] },
 ) {
+  // Старые журналы ещё не имели waitResolved: источник истины — сохранённый ответ.
+  const resolved = new Set(waits.filter(wait => wait.status === "resolved").map(wait => JSON.stringify([wait.key, wait.id])));
+  const byNode = new Map<string, ActivationRecord[]>();
+  const waitingKeys: string[] = [];
+  for (const original of records) {
+    const a = original.kind === "await" && resolved.has(JSON.stringify([original.key, original.metadata.waitId]))
+      ? { ...original, metadata: { ...original.metadata, waitResolved: true } } : original;
+    const key = JSON.stringify([a.context.graphId, a.context.nodeId]);
+    const list = byNode.get(key) ?? []; list.push(a); byNode.set(key, list);
+    if (activationState(a) === "waiting") waitingKeys.push(a.key);
+  }
+  presentation = { ...presentation, waitingKeys };
   return {
     cwd: run.cwd,
     id: run.id,
@@ -44,16 +56,14 @@ export function graphSnapshot(
       id,
       entry: graph.entry,
       nodes: graph.nodes.map((node) => {
-        const activations = records.filter(
-          (a) => a.context.graphId === id && a.context.nodeId === node.id,
-        );
+        const activations = byNode.get(JSON.stringify([id, node.id])) ?? [];
         const ordered = [...activations].sort(
           (a, b) =>
             b.startedAt - a.startedAt || b.context.visit - a.context.visit,
         );
-        const status = activations.some((a) => a.status === "running" && a.metadata.waiting !== true)
-          ? "running" : activations.some(a => a.status === "running" && a.metadata.waiting === true) ? "waiting"
-          : activations.some(a => activationState(a) === "retrying") ? "retrying"
+        const states = activations.map(activationState);
+        const status = states.includes("running") ? "running" : states.includes("waiting") ? "waiting"
+          : states.includes("answered") ? "answered" : states.includes("retrying") ? "retrying"
           : (ordered[0] ? activationState(ordered[0]) : "unvisited");
         const config = run.plan.agents[id]?.[node.id];
         return {
@@ -80,6 +90,7 @@ export function graphSnapshot(
             scope: JSON.stringify(a.context.scope),
             key: a.key,
             path: activationPath(a),
+            basePath: activationPath(a, false),
             status: activationState(a),
             visit: a.context.visit + 1,
             attempt: a.attempt,

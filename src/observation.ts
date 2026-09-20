@@ -36,6 +36,7 @@ export function activeWork(records: readonly ActivationRecord[]): ActivationReco
 }
 export function activationState(a: ActivationRecord) {
   if (a.status === "failed" && parseRetryProgress(a.metadata.retry)?.status === "scheduled") return "retrying";
+  if (a.status === "running" && a.kind === "await" && a.metadata.waitResolved === true) return "answered";
   return a.status === "running" && a.kind === "await" && a.metadata.waiting === true ? "waiting" : a.status;
 }
 export interface ProcessObservation { supervisorAlive: boolean; workersAlive: number; observedAt: number; launchPending: boolean; unresolvedGroupProcesses?: number }

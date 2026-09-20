@@ -244,7 +244,7 @@ export class JournalRuntime implements WorkflowRuntime {
             if (event.type === "usage.report") {
               if (typeof event.reportId !== "string" || typeof event.stopReason !== "string") throw new Error("Invalid worker usage identity");
               const observedEffort = typeof event.observedEffort === "string" ? event.observedEffort : undefined;
-              this.store.recordUsage(this.run.id, this.token, key, event.reportId, event.usage, event.stopReason, observedEffort);
+              this.store.recordUsage(this.run.id, this.token, key, event.reportId, event.usage, event.stopReason, observedEffort, event.observedEffortSource === "sdk-message" || event.observedEffortSource === "request-payload" ? event.observedEffortSource : "unknown");
             } else if (event.type === "usage.settled") {
               if (typeof event.complete !== "boolean") throw new Error("Invalid worker accounting completion");
               this.store.settleUsage(this.run.id, this.token, key, event.complete);

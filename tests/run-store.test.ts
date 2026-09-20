@@ -62,6 +62,7 @@ test("wait admission is fenced and resolution commits atomically with its event"
       assert.equal(second.events("run").filter(e => e.type === "wait.resolved").length, 0);
       injection.exec("DROP TRIGGER reject_wait_event");
       store.resolveWait("run", wait.id, { answer: true }, "agent");
+      assert.equal(second.getActivation("run", wait.key)?.metadata.waitResolved, true);
       second.resolveWait("run", wait.id, { answer: true }, "duplicate");
       assert.equal(second.getWait("run", wait.id).resolvedBy, "agent");
       assert.equal(second.events("run").filter(e => e.type === "wait.resolved").length, 1);
@@ -435,5 +436,18 @@ test("concurrent processes initialize journal and reserve a run exactly once", a
     assert.equal(results.filter(result => result.won).length, 1);
     assert.equal(store.get("run").ownerToken, results.find(result => result.won)?.token);
     assert.equal(store.events("run").filter(event => event.type === "run.reserved").length, 1);
+  });
+});
+
+test("reasoning provenance survives ledger reads without inventing legacy origin", async () => {
+  await withStores((store, second) => {
+    create(store);const {token}=store.reserveLaunch('run');
+    store.beginActivation('run',token,context,{kind:'agent',sideEffect:false});
+    const usage={input:1,output:2,totalTokens:3};
+    store.recordUsage('run',token,key,'1',usage,'stop','high','sdk-message');
+    store.recordUsage('run',token,key,'2',usage,'stop','high','request-payload');
+    store.recordUsage('run',token,key,'3',usage,'stop','high');
+    assert.deepEqual(second.usageReports('run').reports.map(r=>r.observedEffortSource),['sdk-message','request-payload','unknown']);
+    assert.throws(()=>store.recordUsage('run',token,key,'1',usage,'stop','high','request-payload'),/conflict/i);
   });
 });

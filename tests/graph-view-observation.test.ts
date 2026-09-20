@@ -661,3 +661,91 @@ test("run navigation distinguishes missing accounting, known zero and a partial 
     assert.match(runLabels[3], /10 ток.*[Ии]звестная часть/);
   `, { summaries });
 });
+
+test("newer run lists own their success, errors and authorization feedback", async () => {
+  for (const mode of ["success", "failure", "401", "decode"]) await replay(`
+    let finish, fail, decode, reloads=0;
+    window.location={reload(){reloads++}};
+    globalThis.fetch=()=>new Promise((resolve,reject)=>{finish=resolve;fail=reject;});
+    const old=refreshRuns();
+    if(mode==='decode'){finish({ok:true,status:200,json:()=>new Promise(resolve=>{decode=resolve})});await Promise.resolve();}
+    globalThis.fetch=async()=>({ok:true,status:200,json:async()=>({runs:[{...base,status:'paused'}]})});
+    await refreshRuns(); notice('new-feedback');
+    if(mode==='failure')fail(Error('old-error'));
+    else if(mode==='401')finish({ok:false,status:401});
+    else if(mode==='decode')decode({runs:[base]});
+    else finish({ok:true,status:200,json:async()=>({runs:[base]})});
+    await old;
+    assert.equal(state.runs[0].status,'paused');assert.equal(reloads,0);assert.equal($('notice').textContent,'new-feedback');
+  `,{mode});
+});
+
+test("equivalent slow task loads coalesce, settle and can subsequently refresh", async () => {
+  await replay(`
+    state.usageScope='task';let finish,calls=0,total=30;
+    globalThis.fetch=path=>{
+      if(path.startsWith('task-usage?')){calls++;return new Promise(resolve=>{finish=()=>resolve({ok:true,status:200,json:async()=>({taskId:'task-a',summary:{totalTokens:total},runs:[]})});});}
+      if(path.startsWith('task?'))return Promise.resolve({ok:true,status:200,json:async()=>({members:[]})});
+      throw Error(path);
+    };
+    renderTokens();assert.match($('content-panel').textContent,/Загружаем расход всей задачи/);
+    const first=loadTaskScope('task-a');
+    assert.equal(loadTaskScope('task-a'),first);assert.equal(loadTaskScope('task-a'),first);assert.equal(calls,1);
+    finish();assert.equal(await first,true);assert.equal(state.taskUsage.summary.totalTokens,30);
+    total=45;const next=loadTaskScope('task-a');assert.equal(calls,2);finish();await next;
+    assert.equal(state.taskUsage.summary.totalTokens,45);
+  `,{base:{...snapshot(),lineage:{taskId:'task-a'}}});
+});
+
+test("recovery receipt fences earlier history and inspection reads", async () => {
+  for (const kind of ['history','inspection']) for (const failed of [false,true]) await replay(`
+    const activation={key:'key-operation',attempt:1,status:'failed'}, identity=JSON.stringify([base.id,activation.key]);
+    const inspection={value:{attempt:1,checkpoint:'checkpoint',workspace:{digest:'workspace',roots:[],entries:0,bytes:0},blockers:[]},records:[]};
+    recoveryInspections.set(identity,inspection);
+    let finish,fail,receipt;
+    globalThis.fetch=path=>{
+      if(path.startsWith('reconciliations?'))return new Promise((resolve,reject)=>{finish=resolve;fail=reject;});
+      if(path.startsWith('recovery?'))return Promise.resolve({ok:true,status:200,json:async()=>inspection.value});
+      if(path==='reconcile')return Promise.resolve({ok:true,status:200,json:async()=>receipt});
+      if(path.startsWith('snapshot?'))return Promise.resolve({ok:true,status:200,json:async()=>base});
+      throw Error(path);
+    };
+    const history=el('div');
+    if(kind==='history')renderReconciliations(history,activation);else renderRecovery(history,activation);
+    const reading=descendants(history).find(n=>n.tagName==='button').listeners.get('click')[0](new Event('click'));
+    const form=el('div');renderRecoveryForm(form,activation,inspection,async()=>{});
+    const draft=recoveryDrafts.get(JSON.stringify([base.id,activation.key,1]));
+    Object.assign(draft,{action:'retry',actor:'reviewer',reason:'fixture',evidence:'fixture evidence'});
+    receipt={request:{decisionId:'decision',action:'retry'},createdAt:3};
+    await descendants(form).find(n=>n.tagName==='button'&&n.textContent==='Сохранить решение').listeners.get('click')[0](new Event('click'));
+    if(failed)fail(Error('old-error'));else finish({ok:true,status:200,json:async()=>[]});
+    await reading;
+    assert.equal(reconciliationRecords.get(identity).value[0].request.decisionId,'decision');
+    assert.equal(reconciliationRecords.get(identity).saved,true);
+    assert.equal(recoveryInspections.get(identity).records[0].request.decisionId,'decision');
+    assert.equal(recoveryInspections.get(identity).loading,false);
+    // Свежий GET может уточнить статус: сохранённая квитанция не замораживает кэш.
+    globalThis.fetch=async()=>({ok:true,status:200,json:async()=>[{...receipt,application:{attempt:2}}]});
+    const newer=el('div');renderReconciliations(newer,activation);
+    await descendants(newer).find(n=>n.tagName==='button').listeners.get('click')[0](new Event('click'));
+    assert.equal(reconciliationRecords.get(identity).value[0].application.attempt,2);
+  `,{kind,failed,crypto:{randomUUID:()=> 'decision'},base:snapshot({status:'paused',desired:'paused'})});
+});
+
+test("wait actions keep focus while a neighbouring activation updates", async () => {
+  for (const tag of ['summary','button']) await replay(`
+    renderPanel();const control=descendants($('content-panel')).find(n=>n.tagName===tag&&n.dataset.waitControl);
+    control.focus();renderPanel();
+    const updated=descendants($('content-panel')).find(n=>n.id===control.id);
+    assert.notEqual(updated,control);assert.equal(document.activeElement,updated);
+  `,{tag});
+});
+
+test("resolved waits stay visible as saved while paused without asking again", async () => {
+  const a=activation('correctness');a.metadata.waitId='wait-correctness';
+  const w={...waiting('correctness'),status:'resolved' as const,response:{answer:'ready'},resolvedAt:3,resolvedBy:'fixture'};
+  const base=graphSnapshot({...run,status:'paused',desired:'paused'},[a],new Map(),[w]);
+  assert.equal(base.graphs[0]!.nodes[0]!.status,'answered');
+  assert.deepEqual(base.presentation.waitingKeys,[]);
+  await replay(`renderPanel();assert.match($('content-panel').textContent,/Ответ сохранён · на паузе/);assert.match($('content-panel').textContent,/ready/);assert.equal(fields().length,0);`,{base});
+});

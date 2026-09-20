@@ -18,6 +18,18 @@ const collectionPages = new CollectionPages();
 const retryPages = new RetryPages();
 const recoveryInspections = new Map();
 const reconciliationRecords = new Map();
+const reconciliationGenerations = new Map();
+const inspectionGenerations = new Map();
+function nextInspectionRead(identity) {
+  const generation = (inspectionGenerations.get(identity) ?? 0) + 1;
+  inspectionGenerations.set(identity, generation);
+  return () => inspectionGenerations.get(identity) === generation;
+}
+function nextReconciliationRead(identity) {
+  const generation = (reconciliationGenerations.get(identity) ?? 0) + 1;
+  reconciliationGenerations.set(identity, generation);
+  return () => reconciliationGenerations.get(identity) === generation;
+}
 const recoveryDrafts = new Map();
 const routingLabels = { true: "Условие выполнено", false: "Условие не выполнено", "not-evaluated": "Не проверялось", fallback: "Выбран запасной переход", error: "Ошибка проверки" };
 const waitDrafts = new Map();
@@ -27,6 +39,7 @@ const names = {
   queued: "Ожидание",
   running: "В работе",
   waiting: "Ждёт ответа",
+  answered: "Ответ сохранён",
   retrying: "Повтор запланирован",
   pausing: "Приостановка",
   paused: "Пауза",
@@ -82,6 +95,8 @@ const state = {
   cameras: new Map(),
   snapshotAt: 0,
   snapshotRequest: 0,
+  listRequest: 0,
+  taskLoad: null,
   runSelection: 0,
   usageScope: "run",
   taskUsage: null,
@@ -291,23 +306,33 @@ async function selectRun(id, navigation = "push") {
     renderPanel();
   }
 }
-async function loadTaskScope(taskId) {
+function loadTaskScope(taskId) {
+  const runId = state.id, visit = state.runSelection;
+  const identity = JSON.stringify([runId, visit, taskId]);
+  if (state.taskLoad?.identity === identity) return state.taskLoad.promise;
   const seq = ++state.taskFetch;
-  const runId = state.id;
-  try {
-    const usage = await api(`task-usage?id=${encodeURIComponent(taskId)}&after=0`);
-    if (seq !== state.taskFetch || state.id !== runId) return false;
-    const task = await api(`task?id=${encodeURIComponent(taskId)}`);
-    const linked = [];
-    for (const member of task.members ?? []) {
-      if (seq !== state.taskFetch || state.id !== runId) return false;
-      linked.push(await api(`snapshot?id=${encodeURIComponent(member.runId)}`));
+  const current = () => seq === state.taskFetch && state.id === runId && state.runSelection === visit;
+  const promise = (async () => {
+    try {
+      const usage = await api(`task-usage?id=${encodeURIComponent(taskId)}&after=0`, undefined, current);
+      if (!current()) return false;
+      const task = await api(`task?id=${encodeURIComponent(taskId)}`, undefined, current);
+      if (!current()) return false;
+      const linked = [];
+      for (const member of task.members ?? []) {
+        linked.push(await api(`snapshot?id=${encodeURIComponent(member.runId)}`, undefined, current));
+        if (!current()) return false;
+      }
+      return applyTaskScopeFetch(state, seq, taskId, usage, linked);
+    } catch (error) {
+      if (current()) applyTaskScopeError(state, seq, taskId, error instanceof Error ? error.message : String(error));
+      return false;
+    } finally {
+      if (state.taskLoad?.identity === identity) state.taskLoad = null;
     }
-    return applyTaskScopeFetch(state, seq, taskId, usage, linked) && state.id === runId;
-  } catch (error) {
-    applyTaskScopeError(state, seq, taskId, error instanceof Error ? error.message : String(error));
-    return false;
-  }
+  })();
+  state.taskLoad = { identity, promise };
+  return promise;
 }
 async function openActivation(activation) {
   const target = activationTarget(activation, state.id);
@@ -489,6 +514,7 @@ function renderPanel() {
   }
   const focused = document.activeElement;
   const editingWait = focused?.dataset?.waitId;
+  const controlId = focused?.dataset?.waitControl ? focused.id : null;
   const selection = editingWait ? [focused.selectionStart, focused.selectionEnd, focused.selectionDirection] : null;
   const scroll = editingWait ? { top: focused.scrollTop, left: focused.scrollLeft } : null;
   $("graph-panel").hidden = state.tab !== "graph";
@@ -499,6 +525,10 @@ function renderPanel() {
   else if (state.tab === "trace") renderTrace();
   else renderTokens();
   renderInspector();
+  if (controlId) {
+    const control = document.getElementById(controlId);
+    if (control && !control.disabled) control.focus({ preventScroll: true });
+  }
   if (editingWait) {
     const field = document.getElementById(`wait-response-${editingWait}`);
     if (field) {
@@ -669,12 +699,15 @@ function renderRecovery(container, activation) {
   const cached = recoveryInspections.get(identity) ?? {};
   const inspectState = async () => {
     recoveryInspections.set(identity, { ...cached, loading: true, error: null }); renderInspector();
+    const current = nextReconciliationRead(identity);
+    const currentInspection = nextInspectionRead(identity);
     try {
       const suffix = `id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}`;
-      const [value, records] = await Promise.all([api(`recovery?${suffix}`), api(`reconciliations?${suffix}`)]);
-      recoveryInspections.set(identity, { value, records });
-      reconciliationRecords.set(identity, { value: records, at: Date.now() });
-    } catch (error) { recoveryInspections.set(identity, { ...cached, error: error.message }); }
+      const [value, records] = await Promise.all([api(`recovery?${suffix}`, undefined, currentInspection), api(`reconciliations?${suffix}`, undefined, currentInspection)]);
+      if (!currentInspection()) return;
+      recoveryInspections.set(identity, { value, records: current() ? records : reconciliationRecords.get(identity)?.value ?? cached.records ?? [] });
+      if (current()) reconciliationRecords.set(identity, { value: records, at: Date.now() });
+    } catch (error) { if (currentInspection()) recoveryInspections.set(identity, { ...cached, loading: false, error: error.message }); }
     if (state.id === id) renderInspector();
   };
   const inspect = button(cached.loading ? "Сканирование состояния…" : cached.value ? "Обновить инспекцию" : "Проверить состояние для восстановления", inspectState, "child-button");
@@ -742,8 +775,11 @@ function renderRecoveryForm(container, activation, inspection, inspectState) {
       }
       draft.busy = true; renderInspector();
       draft.receipt = await api("reconcile", { method: "POST", headers: { "Content-Type": "application/json", "X-Dynamicwf-View": "1" }, body: JSON.stringify(draft.request) });
-      const records = [...(inspection.records ?? []).filter(record => record.request.decisionId !== draft.receipt.request.decisionId).map(record => record.request.decisionId === draft.receipt.request.supersedes ? { ...record, supersededBy: draft.receipt.request.decisionId } : record), draft.receipt];
-      recoveryInspections.set(JSON.stringify([id, activation.key]), { ...inspection, records });
+      nextReconciliationRead(JSON.stringify([id, activation.key]));
+      nextInspectionRead(JSON.stringify([id, activation.key]));
+      const latest = recoveryInspections.get(JSON.stringify([id, activation.key])) ?? inspection;
+      const records = [...(latest.records ?? []).filter(record => record.request.decisionId !== draft.receipt.request.decisionId).map(record => record.request.decisionId === draft.receipt.request.supersedes ? { ...record, supersededBy: draft.receipt.request.decisionId } : record), draft.receipt];
+      recoveryInspections.set(JSON.stringify([id, activation.key]), { ...latest, loading: false, records });
       reconciliationRecords.set(JSON.stringify([id, activation.key]), { value: records, at: Date.now(), saved: true });
       if (state.id === id && state.runSelection === selection) { notice("Решение о восстановлении сохранено. Запуск продолжится по отдельной команде."); await refreshSnapshot(); }
     } catch (error) { draft.error = error.message; }
@@ -849,8 +885,15 @@ function renderReconciliations(container, activation) {
   const id = state.id, identity = JSON.stringify([id, activation.key]), cached = reconciliationRecords.get(identity) ?? {};
   const load = button(cached.loading ? "Загружаем решения…" : cached.value ? "Обновить решения о восстановлении" : "Решения о восстановлении", async () => {
     reconciliationRecords.set(identity, { ...cached, loading: true, error: null }); renderInspector();
-    try { reconciliationRecords.set(identity, { value: await api(`reconciliations?id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}`), at: Date.now() }); }
-    catch (error) { reconciliationRecords.set(identity, { ...cached, error: error.message }); }
+    const current = nextReconciliationRead(identity);
+    try {
+      const value = await api(`reconciliations?id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}`, undefined, current);
+      if (current()) {
+        reconciliationRecords.set(identity, { value, at: Date.now() });
+        const inspection = recoveryInspections.get(identity);
+        if (inspection) recoveryInspections.set(identity, { ...inspection, records: value });
+      }
+    } catch (error) { if (current()) reconciliationRecords.set(identity, { ...cached, error: error.message }); }
     if (state.id === id) renderInspector();
   }, "child-button");
   load.disabled = !!cached.loading; container.append(load);
@@ -918,7 +961,8 @@ function fit() {
 }
 function zoom(factor) {
   if (!camera) return;
-  const width = Math.min(30000, Math.max(250, camera.width * factor));
+  const width = Math.max(Math.min(250, camera.width), camera.width * factor);
+  if (!Number.isFinite(width) || width <= 0) return;
   const height = (width / camera.width) * camera.height;
   camera = {
     x: camera.x + (camera.width - width) / 2,
@@ -929,8 +973,22 @@ function zoom(factor) {
   state.cameras.set(cameraKey(), camera);
   applyCamera();
 }
+function revealGraphNode(pos) {
+  if (!camera) return;
+  const pad = 12;
+  const x = pos.width + 2 * pad > camera.width ? pos.x - pad
+    : Math.min(Math.max(camera.x, pos.x + pos.width + pad - camera.width), pos.x - pad);
+  const y = pos.height + 2 * pad > camera.height ? pos.y - pad
+    : Math.min(Math.max(camera.y, pos.y + pos.height + pad - camera.height), pos.y - pad);
+  if (x !== camera.x || y !== camera.y) {
+    camera = { ...camera, x, y }; state.cameras.set(cameraKey(), camera); applyCamera();
+  }
+}
 function renderGraph() {
   const graph = selectedGraph();
+  const graphIdentity = JSON.stringify([state.id, state.runSelection, graph.id, state.scope]);
+  const focusedNode = document.activeElement?.dataset?.graphIdentity === graphIdentity ? document.activeElement.dataset.nodeId : null;
+  let restoreFocus = null;
   state.graph = graph.id;
   const select = $("graph-select");
   select.replaceChildren(
@@ -1028,6 +1086,8 @@ function renderGraph() {
         "aria-pressed": String(selected),
         "aria-label": `${title(node)}: ${node.id}, ${names[node.status] ?? node.status}`,
       });
+    g.dataset.graphIdentity = graphIdentity; g.dataset.nodeId = node.id;
+    if (focusedNode === node.id) restoreFocus = g;
     g.append(
       svgEl("title", {}, `${title(node)}: ${node.id}`),
       svgEl("rect", {
@@ -1064,6 +1124,7 @@ function renderGraph() {
             : "",
       ),
     );
+    g.addEventListener("focus", () => revealGraphNode(pos));
     g.addEventListener("click", () => selectNode(graph.id, node.id));
     g.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") {
@@ -1072,6 +1133,14 @@ function renderGraph() {
       }
     });
     svg.append(g);
+    // Реальная ширина шрифта важнее количества символов; полный текст остаётся в title/ARIA.
+    for (const text of Array.from(g.children).filter(child => child.tagName.toLowerCase() === "text")) {
+      if (typeof text.getComputedTextLength !== "function") continue;
+      const glyphs = Array.from(text.textContent), maxWidth = pos.width - 32;
+      while (glyphs.length && text.getComputedTextLength() > maxWidth) {
+        glyphs.pop(); text.textContent = glyphs.join("") + "…";
+      }
+    }
   }
   camera = state.cameras.get(cameraKey());
   if (!camera) {
@@ -1089,6 +1158,7 @@ function renderGraph() {
     state.cameras.set(cameraKey(), camera);
   }
   applyCamera();
+  if (restoreFocus) restoreFocus.focus({ preventScroll: true });
 }
 function sectionHeading(text) {
   const row = el("div", "section-heading");
@@ -1134,7 +1204,15 @@ function renderNow() {
   const waitBlocker = waitResponseBlocker(state.run);
   const activations = allActivations(), byKey = new Map(activations.map(a => [a.key, a]));
   if (!finished.has(state.run.status)) for (const wait of state.run.waits ?? []) {
-    if (wait.status !== "open") continue;
+    if (wait.status !== "open") {
+      if (byKey.get(wait.key)?.status === "answered") {
+        const saved = el("section", "wait-card");
+        saved.append(el("h3", "", state.run.desired === "paused" ? "Ответ сохранён · на паузе" : "Ответ сохранён · ожидает продолжения"),
+          el("p", "", wait.reason), el("pre", "", JSON.stringify(wait.response, null, 2)));
+        panel.append(saved);
+      }
+      continue;
+    }
     let draft = waitDrafts.get(wait.id);
     if (!draft) { draft = { text: "", busy: false, error: null }; waitDrafts.set(wait.id, draft); }
     const card = el("section", "wait-card"), selectedRun = state.id;
@@ -1143,7 +1221,9 @@ function renderNow() {
     card.append(el("p", "muted", activation?.path ?? `Активация: ${wait.key}`), el("p", "muted", `Ожидание: ${wait.id}`));
     const details = el("details");
     details.dataset.waitDetails = wait.id; details.open = draft.detailsOpen ?? false;
-    details.append(el("summary", "", "Данные и формат ответа"), el("pre", "", JSON.stringify({ runId: selectedRun, waitId: wait.id, input: wait.input, responseSchema: wait.responseSchema }, null, 2)));
+    const summary = el("summary", "", "Данные и формат ответа");
+    summary.id = `wait-summary-${wait.id}`; summary.dataset.waitControl = "1";
+    details.append(summary, el("pre", "", JSON.stringify({ runId: selectedRun, waitId: wait.id, input: wait.input, responseSchema: wait.responseSchema }, null, 2)));
     card.append(details);
     if (waitBlocker) {
       card.append(el("p", "muted", waitBlocker));
@@ -1172,6 +1252,7 @@ function renderNow() {
       } catch (error) { draft.error = error.message; }
       finally { draft.busy = false; if (state.id === selectedRun && state.tab === "now") renderPanel(); }
     }, "child-button");
+    submit.id = `wait-submit-${wait.id}`; submit.dataset.waitControl = "1";
     submit.disabled = draft.busy;
     card.append(field, submit);
     if (draft.error) { const error = el("p", "notice", draft.error); error.setAttribute("role", "alert"); card.append(error); }
@@ -1331,7 +1412,8 @@ function renderTokens() {
       button("Вся задача", async () => {
         state.usageScope = "task";
         const id = state.run.lineage?.taskId;
-        if (id) await loadTaskScope(id);
+        const pending = id ? loadTaskScope(id) : Promise.resolve(false);
+        renderTokens(); await pending;
         if (state.id === selectedRun && state.tab === "tokens") renderTokens();
       }, state.usageScope === "task" ? "child-button selected" : "child-button"),
     );
@@ -1343,6 +1425,9 @@ function renderTokens() {
         panel.append(button(`${item.id} · ${tokenTotalLabel(item.summary)}`, () => selectRun(item.id), "child-button"));
       }
     }
+  }
+  if (state.usageScope === "task" && taskId && !taskMode) {
+    panel.append(el("p", "muted", "Загружаем расход всей задачи…")); return;
   }
   const split = el("div", "token-breakdown");
   for (const [label, value, partial] of [
@@ -1383,8 +1468,8 @@ function renderTokens() {
     const activation = records.find(a => a.key === report.key && (!report.runId || !a.runId || a.runId === report.runId));
     const origin = reportOrigin(report, records, selectedRun);
     const row = el("div", "detail-run");
-    row.append(el("strong", "", `${activation?.path ?? "Агент"}${report.runId ? ` · ${report.runId.slice(-8)}` : ""} · попытка ${report.attempt} · ответ ${report.reportId}`),
-      el("p", "", `${number(report.usage.totalTokens)} ток. · вход ${number(report.usage.input)} · кэш ${report.usage.cacheRead === undefined ? "н/д" : number(report.usage.cacheRead)} · выход ${number(report.usage.output)} · ${report.stopReason} · pi SDK${report.observedEffort ? ` · reasoning ${report.observedEffort}` : ""}`));
+    row.append(el("strong", "", `${activation?.basePath ?? activation?.path?.replace(/ · попытка \d+$/, "") ?? "Агент"}${report.runId ? ` · ${report.runId.slice(-8)}` : ""} · попытка ${report.attempt} · ответ ${report.reportId}`),
+      el("p", "", `${number(report.usage.totalTokens)} ток. · вход ${number(report.usage.input)} · кэш ${report.usage.cacheRead === undefined ? "н/д" : number(report.usage.cacheRead)} · выход ${number(report.usage.output)} · ${report.stopReason} · pi SDK${report.observedEffort ? ` · рассуждение ${report.observedEffort} (${report.observedEffortSource === "sdk-message" ? "сообщено SDK" : report.observedEffortSource === "request-payload" ? "отправлено в запросе" : "источник неизвестен"})` : ""}`));
     if (origin?.runId) {
       row.append(button(origin.nodeId ? `Открыть ${origin.nodeId} · ${origin.runId}` : `Открыть ${origin.runId}`, () => {
         void openActivation(origin);
@@ -1483,9 +1568,11 @@ async function refreshSnapshot() {
   }
 }
 async function refreshRuns(isCurrent = () => true) {
+  const request = ++state.listRequest;
+  const current = () => request === state.listRequest && isCurrent();
   try {
-    const data = await api("runs", undefined, isCurrent);
-    if (!isCurrent()) return;
+    const data = await api("runs", undefined, current);
+    if (!current()) return;
     state.runs = data.runs;
     const signature = JSON.stringify({ ...data, runs: data.runs.map(run => ({ ...run,
       presentation: { ...run.presentation, liveness: { ...run.presentation.liveness, observedAt: null } },
@@ -1506,7 +1593,7 @@ async function refreshRuns(isCurrent = () => true) {
       $("connection").textContent = "● Подключено";
     }
   } catch (error) {
-    if (!isCurrent()) return;
+    if (!current()) return;
     notice(error.message);
     $("connection").textContent = "Нет связи";
   }

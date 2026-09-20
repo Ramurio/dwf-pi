@@ -232,6 +232,25 @@ test("local Chrome fixture QA: native DOM replay and trusted Space without scrol
       return;
     }
     res.end(name === "app.js" ? app + `\ntry { ${replay} } catch (error) { document.body.setAttribute('data-replay', String(error.stack)); }
+window.harvestQA = () => {
+  const graph = state.run.graphs[0]; state.graph = graph.id; state.node = null;
+  graph.nodes = Array.from({length:20},(_,i)=>({...graph.nodes[0],id:'n'+i,activations:[]}));
+  graph.entry='n0'; graph.edges=graph.nodes.slice(1).map((n,i)=>({from:'n'+i,to:n.id}));
+  state.cameras.clear(); renderPanel();
+  const nodes=Array.from(document.querySelectorAll('#graph [role="button"]'));
+  nodes[10].focus({preventScroll:true});
+  const node=nodes[10].getBoundingClientRect(), frame=$('graph').getBoundingClientRect();
+  const visible=node.top>=frame.top&&node.bottom<=frame.bottom&&node.left>=frame.left&&node.right<=frame.right;
+  renderPanel(); const kept=document.activeElement.dataset.nodeId==='n10';
+  camera={x:0,y:0,width:50000,height:40000}; zoom(1.25);
+  const outward=camera.width; zoom(0.8); const inward=camera.width;
+  // Полное имя доступно, но видимые строки не выходят за карточку.
+  graph.nodes=[{...graph.nodes[0],id:'Ш'.repeat(30)}];graph.entry=graph.nodes[0].id;graph.edges=[];
+  renderPanel();const group=document.querySelector('#graph [role="button"]');
+  const width=Number(group.querySelector('rect').getAttribute('width'));
+  const textFits=Array.from(group.querySelectorAll('text')).every(t=>t.getComputedTextLength()<=width-32);
+  return {visible,kept,outward,inward,textFits,fullName:group.getAttribute('aria-label').includes('Ш'.repeat(30))};
+};
 await fetch('/replay-result', { method: 'POST', body: document.body.getAttribute('data-replay') });` : readFileSync(new URL(name, root)));
   });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -302,12 +321,15 @@ await fetch('/replay-result', { method: 'POST', body: document.body.getAttribute
       await send("Input.dispatchKeyEvent", { type: "keyUp", key: " ", code: "Space", windowsVirtualKeyCode: 32, nativeVirtualKeyCode: 32 });
       const observation = await send("Runtime.evaluate", { expression: `new Promise(resolve => setTimeout(() => resolve({
         trusted: window.spaceTrusted, before: window.spaceScroll, after: window.scrollY,
-        pressed: document.querySelector('#graph [role="button"]').getAttribute('aria-pressed')
+        pressed: document.querySelector('#graph [role="button"]').getAttribute('aria-pressed'), focused: document.activeElement === document.querySelector('#graph [role="button"]')
       }), 250))`, awaitPromise: true, returnByValue: true });
       assert.equal(observation.result.value.trusted, true);
       assert.ok(observation.result.value.before > 0, "fixture must be scrollable");
       assert.equal(observation.result.value.after, observation.result.value.before);
       assert.equal(observation.result.value.pressed, "true");
+      assert.equal(observation.result.value.focused, true);
+      const harvest = await send("Runtime.evaluate", { expression: "window.harvestQA()", returnByValue: true });
+      assert.deepEqual(harvest.result.value, {visible:true,kept:true,outward:62500,inward:50000,textFits:true,fullName:true});
     } finally { socket.close(); }
   } finally {
     clearTimeout(deadline);

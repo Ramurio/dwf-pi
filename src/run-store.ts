@@ -80,7 +80,8 @@ export interface WaitRecord {
   id: string; runId: string; key: string; reason: string; input: Json; responseSchema: Record<string, unknown>;
   status: "open" | "resolved"; createdAt: number; resolvedAt: number | null; resolvedBy: string | null; response?: Json;
 }
-export interface UsageRecord { seq: number; runId: string; key: string; attempt: number; reportId: string; usage: TokenUsage; stopReason: string; at: number; source: "pi-sdk"; observedEffort?: string }
+export type EffortSource = "sdk-message" | "request-payload" | "unknown";
+export interface UsageRecord { seq: number; runId: string; key: string; attempt: number; reportId: string; usage: TokenUsage; stopReason: string; at: number; source: "pi-sdk"; observedEffort?: string; observedEffortSource?: EffortSource }
 export type RunOutcome = { status: "succeeded"; output: Json } | { status: "failed"; error: string; failure?: ExecutionFailureRecord } | { status: "cancelled" };
 const terminal = new Set<RunStatus>(["succeeded", "failed", "cancelled"]);
 const active = new Set<RunStatus>(["running", "waiting", "pausing", "paused", "cancelling"]);
@@ -542,7 +543,7 @@ export class RunStore {
         wait = this.getWait(id, waitId);
         this.event(id, "wait.opened", { id: waitId, key, reason, input, responseSchema: responseSchema as Json });
       }
-      const metadata = { ...activation.metadata, waitId: wait.id, waitReason: reason, waiting: wait.status === "open" };
+      const metadata = { ...activation.metadata, waitId: wait.id, waitReason: reason, waiting: wait.status === "open", waitResolved: wait.status === "resolved" };
       this.database.prepare("UPDATE workflow_activations SET metadata=? WHERE run_id=? AND activation_key=?").run(JSON.stringify(metadata), id, key);
       return wait;
     });
@@ -573,6 +574,12 @@ export class RunStore {
       const valid = createOutputValidator(wait.responseSchema)(response);
       this.database.prepare("UPDATE workflow_waits SET status='resolved',response=?,resolved_by=?,resolved_at=? WHERE run_id=? AND id=?")
         .run(JSON.stringify(valid), resolvedBy, Date.now(), id, waitId);
+      const activation = this.getActivation(id, wait.key);
+      if (activation?.kind === "await" && activation.metadata.waitId === waitId) {
+        const metadata = { ...activation.metadata, waitResolved: true };
+        this.database.prepare("UPDATE workflow_activations SET metadata=? WHERE run_id=? AND activation_key=?")
+          .run(JSON.stringify(metadata), id, wait.key);
+      }
       this.event(id, "wait.resolved", { id: waitId, key: wait.key, response: valid, resolvedBy });
       return this.getWait(id, waitId);
     });
@@ -895,14 +902,15 @@ export class RunStore {
     });
   }
   /** One response is committed independently of output validation. Duplicate delivery is idempotent. */
-  recordUsage(id: string, token: string, key: string, reportId: string, value: unknown, stopReason: string, observedEffort?: string): void {
+  recordUsage(id: string, token: string, key: string, reportId: string, value: unknown, stopReason: string, observedEffort?: string, observedEffortSource?: EffortSource): void {
     const usage = parseUsage(value);
     if (!usage || !/^[1-9][0-9]*$/.test(reportId) || !["pending", "stop", "length", "toolUse", "error", "aborted", "deferred"].includes(stopReason)) throw new Error("Invalid worker usage report");
+    if (observedEffortSource !== undefined && !["sdk-message", "request-payload", "unknown"].includes(observedEffortSource)) throw new Error("Invalid reasoning effort source");
     if (observedEffort !== undefined && (typeof observedEffort !== "string" || !observedEffort)) throw new Error("Invalid observed reasoning effort");
     this.transaction(() => {
       const activation = this.runningActivation(id, token, key);
       if (activation.kind !== "agent") throw new Error("Usage belongs to an agent activation");
-      const encoded = JSON.stringify({ ...usage, ...(observedEffort !== undefined ? { observedEffort } : {}) });
+      const encoded = JSON.stringify({ ...usage, ...(observedEffort !== undefined ? { observedEffort, ...(observedEffortSource !== undefined ? { observedEffortSource } : {}) } : {}) });
       const old = this.database.prepare("SELECT usage,stop_reason FROM workflow_usage_reports WHERE run_id=? AND activation_key=? AND attempt=? AND report_id=?").get(id, key, activation.attempt, reportId);
       if (old) {
         if (old.usage !== encoded || old.stop_reason !== stopReason) throw new Error("Conflicting worker usage report identity");
@@ -912,7 +920,7 @@ export class RunStore {
       this.database.prepare("INSERT INTO workflow_usage_reports(run_id,activation_key,attempt,report_id,usage,stop_reason,at) VALUES(?,?,?,?,?,?,?)")
         .run(id, key, activation.attempt, reportId, encoded, stopReason, Date.now());
       this.projectUsage(activation);
-      this.event(id, "usage.reported", { key, attempt: activation.attempt, reportId, usage: JSON.parse(JSON.stringify(usage)) as Json, stopReason, source: "pi-sdk", ...(observedEffort !== undefined ? { observedEffort } : {}) });
+      this.event(id, "usage.reported", { key, attempt: activation.attempt, reportId, usage: JSON.parse(JSON.stringify(usage)) as Json, stopReason, source: "pi-sdk", ...(observedEffort !== undefined ? { observedEffort, ...(observedEffortSource !== undefined ? { observedEffortSource } : {}) } : {}) });
     });
   }
   settleUsage(id: string, token: string, key: string, complete: boolean): void {
@@ -964,12 +972,12 @@ export class RunStore {
     if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error("Invalid usage page cursor or limit (1–1000)");
     const rows = this.database.prepare("SELECT * FROM workflow_usage_reports WHERE run_id=? AND seq>? ORDER BY seq LIMIT ?").all(id, after, limit + 1);
     const reports: UsageRecord[] = rows.slice(0, limit).map(row => {
-      const raw = JSON.parse(String(row.usage)) as TokenUsage & { observedEffort?: string };
+      const raw = JSON.parse(String(row.usage)) as TokenUsage & { observedEffort?: string; observedEffortSource?: EffortSource };
       const usage = parseUsage(raw);
       if (!usage) throw new Error("Invalid stored usage report");
       return { seq: Number(row.seq), runId: String(row.run_id), key: String(row.activation_key), attempt: Number(row.attempt),
       reportId: String(row.report_id), usage, stopReason: String(row.stop_reason), at: Number(row.at), source: "pi-sdk" as const,
-      ...(typeof raw.observedEffort === "string" ? { observedEffort: raw.observedEffort } : {}) };
+      ...(typeof raw.observedEffort === "string" ? { observedEffort: raw.observedEffort, observedEffortSource: raw.observedEffortSource ?? "unknown" } : {}) };
     });
     return { reports, nextAfter: reports.at(-1)?.seq ?? after, hasMore: rows.length > limit };
   }
@@ -979,12 +987,12 @@ export class RunStore {
     const rows = this.database.prepare(`SELECT r.* FROM workflow_usage_reports r JOIN workflow_task_membership m ON m.run_id=r.run_id
       WHERE m.task_id=? AND r.seq>? ORDER BY r.seq LIMIT ?`).all(taskId, after, limit + 1);
     const reports: UsageRecord[] = rows.slice(0, limit).map(row => {
-      const raw = JSON.parse(String(row.usage)) as TokenUsage & { observedEffort?: string };
+      const raw = JSON.parse(String(row.usage)) as TokenUsage & { observedEffort?: string; observedEffortSource?: EffortSource };
       const usage = parseUsage(raw);
       if (!usage) throw new Error("Invalid stored usage report");
       return { seq: Number(row.seq), runId: String(row.run_id), key: String(row.activation_key), attempt: Number(row.attempt),
         reportId: String(row.report_id), usage, stopReason: String(row.stop_reason), at: Number(row.at), source: "pi-sdk" as const,
-        ...(typeof raw.observedEffort === "string" ? { observedEffort: raw.observedEffort } : {}) };
+        ...(typeof raw.observedEffort === "string" ? { observedEffort: raw.observedEffort, observedEffortSource: raw.observedEffortSource ?? "unknown" } : {}) };
     });
     return { reports, nextAfter: reports.at(-1)?.seq ?? after, hasMore: rows.length > limit };
   }
