@@ -1105,7 +1105,7 @@ function taskRow(a) {
   row.append(badge(a.status), body, right);
   return row;
 }
-// Explain only restrictions already enforced by RunStore; this is not authorization.
+// Показываем уже действующие ограничения RunStore. Допуск по-прежнему проверяет сервер.
 function waitResponseBlocker(run) {
   if (run.lineage?.successorRunId) return "Этот запуск заменён продолжением. Новые ответы здесь не принимаются.";
   if (run.desired === "cancelled" || run.status === "cancelling") return "Отмена уже запрошена. Новые ответы не принимаются.";
