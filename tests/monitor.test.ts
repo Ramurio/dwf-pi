@@ -187,3 +187,15 @@ test("monitor uses typed causes instead of stacks and labels effect certainty on
   assert.match(text,/process\/setup: Command missing/);assert.match(text,/not-started/);assert.doesNotMatch(text,/STACK_TRACE_NOT_FOR_HEADER/);
   const log = new MonitorLog();assert.match(log.update(failed,[record]).join("\n"),/process\/setup/);assert.deepEqual(log.update(failed,[record]),[]);
 });
+
+
+test("saved answers appear on initial watch and on waiting transitions",()=>{
+  const current=run(),a=activation('question','await',base),log=new MonitorLog();
+  a.metadata={waiting:true,waitId:'wait',waitReason:'ответ'};
+  assert.match(log.update(current,[a]).join('\n'),/\?/);
+  a.metadata.waitResolved=true;current.desired='paused';
+  const changed=log.update(current,[a]).join('\n');
+  assert.match(changed,/ответ сохранён.*на паузе/);assert.doesNotMatch(changed,/начат/);
+  assert.match(new MonitorLog().update(current,[a]).join('\n'),/ответ сохранён/);
+  assert.deepEqual(log.update(current,[a]),[]);
+});

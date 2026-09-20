@@ -703,11 +703,11 @@ function renderRecovery(container, activation) {
     const currentInspection = nextInspectionRead(identity);
     try {
       const suffix = `id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}`;
-      const [value, records] = await Promise.all([api(`recovery?${suffix}`, undefined, currentInspection), api(`reconciliations?${suffix}`, undefined, currentInspection)]);
+      const [value, records] = await Promise.all([api(`recovery?${suffix}`, undefined, currentInspection), api(`reconciliations?${suffix}`, undefined, () => currentInspection() && current())]);
       if (!currentInspection()) return;
       recoveryInspections.set(identity, { value, records: current() ? records : reconciliationRecords.get(identity)?.value ?? cached.records ?? [] });
       if (current()) reconciliationRecords.set(identity, { value: records, at: Date.now() });
-    } catch (error) { if (currentInspection()) recoveryInspections.set(identity, { ...cached, loading: false, error: error.message }); }
+    } catch (error) { if (currentInspection()) recoveryInspections.set(identity, { ...(recoveryInspections.get(identity) ?? cached), loading: false, error: error.message }); }
     if (state.id === id) renderInspector();
   };
   const inspect = button(cached.loading ? "Сканирование состояния…" : cached.value ? "Обновить инспекцию" : "Проверить состояние для восстановления", inspectState, "child-button");

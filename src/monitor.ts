@@ -179,7 +179,7 @@ export class MonitorLog {
       if (presentation.taskOutcome) lines.push(`Task: ${presentation.taskOutcome.decision} · ${terminalText(presentation.taskOutcome.reason, 500)}`);
       if (presentation.liveness.state !== "unknown") lines.push(presentation.liveness.label);
     }
-    const initialVisible = new Set([...records.filter(a => presentation.activeKeys.includes(a.key) || presentation.waitingKeys.includes(a.key) || presentation.retryingKeys.includes(a.key)), ...records.filter(a => a.status !== "running" && significant(a)).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0)).slice(0, 5)].map(a => a.key));
+    const initialVisible = new Set([...records.filter(a => activationState(a) === "answered" || presentation.activeKeys.includes(a.key) || presentation.waitingKeys.includes(a.key) || presentation.retryingKeys.includes(a.key)), ...records.filter(a => a.status !== "running" && significant(a)).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0)).slice(0, 5)].map(a => a.key));
     for (const a of records) {
       const repair = parseOutputRepairProgress(a.metadata.outputRepair);
       const collection = collectionEvidence(a);
@@ -187,6 +187,7 @@ export class MonitorLog {
       const value = `${activationState(a)}/${a.attempt}/${repair?.round ?? 0}/${repair?.status ?? ""}/${collection}/${retry?.decisionSeq??0}/${retry?.status??""}`;
       if (significant(a) && (this.state || initialVisible.has(a.key)) && this.records.get(a.key) !== value) lines.push(activationState(a) === "waiting"
         ? `? ${activationPath(a)} — ${terminalText(String(a.metadata.waitReason), 500)} · ${terminalText(String(a.metadata.waitId))}`
+        : activationState(a) === "answered" ? `✓ ${activationPath(a)} — ответ сохранён${run.desired === "paused" ? " · на паузе" : " · ожидает продолжения"}`
         : retry?.status === "scheduled" ? `↻ ${activationPath(a)} — запланирована попытка ${retry.nextAttempt}`
         : a.status === "running" ? `▶ ${activationPath(a)} — ${repair ? `исправление формата · раунд ${repair.round} · ${repair.status} · только submit_result` : collection || "начат"}` : historyLine(a));
       this.records.set(a.key, value);

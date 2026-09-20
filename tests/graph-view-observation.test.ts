@@ -749,3 +749,48 @@ test("resolved waits stay visible as saved while paused without asking again", a
   assert.deepEqual(base.presentation.waitingKeys,[]);
   await replay(`renderPanel();assert.match($('content-panel').textContent,/Ответ сохранён · на паузе/);assert.match($('content-panel').textContent,/ready/);assert.equal(fields().length,0);`,{base});
 });
+
+test("late inspection failure preserves newer decision history",async()=>{
+await replay(`
+ const activation={key:'key-operation',attempt:1,status:'failed'}, identity=JSON.stringify([base.id,activation.key]);
+ const inspection={value:{attempt:1,checkpoint:'checkpoint',workspace:{digest:'workspace',roots:[],entries:0,bytes:0},blockers:[]},records:[]};
+ recoveryInspections.set(identity,inspection);
+ let failInspection;
+ globalThis.fetch=path=>{
+   if(path.startsWith('recovery?'))return new Promise((_,reject)=>{failInspection=reject;});
+   if(path.startsWith('reconciliations?'))return Promise.resolve({ok:true,status:200,json:async()=>[]});
+   throw Error(path);
+ };
+ const panel=el('div');renderRecovery(panel,activation);
+ const reading=descendants(panel).find(n=>n.tagName==='button').listeners.get('click')[0](new Event('click'));
+ const latest={request:{decisionId:'fresh',action:'retry'},createdAt:3};
+ globalThis.fetch=async()=>({ok:true,status:200,json:async()=>[latest]});
+ const history=el('div');renderReconciliations(history,activation);
+ await descendants(history).find(n=>n.tagName==='button').listeners.get('click')[0](new Event('click'));
+ assert.equal(recoveryInspections.get(identity).records[0].request.decisionId,'fresh');
+ failInspection(Error('OLD_INSPECTION_FAILED'));await reading;
+ assert.equal(recoveryInspections.get(identity).records[0]?.request.decisionId,'fresh');
+`,{base:snapshot({status:'paused',desired:'paused'})});
+});
+
+test("stale inspection history cannot reload after a newer history read",async()=>{
+await replay(`
+ const activation={key:'key-operation',attempt:1,status:'failed'}, identity=JSON.stringify([base.id,activation.key]);
+ const inspection={value:{attempt:1,checkpoint:'checkpoint',workspace:{digest:'workspace',roots:[],entries:0,bytes:0},blockers:[]},records:[]};
+ recoveryInspections.set(identity,inspection);
+ let finishHistory,reloads=0;
+ window.location={reload(){reloads++}};
+ globalThis.fetch=path=>{
+   if(path.startsWith('recovery?'))return Promise.resolve({ok:true,status:200,json:async()=>inspection.value});
+   if(path.startsWith('reconciliations?'))return new Promise(resolve=>{finishHistory=resolve;});
+   throw Error(path);
+ };
+ const panel=el('div');renderRecovery(panel,activation);
+ const reading=descendants(panel).find(n=>n.tagName==='button').listeners.get('click')[0](new Event('click'));
+ globalThis.fetch=async()=>({ok:true,status:200,json:async()=>[{request:{decisionId:'fresh',action:'retry'}}]});
+ const history=el('div');renderReconciliations(history,activation);
+ await descendants(history).find(n=>n.tagName==='button').listeners.get('click')[0](new Event('click'));
+ finishHistory({ok:false,status:401});await reading;
+ assert.equal(reloads,0);
+`,{base:snapshot({status:'paused',desired:'paused'})});
+});
