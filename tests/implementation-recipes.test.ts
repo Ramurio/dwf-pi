@@ -185,3 +185,17 @@ test("instantiate rejects canonical source aliases before writing and binds dist
   assert.equal(chooseEdge("inputBinding", workflow.graphs.main!.edges, { input: { ...input, checkArgs: ["other"] }, nodes: {} }), "invalidBinding");
   assert.deepEqual(fs.readFileSync(path.join(source, "patch.json")), before);
 });
+
+test("instantiate rejects hardlinked output before changing any source or output", t => {
+  const root = temporary(t), source = path.join(root, "recipe"), out = path.join(root, "output");
+  fs.cpSync(path.join(recipes, "S"), source, { recursive: true }); fs.mkdirSync(out);
+  const names = ["create", "patch", "input", "validate"];
+  for (const name of names) fs.linkSync(path.join(source, `${name}.json`), path.join(out, `${name}.json`));
+  const before = names.map(name => fs.readFileSync(path.join(source, `${name}.json`)));
+  const params = read(path.join(recipes, "parameters.example.json")); params.id = "hardlinkAlias";
+  const parameters = path.join(root, "parameters.json"); fs.writeFileSync(parameters, JSON.stringify(params));
+  const result = run(root, process.execPath, [path.join(recipes, "instantiate.mjs"), "--recipe", source, "--parameters", parameters, "--out", out]);
+  assert.notEqual(result.status, 0); assert.match(result.stderr, /hardlinks/);
+  for (const [i, name] of names.entries()) assert.deepEqual(fs.readFileSync(path.join(source, `${name}.json`)), before[i]);
+  assert.equal(fs.existsSync(path.join(out, "instantiation.json")), false);
+});

@@ -371,3 +371,38 @@ test("ignored collision matching protects case variants on case-insensitive file
     assert.equal(git(f.repo, "rev-parse", "HEAD"), before);
   } finally { await rm(f.directory, { recursive: true, force: true }); }
 });
+
+test("ignored nested repositories cannot hide local files from integration collision checks", async () => {
+  const f = await fixture();
+  try {
+    await writeFile(join(f.repo, ".gitignore"), "nested/\n");
+    git(f.repo, "add", ".gitignore"); git(f.repo, "commit", "-m", "Ignore nested repo");
+    const nested = join(f.repo, "nested"); await mkdir(nested); git(nested, "init");
+    await writeFile(join(nested, "local.txt"), "USER CONTENT");
+    const manager = new GitWorkspaces("run-nested", join(f.directory, "run"));
+    const allocation = await manager.allocate(f.repo, "nested", undefined);
+    await mkdir(join(allocation.path, "nested")); await writeFile(join(allocation.path, "nested/local.txt"), "WORKER CONTENT");
+    git(allocation.path, "add", "--force", "nested/local.txt"); const record = await manager.commit(allocation);
+    const head = git(f.repo, "rev-parse", "HEAD");
+    await assert.rejects(manager.integrate(f.repo, [record] as any, [record]), /ignored local content/);
+    assert.equal(await readFile(join(nested, "local.txt"), "utf8"), "USER CONTENT");
+    assert.equal(git(f.repo, "rev-parse", "HEAD"), head);
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
+for (const flag of ["assume-unchanged", "skip-worktree"]) test(`managed snapshots reject hidden tracked changes (${flag})`, async () => {
+  const f = await fixture();
+  try {
+    const manager = new GitWorkspaces("run-index", join(f.directory, "run"));
+    const allocation = await manager.allocate(f.repo, "index", undefined);
+    git(allocation.path, "update-index", `--${flag}`, "base.txt");
+    await writeFile(join(allocation.path, "base.txt"), "HIDDEN WORKER CONTENT");
+    assert.equal(git(allocation.path, "status", "--porcelain"), "");
+    await assert.rejects(manager.commit(allocation), /index flags/);
+    assert.equal(await readFile(join(allocation.path, "base.txt"), "utf8"), "HIDDEN WORKER CONTENT");
+    git(f.repo, "update-index", `--${flag}`, "base.txt");
+    await writeFile(join(f.repo, "base.txt"), "HIDDEN USER CONTENT");
+    await assert.rejects(manager.allocate(f.repo, "next", undefined), /index flags/);
+    assert.equal(await readFile(join(f.repo, "base.txt"), "utf8"), "HIDDEN USER CONTENT");
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});

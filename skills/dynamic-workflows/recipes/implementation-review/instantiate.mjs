@@ -50,7 +50,7 @@ const input={task:params.task,acceptanceCriteria:params.acceptanceCriteria,check
 // Existing output file aliases must not redirect writes back into the recipe.
 for(const name of ['create','patch','input','validate','instantiation']){
  const file=path.join(out,name+'.json');
- try{assert(!fs.lstatSync(file).isSymbolicLink(),'Output file must not be a symlink: '+file)}catch(error){if(error.code!=='ENOENT')throw error}
+ try{const info=fs.lstatSync(file);assert(!info.isSymbolicLink(),'Output file must not be a symlink: '+file);assert(info.nlink===1,'Output file must not have hardlinks: '+file)}catch(error){if(error.code!=='ENOENT')throw error}
 }
 fs.mkdirSync(out,{recursive:true});
 for(const [name,data] of Object.entries({create,patch,input,validate:{id:params.id}}))fs.writeFileSync(path.join(out,name+'.json'),JSON.stringify(data,null,2)+'\n');

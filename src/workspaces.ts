@@ -1,3 +1,4 @@
+import { withProcessCleanup } from "./process-cleanup.js";
 import { createHash } from "node:crypto";
 import { mkdir, realpath, stat, lstat, readdir, readFile, cp, mkdtemp, open } from "node:fs/promises";
 import { constants } from "node:fs";
@@ -42,6 +43,7 @@ export class GitWorkspaces {
     return this.locked(allocation.path, async () => {
       await this.assertAllocation(allocation, options);
       await this.noOperation(allocation.path, options);
+      await this.visibleIndex(allocation.path, options);
       if ((await this.git(allocation.path, ["status", "--porcelain=v1", "--untracked-files=all"], options)).stdout) {
         await this.git(allocation.path, ["add", "--all", "--", "."], options);
         const staged = await this.git(allocation.path, ["diff", "--cached", "--quiet", "--exit-code"], options, [0, 1]);
@@ -250,7 +252,7 @@ export class GitWorkspaces {
     // --no-overwrite-ignore alone is insufficient for every installed Git merge strategy.
     // Conservative case/Unicode folding protects case-insensitive worktrees even when core.ignorecase was changed.
     const normalize = (path: string) => path.normalize("NFC").toLowerCase();
-    const ignored = new Set((await this.git(cwd, ["ls-files", "--others", "--ignored", "--exclude-standard", "-z"], options)).stdout.split("\0").filter(Boolean).map(normalize));
+    const ignored = new Set((await this.git(cwd, ["ls-files", "--others", "--ignored", "--exclude-standard", "-z"], options)).stdout.split("\0").filter(Boolean).map(path => normalize(path.replace(/\/+$/, ""))));
     if (!ignored.size) return;
     const ignoredParents = new Set<string>();
     for (const path of ignored) {
@@ -278,19 +280,26 @@ export class GitWorkspaces {
       catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
     }
   }
+  private async visibleIndex(cwd: string, options: GitOperationOptions): Promise<void> {
+    const entries = (await this.git(cwd, ["ls-files", "-v", "-z"], options)).stdout.split("\0").filter(Boolean);
+    if (entries.some(entry => /^[a-zS]/.test(entry))) {
+      throw new Error("Managed Git workspace cannot use assume-unchanged or skip-worktree index flags; inspect the files and clear those flags explicitly");
+    }
+  }
   private async clean(cwd: string, options: GitOperationOptions): Promise<void> {
     await this.noOperation(cwd, options);
+    await this.visibleIndex(cwd, options);
     const status = await this.git(cwd, ["status", "--porcelain=v1", "--untracked-files=all"], options);
     if (status.stdout) throw new Error(`Git workspace must be clean, including untracked files: ${cwd}`);
   }
   private async git(cwd: string, args: string[], options: GitOperationOptions, expected = [0]): Promise<{ exitCode: number; stdout: string; stderr: string }> {
     const override = Object.keys(process.env).find(name => unsafeGitEnvironment.test(name));
     if (override) throw new Error(`Git environment override is unsupported for managed workspaces: ${override}. Unset it before launching the workflow.`);
-    try {
+    return withProcessCleanup(async () => {
       const result = await runCheckProcess("git", ["--no-optional-locks", ...gitConfiguration, ...args], cwd, options) as { exitCode: number; stdout: string; stderr: string };
       if (!expected.includes(result.exitCode)) throw new Error(`git ${args[0]} failed (${result.exitCode}): ${result.stderr.trim() || result.stdout.trim()}`);
       return result;
-    } finally { options.onFinished?.(); }
+    }, () => options.onFinished?.());
   }
   private async locked<T>(path: string, operation: () => Promise<T>): Promise<T> {
     const previous = this.locks.get(path) ?? Promise.resolve();
