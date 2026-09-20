@@ -406,3 +406,16 @@ for (const flag of ["assume-unchanged", "skip-worktree"]) test(`managed snapshot
     assert.equal(await readFile(join(f.repo, "base.txt"), "utf8"), "HIDDEN USER CONTENT");
   } finally { await rm(f.directory, { recursive: true, force: true }); }
 });
+
+test("Git failure preserves primary error alongside normalized cleanup failure", async () => {
+  const f = await fixture();
+  try {
+    const manager = new GitWorkspaces("run-git-cleanup", join(f.directory, "run"));
+    await assert.rejects(manager.allocate(f.directory, "invalid-source", undefined, { onFinished() { throw new Error("cleanup checkpoint unavailable"); } }), (error: any) => {
+      assert.equal(error.name, "ProcessCleanupError");
+      assert.match(error.primary.message, /git.*failed/);
+      assert.equal(error.cleanup.failure.phase, "cleanup"); assert.equal(error.cleanup.failure.effects, "unknown");
+      return true;
+    });
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});

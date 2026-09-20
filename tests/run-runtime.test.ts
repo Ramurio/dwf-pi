@@ -159,3 +159,18 @@ test("interrupt waits for cleanup and retains its failure diagnostic", { timeout
   assert.ok(Array.from(Cause.defects(result.cause)).some(error => error instanceof ExecutionFailure && error.failure.phase === "cleanup"));
   assert.equal((f.store.getActivation("run", key)!.metadata.failure as any).phase, "cleanup");
 });
+
+test("agent setup failure and cleanup fault remain distinct without model admission", { timeout: 15000 }, async t => {
+  const node: Extract<Node, { kind: "agent" }> = { id: "work", kind: "agent", role: "general", task: { op: "literal", value: "fixture" } };
+  const f = await fixture(t, node);
+  f.run.plan.agents.main = { work: { model: { provider: "offline", id: "offline" }, thinking: "off", systemPrompt: "fixture", tools: ["invalid-tool" as any], skills: [], session: "fresh", permission: "read-only", outputSchema: { type: "object" } } };
+  const original = f.store.setActivationMetadata.bind(f.store);
+  f.store.setActivationMetadata = (id, token, key, metadata) => {
+    if (metadata.workerLaunch === "settled") throw new Error("injected agent cleanup");
+    return original(id, token, key, metadata);
+  };
+  const result = await Effect.runPromiseExit(f.runtime.step(context, () => f.runtime.agent(context, node, "fixture", null)));
+  assert.ok(Exit.isFailure(result));
+  const causes = Array.from(Cause.failures(result.cause)) as ExecutionFailure[];
+  assert.equal(causes.length, 2); assert.equal(causes[0]!.failure.code, "configuration"); assert.equal(causes[1]!.failure.phase, "cleanup");
+});
