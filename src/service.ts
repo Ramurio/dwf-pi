@@ -15,7 +15,6 @@ import { RunController } from "./run-controller.js";
 import type { ActivationRecord, AttemptRecord, RunEvent, RunRecord } from "./run-store.js";
 import { DraftStore } from "./store.js";
 import { PresetLibrary, presetName, presetRevision, presetSummary, type PresetScope } from "./presets.js";
-import { summarizeTaskUsage, summarizeUsage } from "./usage.js";
 import { PreparedPlanStore, executionWorkspace } from "./prepared-plans.js";
 import { canonicalContinuationRequest, continuationKind, parseContinuationRequest, publicLineage, publicReceipt } from "./lineage.js";
 
@@ -186,7 +185,7 @@ export class WorkflowService {
         controller.store.get(id);
         const after = input.after === undefined ? 0 : cursor(input.after);
         const limit = input.limit === undefined ? 100 : cursor(input.limit);
-        return { summary: summarizeUsage(controller.store.listActivations(id)), ...controller.store.usageReports(id, after, limit) };
+        return controller.store.usageSnapshot(id, after, limit);
       }
       case "run.trace": {
         const input = object(request, ["id", "after", "limit"]), id = identifier(input.id);
@@ -302,15 +301,9 @@ export class WorkflowService {
       case "task.usage": {
         const input = object(request, ["id", "after", "limit"]);
         const controller = this.getController();
-        const task = controller.store.task(identifier(input.id));
-        const members = controller.store.taskMembers(task.id);
         const after = input.after === undefined ? 0 : cursor(input.after);
         const limit = input.limit === undefined ? 100 : cursor(input.limit);
-        return {
-          taskId: task.id,
-          ...summarizeTaskUsage(members.map(member => ({ id: member.runId, records: controller.store.listActivations(member.runId) }))),
-          ...controller.store.taskUsageReports(task.id, after, limit),
-        };
+        return controller.store.taskUsageSnapshot(identifier(input.id), after, limit);
       }
       default: throw new Error(`Unknown tool: ${tool}`);
     }

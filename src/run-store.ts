@@ -6,7 +6,7 @@ import { preparedExecutionId, type ExecutionPlan } from "./execution-types.js";
 import { executionFailure, parseExecutionFailure, parseFailureCauses, type ExecutionFailureRecord } from "./execution-failure.js";
 import type { Json } from "./graph.js";
 import type { RuntimeContext } from "./runtime-contract.js";
-import { parseUsage, sumTokenUsage, type TokenUsage } from "./usage.js";
+import { parseUsage, sumTokenUsage, summarizeUsage, summarizeTaskUsage, type TokenUsage } from "./usage.js";
 import { assertJson, createOutputValidator } from "./output-schema.js";
 import { explicitOutcome, legacyOutcome, type TaskOutcome, type TaskDecision } from "./task-outcome.js";
 import { isDeepStrictEqual } from "node:util";
@@ -1003,6 +1003,22 @@ export class RunStore {
       ...(constituents.length ? { usage: sumTokenUsage(constituents) } : {}),
     };
     this.database.prepare("UPDATE workflow_activations SET metadata=? WHERE run_id=? AND activation_key=?").run(JSON.stringify(metadata), activation.runId, activation.key);
+  }
+  /** Сводка и страница одного ответа читаются на одном снимке WAL. */
+  usageSnapshot(id: string, after = 0, limit = 100) {
+    return this.transaction(() => {
+      this.controlState(id);
+      return { summary: summarizeUsage(this.listActivations(id)), ...this.usageReports(id, after, limit) };
+    }, "read");
+  }
+  taskUsageSnapshot(taskId: string, after = 0, limit = 100) {
+    return this.transaction(() => {
+      const members = this.taskMembers(taskId);
+      return { taskId,
+        ...summarizeTaskUsage(members.map(member => ({ id: member.runId, records: this.listActivations(member.runId) }))),
+        ...this.taskUsageReports(taskId, after, limit),
+      };
+    }, "read");
   }
   usageReports(id: string, after = 0, limit = 100): { reports: UsageRecord[]; nextAfter: number; hasMore: boolean } {
     if (!Number.isSafeInteger(after) || after < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error("Invalid usage page cursor or limit (1–1000)");

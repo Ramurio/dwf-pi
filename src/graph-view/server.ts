@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { RunController } from "../run-controller.js";
 import { collectActivity, type WorkerActivity } from "../monitor.js";
-import { summarizeTaskUsage, summarizeUsage } from "../usage.js";
+import { summarizeUsage } from "../usage.js";
 import { publicReceipt } from "../lineage.js";
 import { publicAttempts } from "../service.js";
 import { graphSnapshot } from "./model.js";
@@ -233,12 +233,7 @@ export async function startGraphServer(
       if (name === "task-usage") {
         const id = url.searchParams.get("id");
         if (!id) throw new Error("Select a task");
-        const members = store.taskMembers(id);
-        json({
-          taskId: id,
-          ...summarizeTaskUsage(members.map(member => ({ id: member.runId, records: store.listActivations(member.runId) }))),
-          ...store.taskUsageReports(id, Number(url.searchParams.get("after") ?? 0), 100),
-        });
+        json(store.taskUsageSnapshot(id, Number(url.searchParams.get("after") ?? 0), 100));
         return;
       }
       if (name === "recovery") {
