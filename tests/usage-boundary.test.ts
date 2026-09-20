@@ -10,15 +10,16 @@ const base = () => ({ input: 1.5, output: 2.5, totalTokens: 17 });
 test("plain SDK and null-prototype usage preserve numbers and optional normalization", () => {
   for (const prototype of [Object.prototype, null]) {
     const value = Object.assign(Object.create(prototype), base(), { sdkExtra: { arbitrary: true } });
+    const extend = (fields: object) => Object.assign(Object.create(prototype), value, fields);
     assert.deepEqual(parseUsage(value), base());
     for (const name of optional) {
-      assert.deepEqual(parseUsage({ ...value, [name]: undefined }), base());
-      assert.deepEqual(parseUsage({ ...value, [name]: 0 }), { ...base(), [name]: 0 });
-      assert.deepEqual(parseUsage({ ...value, [name]: 0, partialFields: [name] }), { ...base(), [name]: 0, partialFields: [name] });
-      assert.equal(parseUsage({ ...value, [name]: undefined, partialFields: [name] }), undefined);
-      assert.equal(parseUsage({ ...value, partialFields: [name] }), undefined);
+      assert.deepEqual(parseUsage(extend({ [name]: undefined })), base());
+      assert.deepEqual(parseUsage(extend({ [name]: 0 })), { ...base(), [name]: 0 });
+      assert.deepEqual(parseUsage(extend({ [name]: 0, partialFields: [name] })), { ...base(), [name]: 0, partialFields: [name] });
+      assert.equal(parseUsage(extend({ [name]: undefined, partialFields: [name] })), undefined);
+      assert.equal(parseUsage(extend({ partialFields: [name] })), undefined);
     }
-    for (const partialFields of [undefined, []]) assert.deepEqual(parseUsage({ ...value, partialFields }), base());
+    for (const partialFields of [undefined, []]) assert.deepEqual(parseUsage(extend({ partialFields })), base());
   }
 });
 
@@ -93,4 +94,67 @@ test("partialFields requires dense own enumerable data indices and never invokes
   result.partialFields![1] = "cost"; result.cacheRead = 8;
   assert.equal(input.cacheRead, 2); assert.equal(partialFields[1], "cacheRead");
   assert.equal(calls, 0);
+});
+
+// Keep pollution synchronous and restore before assertions (including failed parses).
+function underAccessor(name: string, descriptor: PropertyDescriptor, value: unknown) {
+  const previous = Object.getOwnPropertyDescriptor(Object.prototype, name);
+  let result: ReturnType<typeof parseUsage>, error: unknown;
+  try {
+    Object.defineProperty(Object.prototype, name, { configurable: true, ...descriptor });
+    try { result = parseUsage(value); } catch (reason) { error = reason; }
+  } finally {
+    if (previous) Object.defineProperty(Object.prototype, name, previous);
+    else Reflect.deleteProperty(Object.prototype, name);
+  }
+  return { result, error };
+}
+
+for (const name of recognized) for (const mode of ["get", "set", "both"] as const) {
+  test(`result owns ${name} without inherited ${mode}`, () => {
+    const value = { ...base(), cacheRead: 0, cacheWrite: 0, reasoning: 0, cost: 0, partialFields: [...optional] };
+    let gets = 0, sets = 0;
+    const descriptor = {
+      ...(mode !== "set" ? { get() { gets++; return 0; } } : {}),
+      ...(mode !== "get" ? { set(_value: unknown) { sets++; } } : {}),
+    };
+    const { result, error } = underAccessor(name, descriptor, value);
+    assert.equal(error, undefined);
+    assert.deepEqual({ gets, sets }, { gets: 0, sets: 0 });
+    assert.ok(result);
+    assert.equal(Object.getPrototypeOf(result), Object.prototype);
+    for (const field of recognized) assert.deepEqual(Object.getOwnPropertyDescriptor(result, field), {
+      value: value[field as keyof typeof value], enumerable: true, writable: true, configurable: true,
+    });
+  });
+}
+
+for (const prototype of [Object.prototype, null]) for (const name of optional) for (const missing of [false, true]) for (const throwing of [false, true]) {
+  test(`linked ${prototype === null ? "null-prototype" : "plain"} ${name} rejects ${missing ? "absent" : "undefined"} without ${throwing ? "throwing" : "zero"} getter`, () => {
+    const value = Object.assign(Object.create(prototype), base(), { partialFields: [name] }, missing ? {} : { [name]: undefined });
+    let calls = 0;
+    const { result, error } = underAccessor(name, { get() {
+      calls++; if (throwing) throw new Error("inherited getter"); return 0;
+    } }, value);
+    assert.equal(calls, 0);
+    assert.equal(error, undefined);
+    assert.equal(result, undefined);
+  });
+}
+
+test("frozen plain and null-prototype inputs preserve descriptors and copy partial fields", () => {
+  for (const prototype of [Object.prototype, null]) {
+    const partialFields = Object.freeze([...optional]);
+    const value = Object.freeze(Object.assign(Object.create(prototype), base(), {
+      cacheRead: 0, cacheWrite: 0.25, reasoning: 2, cost: 0, partialFields, sdkExtra: true,
+    }));
+    const before = Object.getOwnPropertyDescriptors(value);
+    const arrayBefore = Object.getOwnPropertyDescriptors(partialFields);
+    const result = parseUsage(value)!;
+    assert.deepEqual(result, { ...base(), cacheRead: 0, cacheWrite: 0.25, reasoning: 2, cost: 0, partialFields: [...optional] });
+    assert.equal(Object.getPrototypeOf(result), Object.prototype);
+    assert.notEqual(result.partialFields, partialFields);
+    assert.deepEqual(Object.getOwnPropertyDescriptors(value), before);
+    assert.deepEqual(Object.getOwnPropertyDescriptors(partialFields), arrayBefore);
+  }
 });

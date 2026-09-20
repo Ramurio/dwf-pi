@@ -30,7 +30,7 @@ export function parseUsage(value: unknown): TokenUsage | undefined {
     const field = ownUsageField(value, name);
     if (field !== undefined) {
       if (!nonnegative(field)) return undefined;
-      result[name] = field;
+      Object.defineProperty(result, name, { value: field, enumerable: true, writable: true, configurable: true });
     }
   }
   const partial = ownUsageField(value, "partialFields");
@@ -44,11 +44,11 @@ export function parseUsage(value: unknown): TokenUsage | undefined {
       const descriptor = Object.getOwnPropertyDescriptor(partial, String(index));
       if (!descriptor?.enumerable || !Object.hasOwn(descriptor, "value")) return undefined;
       const name: unknown = descriptor.value;
-      if (typeof name !== "string" || !breakdownFields.includes(name as BreakdownField) || seen.has(name) || result[name as BreakdownField] === undefined) return undefined;
+      if (typeof name !== "string" || !breakdownFields.includes(name as BreakdownField) || seen.has(name) || !Object.hasOwn(result, name)) return undefined;
       seen.add(name);
       names.push(name as BreakdownField);
     }
-    if (names.length) result.partialFields = names;
+    if (names.length) Object.defineProperty(result, "partialFields", { value: names, enumerable: true, writable: true, configurable: true });
   }
   return result;
 }

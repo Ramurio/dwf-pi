@@ -124,7 +124,25 @@ test("rejected usage leaves ledger, events and projections unchanged before and 
         assert.throws(() => store.recordUsage("run", token, key, "2", value, "stop"), /Invalid worker usage report/);
         assert.deepEqual(snapshot(), before);
       }
+      const linked = { ...valid, cost: undefined, partialFields: ["cost"] };
+      const previous = Object.getOwnPropertyDescriptor(Object.prototype, "cost");
+      let linkedError: unknown;
+      try {
+        Object.defineProperty(Object.prototype, "cost", {
+          configurable: true,
+          get() { calls++; return 0; },
+          set(_value: unknown) { calls++; },
+        });
+        try { store.recordUsage("run", token, key, "2", linked, "stop"); }
+        catch (error) { linkedError = error; }
+      } finally {
+        if (previous) Object.defineProperty(Object.prototype, "cost", previous);
+        else Reflect.deleteProperty(Object.prototype, "cost");
+      }
+      assert.ok(linkedError instanceof Error);
+      assert.match(linkedError.message, /Invalid worker usage report/);
       assert.equal(calls, 0);
+      assert.deepEqual(snapshot(), before);
       store.recordUsage("run", token, key, "2", valid, "stop");
       store.recordUsage("run", token, key, "2", valid, "stop");
       assert.equal(second.usageReports("run").reports.length, before.reports.reports.length + 1);
