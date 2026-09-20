@@ -639,7 +639,7 @@ function renderInspector() {
           "",
           edge.conditional
             ? JSON.stringify(edge.condition, null, 2)
-            : "Следующий безусловный переход, если предыдущие условия не выбраны.",
+            : "Резервный переход, если ни одно условие исходящих переходов не выполнено.",
         ),
       );
       aside.append(details);
