@@ -1,0 +1,1083 @@
+{
+  "metadata": {
+    "researchId": "r11",
+    "topic": "Визуализация графов большого размера",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "date": "2026-09-20",
+    "actualCwd": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/ae9f7bfdeccdee959148e259d55c43a8f4274f2d3f2d1b30b4b86466aab4b20c",
+    "sourceAndDependencyDevHeadVerifiedEqual": true,
+    "reportPaths": {
+      "markdown": "research/2026-09-20-astra-max/r11-graph-scale.md",
+      "json": "research/2026-09-20-astra-max/r11-graph-scale.json"
+    },
+    "environment": {
+      "node": "26.8.1",
+      "chrome": "153.0.8010.52",
+      "os": "macOS",
+      "viewportCssPx": [
+        1600,
+        1000
+      ],
+      "svgCssPx": [
+        972,
+        620
+      ]
+    },
+    "implementationPerformed": false,
+    "externalWebResearchPerformed": false,
+    "liveProvidersOrUserRunsAccessed": false,
+    "packagesInstalled": false,
+    "gitCommitPushCheckoutResetPerformed": false
+  },
+  "summary": {
+    "findingCount": 9,
+    "countsByClassification": {
+      "bug": 4,
+      "idea": 1,
+      "unknown": 1,
+      "already-fixed": 3
+    },
+    "repositoryTests": {
+      "passed": 45,
+      "failed": 0,
+      "skipped": 0,
+      "fullSuiteExecuted": false
+    },
+    "conclusion": "Подтверждены четыре локальных дефекта фокуса, видимости, zoom и текста карточек. Коллизии маршрутов не воспроизвелись в расширенной матрице; старые scope/ARIA/await/control исправления подтверждены выбранными тестами. Масштабирование геометрии и динамической истории требует разных оптимизаций."
+  },
+  "coverage": {
+    "inspected": [
+      "Обязательные документы, профильные observation и graph-contract, git log и HEAD обоих деревьев",
+      "Полный layout.js, SVG/selection/camera/event handlers и relevant state reducers в app.js",
+      "model.ts, activationState/projectRun, activationPath, формат допустимых ID",
+      "HTML/CSS графа и соответствующие layout/accessibility/trace/projection тесты"
+    ],
+    "staticGeometry": {
+      "chainNodeCounts": [
+        10,
+        100,
+        250,
+        500,
+        1000
+      ],
+      "fanoutBranchCounts": [
+        4,
+        30,
+        120,
+        300,
+        500
+      ],
+      "fanoutShape": "start -> conditional children -> join; join -> start, join -> join, join -> done",
+      "allMeasuredCollisionMetricsWereZero": true,
+      "metrics": [
+        "card overlap",
+        "route versus card",
+        "mask versus card",
+        "mask versus mask",
+        "mask versus other route",
+        "shared collinear segment length"
+      ],
+      "pointCrossingsExcludedFromSharedSegmentMetric": true
+    },
+    "dynamicScopes": {
+      "scopeCounts": [
+        100,
+        1000,
+        5000
+      ],
+      "definitionNodeCount": 3,
+      "maximumActivationCount": 15000,
+      "semantics": "map/parallel добавляют scope и visit, не копии SVG-карточек"
+    },
+    "browserMethod": "Настоящие assets и UI-функции из cwd; отключены только startup/polling по существующей test boundary. Собственный loopback server, изолированный Chrome профиль/HOME; trusted keyboard через CDP, native bbox/rect. Снимки и активации синтетические.",
+    "notCovered": [
+      "Live provider, квоты, качество моделей и реальные пользовательские run",
+      "VoiceOver/NVDA и все assistive technologies",
+      "Safari/Firefox, touch, все viewport, темы и шрифты",
+      "Стоимость snapshot/сериализации/доставки на больших живых БД",
+      "Все возможные топологии, утечки памяти и регрессия относительно другой ревизии"
+    ]
+  },
+  "findings": [
+    {
+      "id": "r11-B01",
+      "classification": "bug",
+      "severity": "medium",
+      "title": "Выбор узла и семантическая перерисовка теряют клавиатурный фокус",
+      "sourceLocations": [
+        "src/graph-view/app.js:1068-1072",
+        "src/graph-view/app.js:510-514",
+        "src/graph-view/app.js:967-969",
+        "src/graph-view/app.js:490-506",
+        "src/graph-view/app.js:1465-1468"
+      ],
+      "trigger": "Цепочка 10 узлов. Фокус на fit, настоящий Tab на n0, Enter. Отдельно: фокус n1 и renderPanel после изменения соседа.",
+      "expected": "Фокус остаётся на текущем графовом button; следующий Tab идёт к следующему узлу. Обновление того же run/graph/node не сбрасывает фокус.",
+      "observed": {
+        "before": "g role=button, n0",
+        "afterEnter": "BODY, state.node=n0",
+        "nextTab": "n0 повторно, aria-pressed=true",
+        "afterSemanticRedraw": "BODY"
+      },
+      "cause": "selectNode вызывает renderPanel, renderGraph удаляет все SVG children. Восстановление фокуса реализовано для await/recovery fields, но не для графового узла.",
+      "evidenceKind": "Измерение настоящего Chrome с CDP keyboard и production render functions",
+      "experimentIds": [
+        "E04"
+      ],
+      "reproduction": {
+        "fixture": "browser.mjs",
+        "command": "node /tmp/r11-graph-scale-sf39ZV/browser.mjs",
+        "cwd": "actualCwd",
+        "resultFields": [
+          "keyboardBefore",
+          "keyboardAfterEnter",
+          "keyboardNextTab",
+          "keyboardAfterUpdate"
+        ]
+      },
+      "counterevidence": [
+        "Выбор и aria-pressed сохраняются: это не повторное открытие ARIA-state дефекта.",
+        "graph-node-accessibility прошёл, но его trusted Space тест не проверяет activeElement после активации (tests/graph-node-accessibility.test.ts:290-309).",
+        "Сохранение focus/caret/scroll редактора await работает и защищено отдельной регрессией."
+      ],
+      "recommendation": {
+        "minimalChange": "Сохранять и восстанавливать идентичность фокусируемого SVG-узла внутри текущего посещения run/graph либо не заменять SVG-узлы при изменении выбора.",
+        "risk": "Фокус по одному node ID может ошибочно переноситься в другой graph/run или отнимать фокус у пользователя.",
+        "acceptance": "Trusted Tab -> Enter -> Tab проходит n0 -> n1; semantic refresh сохраняет focus; смена run/graph его не переносит; await/control/trace проверки остаются зелёными.",
+        "implemented": false
+      }
+    },
+    {
+      "id": "r11-B02",
+      "classification": "bug",
+      "severity": "medium",
+      "title": "Tab-навигация достигает полностью невидимого узла без перемещения камеры",
+      "sourceLocations": [
+        "src/graph-view/app.js:1023-1029",
+        "src/graph-view/app.js:1067-1090",
+        "src/graph-view/app.js:1581-1596",
+        "src/graph-view/style.css:450-453"
+      ],
+      "trigger": "Цепочка 20 узлов, исходный масштаб 0.9. После фокуса fit отправлены 11 Tab без Enter.",
+      "expected": "Сфокусированный graph button и его рамка видны в области SVG при сохранении читаемого масштаба.",
+      "observed": {
+        "focusedNode": "n10",
+        "focusedRectY": [
+          2105.6,
+          2199.2
+        ],
+        "svgRectY": [
+          284,
+          904
+        ],
+        "viewBox": "-352 0 1080 688.8888888888889",
+        "documentScrollY": 31
+      },
+      "cause": "Узлы имеют tabindex=0, но нет раскрытия узла в камере при focus. Прокрутка документа не раскрывает клиппированную область SVG.",
+      "evidenceKind": "Измерение viewport и focused DOM element в Chrome; последовательность независима от B01",
+      "experimentIds": [
+        "E04"
+      ],
+      "reproduction": {
+        "fixture": "browser.mjs",
+        "command": "node /tmp/r11-graph-scale-sf39ZV/browser.mjs",
+        "cwd": "actualCwd",
+        "resultFields": [
+          "offscreenTab"
+        ]
+      },
+      "counterevidence": [
+        "Есть focus-visible стиль, полное aria-label и клавиатурная активация.",
+        "Fit, mouse pan и центрирование источника из trace дают обходные пути (app.js:1308-1312).",
+        "Не утверждается полный keyboard trap или невозможность чтения screen reader."
+      ],
+      "recommendation": {
+        "minimalChange": "При focus сдвигать камеру только если box узла вне viewport, не меняя масштаб; отдельные pan/search shortcuts не обязательны для исправления.",
+        "risk": "Без проверки видимости камера будет прыгать на каждом Tab и перезаписывать пользовательскую позицию.",
+        "acceptance": "Tab по цепочкам 20/250 всегда показывает сфокусированную карточку; polling не перемещает камеру; mouse pan и trace navigation сохраняются.",
+        "implemented": false
+      }
+    },
+    {
+      "id": "r11-B03",
+      "classification": "bug",
+      "severity": "medium",
+      "title": "После fit большого графа кнопка уменьшения масштаба приближает граф",
+      "sourceLocations": [
+        "src/graph-view/app.js:904-925",
+        "src/graph-view/app.js:1562-1564",
+        "src/graph-view/app.js:1604-1608"
+      ],
+      "trigger": "250 узлов в последовательной цепочке; fit, затем кнопка zoom-out.",
+      "expected": "zoom-out не уменьшает world-space ширину камеры и не увеличивает видимый размер карточек.",
+      "observed": {
+        "layout": [
+          376,
+          49084
+        ],
+        "cameraBefore": [
+          76951.04516129031,
+          49084
+        ],
+        "cameraAfter": [
+          30000,
+          19135.802469135804
+        ],
+        "fullyVisibleBefore": 250,
+        "fullyVisibleAfter": 97,
+        "apparentMagnification": 2.565
+      },
+      "cause": "fit не ограничивает ширину; zoom обрезает даже уже больший fit константой 30000 и тем самым меняет направление масштабирования.",
+      "evidenceKind": "Native DOM click + production camera, независимо подтверждённая высота layout",
+      "experimentIds": [
+        "E03",
+        "E04",
+        "E05"
+      ],
+      "reproduction": {
+        "fixture": "browser.mjs",
+        "command": "node /tmp/r11-graph-scale-sf39ZV/browser.mjs",
+        "cwd": "actualCwd",
+        "resultFields": [
+          "zoom",
+          "zoomSmall"
+        ]
+      },
+      "counterevidence": [
+        "На цепочке 10 fit width 3204.4645 корректно увеличивается zoom-out до 4005.5806.",
+        "Повторный fit возвращает все карточки; нет потери данных.",
+        "Колесо использует ту же функцию по коду, но конкретный дефект воспроизведён кнопкой, не live wheel устройством."
+      ],
+      "recommendation": {
+        "minimalChange": "Согласовать границы zoom с geometry/current fit, сохраняя монотонное направление; не заменять 30000 другим произвольным пределом и не ограничивать workflow.",
+        "risk": "Нужны проверки конечности чисел, центра и aspect ratio на очень большой геометрии.",
+        "acceptance": "Zoom-out никогда не уменьшает ширину, zoom-in никогда не увеличивает её на chain 10/250/1000 и wide fanout; fit остаётся доступным.",
+        "implemented": false
+      }
+    },
+    {
+      "id": "r11-B04",
+      "classification": "bug",
+      "severity": "low",
+      "title": "Усечение ID по символам допускает текст в область соседней карточки",
+      "sourceLocations": [
+        "src/graph.ts:38",
+        "src/graph-view/layout.js:56-66",
+        "src/graph-view/app.js:892",
+        "src/graph-view/app.js:1044",
+        "src/graph-view/style.css:460-463"
+      ],
+      "trigger": "Fanout с четырьмя соседями, первый ID = W, повторённая 30 раз. Валидность полноценного workflow проверена parseWorkflow.",
+      "expected": "Видимый ID/ellipsis остаётся внутри своей карточки; полное имя отдельно доступно через title/ARIA.",
+      "observed": {
+        "textBBoxX": 16,
+        "textBBoxWidth": 348.0903015136719,
+        "cardWidth": 230,
+        "gap": 48,
+        "overlapIntoNextCardSvgUnits": 86.0903015136719,
+        "textScreenRight": 551.5312652587891,
+        "nextCardScreenLeft": 474.0500183105469,
+        "overlapCssPx": 77.4812469482422
+      },
+      "cause": "shorten по длине оставляет 30 широких glyphs нетронутыми, тогда как nodeWidth зависит только от числа портов и текст не ограничен внутренней областью.",
+      "evidenceKind": "Native SVG getBBox и screen rectangles со штатным CSS",
+      "experimentIds": [
+        "E04",
+        "E05"
+      ],
+      "reproduction": {
+        "fixture": "browser.mjs",
+        "command": "node /tmp/r11-graph-scale-sf39ZV/browser.mjs",
+        "cwd": "actualCwd",
+        "resultFields": [
+          "text"
+        ]
+      },
+      "counterevidence": [
+        "Full title/aria-label остаются верными, HTML не исполняется.",
+        "Accessibility test использует узкие i и проверяет строковое усечение, а не glyph width (tests/graph-node-accessibility.test.ts:90-109).",
+        "Карточки и маршруты не перекрываются; это отдельная коллизия содержимого. Соседний node-box может закрывать вышедшие за границу буквы."
+      ],
+      "recommendation": {
+        "minimalChange": "Ограничить область текста внутренним box и подбирать ellipsis по ширине, сохранив полный title/ARIA. Не менять topology от live status/usage.",
+        "risk": "Разные и поздно загруженные шрифты меняют метрики; измерения требуют кэширования.",
+        "acceptance": "W/i, длинные допустимые ID, переведённые заголовки и token строки не рисуются за внутреннюю границу карточки в реальном браузере; доступные имена полные.",
+        "implemented": false
+      }
+    },
+    {
+      "id": "r11-I01",
+      "classification": "idea",
+      "title": "Отделить immutable geometry от live states и масштабировать инспектор активаций",
+      "sourceLocations": [
+        "src/graph-view/app.js:948-969",
+        "src/graph-view/app.js:627-665",
+        "src/graph-view/layout.js:71-94",
+        "src/graph-view/layout.js:120-133"
+      ],
+      "observed": "500 fanout branches: 503 карточки/1003 ребра, 7537 SVG descendants, Chrome render 173.4-326.5 ms в трёх вызовах. 5000 map scope: только 3 карточки, но 5001 options и 30009 inspector elements, выбор с историей 231.9 ms.",
+      "inference": "Статическая топология и динамическая история создают разные повторные затраты; неизменную геометрию не обязательно считать при каждом selection/update.",
+      "notEstablished": "Нет заявленного SLA, устойчивого зависания, memory leak или сравнения с прошлой версией; замеры зависят от нагрузки/JIT.",
+      "experimentIds": [
+        "E03",
+        "E04"
+      ],
+      "counterevidence": [
+        "Малые схемы быстры.",
+        "Map уже не размножает SVG-карточки по числу ветвей."
+      ],
+      "recommendation": {
+        "minimalChange": "Первым шагом кэшировать только геометрию по frozen plan/graph и переиспользовать DOM; state/trace обновлять отдельно. Затем явное раскрытие истории и поиск scope без скрытого отбрасывания записей.",
+        "risk": "Кэш всего layout сейчас заморозит скопированные edge.traversals. Виртуализация рискует потерять focus/disclosure и доступ к истории.",
+        "acceptance": "Счётчик показывает один расчёт geometry на неизменный plan/graph при 1000 обновлениях активаций; цвета/счётчики/trace актуальны; полная история доступна явно; focus/scope тесты проходят.",
+        "implemented": false
+      }
+    },
+    {
+      "id": "r11-U01",
+      "classification": "unknown",
+      "title": "Не определён обязательный агрегатный статус разных конечных исходов одного узла в нескольких scope",
+      "sourceLocations": [
+        "src/graph-view/model.ts:50-57",
+        "src/graph-view/app.js:129-140",
+        "src/graph-view/app.js:212-229",
+        "PROJECT_INFO/observation.md:147-151"
+      ],
+      "observed": "graphSnapshot для left failed startedAt=1 и right succeeded startedAt=2 возвращает branches=2/status=succeeded; обе активации и ошибка остаются в данных.",
+      "openQuestion": "Должна ли подпись режима Все ветки означать последнюю запись или сводку последних состояний каждого scope?",
+      "whyNotBug": "Документ о последних результатах ветвей не задаёт однозначный reducer для failed. Данные не потеряны; collect-родитель имеет отдельное предупреждение. Fixture проверила проекцию, не runtime end-to-end.",
+      "experimentIds": [
+        "E06"
+      ],
+      "reproduction": {
+        "fixture": "mixed.mts",
+        "command": "node --import tsx /tmp/r11-graph-scale-sf39ZV/mixed.mts",
+        "cwd": "dependencyDevAtSameRevision"
+      },
+      "recommendation": {
+        "minimalChange": "Сначала определить контракт; если нужна сводка, явно показывать числа последних состояний по scope, не считать исторические сбои нерешёнными.",
+        "risk": "Старый исправленный visit может снова выглядеть текущей ошибкой.",
+        "acceptance": "Согласованная матрица collect/fail-fast, mixed outcomes, active sibling, repaired visit и scoped view до внедрения reducer.",
+        "implemented": false
+      }
+    },
+    {
+      "id": "r11-AF01",
+      "classification": "already-fixed",
+      "title": "Разведение маршрутов, масок и корректность возвратов подтверждены",
+      "sourceLocations": [
+        "src/graph-view/layout.js:13-39",
+        "src/graph-view/layout.js:43-106",
+        "src/graph-view/layout.js:120-135",
+        "src/graph-view/app.js:990-991",
+        "tests/graph-layout-overlap.test.ts:1-70"
+      ],
+      "observed": "7 overlap tests и 5 выбранных layout cases прошли. В 10 дополнительных геометрических fixtures все 6 collision metrics равны нулю; status-independent geometry проверена существующими тестами.",
+      "experimentIds": [
+        "E02",
+        "E03"
+      ],
+      "refutes": "Общее утверждение, что актуальные рёбра/маски снова перекрываются или shortcut превращает forward edge в повтор.",
+      "limits": "Не все топологии/пиксели/шрифты; point crossings допустимы, text glyph collision проверяется отдельно в B04."
+    },
+    {
+      "id": "r11-AF02",
+      "classification": "already-fixed",
+      "title": "Trace scope, ARIA-selection и полные текстовые имена исправлены",
+      "sourceLocations": [
+        "src/graph-view/app.js:989-1002",
+        "src/graph-view/app.js:1022-1032",
+        "src/graph-view/app.js:1551-1559",
+        "tests/graph-node-accessibility.test.ts:1-329",
+        "tests/graph-transition-scope.test.ts:1-189"
+      ],
+      "observed": "4/4 DOM/Chrome cases без skip. Дополнительная mixed map/parallel scope fixture: traversal count 3 в aggregate, 2 в выбранном map scope, два visit остаются; прошлое request_changes не подсвечивает исправленную ветвь.",
+      "experimentIds": [
+        "E02",
+        "E04"
+      ],
+      "refutes": "Выбранный переход якобы наследуется от другой ветки или узел не сообщает ARIA-selection.",
+      "limits": "B01/B02 относятся к activeElement/viewport, а не к сохранённому selection state. Не проводилось live screen-reader исследование."
+    },
+    {
+      "id": "r11-AF03",
+      "classification": "already-fixed",
+      "title": "Async ownership и состояние wait редактора не следует переоткрывать",
+      "sourceLocations": [
+        "src/graph-view/app.js:484-509",
+        "tests/graph-view-observation.test.ts",
+        "PROJECT_INFO/known-issues.md",
+        "git:fea2136",
+        "git:d72df5d",
+        "git:b04ef8d",
+        "git:1ee48ff"
+      ],
+      "observed": "21/21 graph-view-observation cases: late snapshot/control/await/recovery effects не меняют новое посещение; disclosure по wait ID, focus/selection direction/scroll сохраняются.",
+      "experimentIds": [
+        "E01",
+        "E02"
+      ],
+      "refutes": "Старые гипотезы ownership и сброса await disclosure/caret/scroll на обновлении.",
+      "limits": "Эти DOM-adapter тесты не выдаются за полный browser E2E панели. Skill delivery вне scope, повторная проблема по старому main не заявляется."
+    }
+  ],
+  "experiments": [
+    {
+      "id": "E01",
+      "executed": true,
+      "command": "pwd; git rev-parse HEAD; cat AGENTS.md; read PROJECT_INFO/{architecture,development,known-issues,observation,graph-contract}.md; git log -15 --oneline; git log -20 --oneline -- src/graph-view tests/graph*; git -C <dependency-dev> rev-parse HEAD",
+      "outcome": "Оба HEAD e15bc407da8753fd6b683c0aa4a68634e3c458a7; обязательные источники прочитаны, исходное рабочее дерево чистое.",
+      "limits": "Команда read обозначает инспекцию granted read tool, не отдельную shell команду. Чужие исследовательские отчёты не читались."
+    },
+    {
+      "id": "E02",
+      "executed": true,
+      "cwd": "dependencyDevAtSameRevision",
+      "commands": [
+        "TMPDIR=/tmp/r11-graph-scale-sf39ZV node --import tsx --test --test-concurrency=1 tests/graph-layout-overlap.test.ts tests/graph-node-accessibility.test.ts tests/graph-transition-scope.test.ts tests/graph-view-task-scope.test.ts tests/graph-view-observation.test.ts",
+        "TMPDIR=/tmp/r11-graph-scale-sf39ZV node --import tsx --test --test-concurrency=1 --test-name-pattern='node projection|layout preserves|cross-layer|parallel conditions|shortcut|routes and label' tests/graph-view.test.ts"
+      ],
+      "outcome": "39/39 плюс 6/6 выбранных тестов, 0 fail/skip; Chrome оба сценария исполнены.",
+      "limits": "Полный npm test и остальные cases graph-view.test.ts не запускались. Offline fixtures, без провайдеров."
+    },
+    {
+      "id": "E03",
+      "executed": true,
+      "command": "node /tmp/r11-graph-scale-sf39ZV/geometry.mjs",
+      "cwd": "actualCwd",
+      "fixture": "geometry.mjs",
+      "outcome": "10 геометрий, 3 timing samples каждой, все collision assertions прошли.",
+      "limits": "Segment/box геометрия, не все stroke/font pixels; намеренные point crossings не являются общими сегментами; timings локальны."
+    },
+    {
+      "id": "E04",
+      "executed": true,
+      "command": "node /tmp/r11-graph-scale-sf39ZV/browser.mjs",
+      "cwd": "actualCwd",
+      "fixture": "browser.mjs",
+      "outcome": "Воспроизведены четыре дефекта; scope/count/current-attention проверки дали ожидаемые значения; сняты render/activation-scale measurements.",
+      "harnessNote": "Первый запуск остановился на повторном top-level const before в CDP harness. Исправлен только /tmp скрипт, затем два успешных прогона; итоговый добавил scope-scale. Это не ошибка Dynamicwf.",
+      "limits": "Изолированный Chrome, synthetic snapshots, production functions без startup/polling. Никакие real run/provider не затрагивались; timings не benchmark SLA."
+    },
+    {
+      "id": "E05",
+      "executed": true,
+      "command": "node --import tsx /tmp/r11-graph-scale-sf39ZV/validate.mts",
+      "cwd": "dependencyDevAtSameRevision",
+      "fixture": "validate.mts",
+      "outcome": "parseWorkflow принял 12 полных определений (6 цепочек, 5 fan/loop, 1 parallel+map).",
+      "limits": "Только проверка определения; workflow не исполнялись."
+    },
+    {
+      "id": "E06",
+      "executed": true,
+      "command": "node --import tsx /tmp/r11-graph-scale-sf39ZV/mixed.mts",
+      "cwd": "dependencyDevAtSameRevision",
+      "fixture": "mixed.mts",
+      "outcome": "Настоящий graphSnapshot сохранил обе mixed-state ветви, aggregate status оказался succeeded.",
+      "limits": "Контролируемые записи, без RunController/БД исполнения; семантический контракт агрегатного цвета не установлен."
+    }
+  ],
+  "alreadyFixedAndRefutations": [
+    "r11-AF01",
+    "r11-AF02",
+    "r11-AF03"
+  ],
+  "unknowns": [
+    {
+      "id": "r11-U01",
+      "question": "Контракт aggregate node status для mixed final scope outcomes"
+    },
+    {
+      "id": "r11-U02",
+      "question": "Реальные screen-reader announcements и navigation на VoiceOver/NVDA",
+      "reason": "Assistive technology не запускалась"
+    },
+    {
+      "id": "r11-U03",
+      "question": "Остальные браузерные движки, шрифты, mobile и темы",
+      "reason": "Измерения ограничены указанным Chrome/viewport"
+    },
+    {
+      "id": "r11-U04",
+      "question": "Серверная snapshot latency и delivery на большой живой истории",
+      "reason": "Большие активации подставлялись локально; живые журналы не читались"
+    }
+  ],
+  "sources": [
+    {
+      "id": "S01",
+      "kind": "repository-documents",
+      "refs": [
+        "AGENTS.md",
+        "PROJECT_INFO/architecture.md",
+        "PROJECT_INFO/development.md",
+        "PROJECT_INFO/known-issues.md"
+      ],
+      "accessDate": "2026-09-20"
+    },
+    {
+      "id": "S02",
+      "kind": "repository-contract",
+      "refs": [
+        "PROJECT_INFO/graph-contract.md:28-32",
+        "PROJECT_INFO/graph-contract.md:79-88",
+        "PROJECT_INFO/graph-contract.md:248-264",
+        "PROJECT_INFO/observation.md:125-178",
+        "PROJECT_INFO/observation.md:321-380"
+      ]
+    },
+    {
+      "id": "S03",
+      "kind": "source",
+      "refs": [
+        "src/graph-view/layout.js:1-155",
+        "src/graph-view/app.js:129-151",
+        "src/graph-view/app.js:212-229",
+        "src/graph-view/app.js:478-665",
+        "src/graph-view/app.js:885-1092",
+        "src/graph-view/app.js:1298-1316",
+        "src/graph-view/app.js:1448-1648"
+      ]
+    },
+    {
+      "id": "S04",
+      "kind": "source",
+      "refs": [
+        "src/graph-view/model.ts:1-168",
+        "src/observation.ts",
+        "src/monitor.ts:38-50",
+        "src/graph.ts:38",
+        "src/graph-view/index.html:77-119",
+        "src/graph-view/style.css:322-373",
+        "src/graph-view/style.css:427-471"
+      ]
+    },
+    {
+      "id": "S05",
+      "kind": "inspected-tests",
+      "refs": [
+        "tests/graph-layout-overlap.test.ts:1-70",
+        "tests/graph-node-accessibility.test.ts:1-329",
+        "tests/graph-transition-scope.test.ts:1-189",
+        "tests/graph-view.test.ts:215-393"
+      ]
+    },
+    {
+      "id": "S06",
+      "kind": "executed-tests",
+      "refs": [
+        "tests/graph-view-observation.test.ts",
+        "tests/graph-view-task-scope.test.ts"
+      ],
+      "scopeNote": "Исполнены как regression evidence, не заявляется полный построчный аудит"
+    },
+    {
+      "id": "S07",
+      "kind": "git-history",
+      "refs": [
+        "git log -15 --oneline",
+        "git log -20 --oneline -- src/graph-view tests/graph*"
+      ],
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7"
+    }
+  ],
+  "reproduction": {
+    "sourceRevisionRequired": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "dependencyDev": "/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+    "instructions": "Восстановить fixtureSources в новый /tmp/r11-repro-XXXXXX; geometry.mjs и browser.mjs запускать node из actual worktree этой ревизии. validate.mts и mixed.mts запускать node --import tsx из dependency dev с существующими зависимостями. Ничего не устанавливать. Полная команда извлечения в Markdown.",
+    "fixtureSources": {
+      "geometry.mjs": "import { pathToFileURL } from 'node:url';\nimport { performance } from 'node:perf_hooks';\nimport assert from 'node:assert/strict';\nconst {layoutGraph}=await import(pathToFileURL(process.cwd()+'/src/graph-view/layout.js'));\nconst node=id=>({id});\nfunction chain(n){return {entry:'n0',nodes:Array.from({length:n},(_,i)=>node('n'+i)),edges:Array.from({length:n-1},(_,i)=>({from:'n'+i,to:'n'+(i+1)}))}}\nfunction fan(n){const ids=Array.from({length:n},(_,i)=>'c'+i);return {entry:'start',nodes:['start',...ids,'join','done'].map(node),edges:[...ids.map(to=>({from:'start',to,conditional:true})),...ids.map(from=>({from,to:'join'})),{from:'join',to:'start',conditional:true},{from:'join',to:'join',conditional:true},{from:'join',to:'done'}]}}\nconst seg=e=>e.points.slice(1).map((b,i)=>[e.points[i],b]).filter(([a,b])=>a.x!==b.x||a.y!==b.y);\nconst hit=([a,b],box)=>a.x===b.x?a.x>box.x&&a.x<box.x+box.width&&Math.max(a.y,b.y)>box.y&&Math.min(a.y,b.y)<box.y+box.height:a.y>box.y&&a.y<box.y+box.height&&Math.max(a.x,b.x)>box.x&&Math.min(a.x,b.x)<box.x+box.width;\nconst intersect=(a,b)=>a.x<b.x+b.width&&b.x<a.x+a.width&&a.y<b.y+b.height&&b.y<a.y+a.height;\nfunction shared([a,b],[c,d]) { if(a.x===b.x&&c.x===d.x&&a.x===c.x)return Math.max(0,Math.min(Math.max(a.y,b.y),Math.max(c.y,d.y))-Math.max(Math.min(a.y,b.y),Math.min(c.y,d.y)));if(a.y===b.y&&c.y===d.y&&a.y===c.y)return Math.max(0,Math.min(Math.max(a.x,b.x),Math.max(c.x,d.x))-Math.max(Math.min(a.x,b.x),Math.min(c.x,d.x)));return 0; }\nconst rows=[];\nfor(const [type,make,sizes]of [['chain',chain,[10,100,250,500,1000]],['fan-loop',fan,[4,30,120,300,500]]]) for(const n of sizes){\n const g=make(n), times=[];let l;\n for(let i=0;i<3;i++){const t=performance.now();l=layoutGraph(g);times.push(+(performance.now()-t).toFixed(2));}\n const boxes=[...l.positions.values()],labels=l.edges.filter(e=>e.label),allSeg=l.edges.map(seg);\n let nodeOverlap=0,routeNodeHit=0,maskNodeHit=0,maskOverlap=0,maskOtherRoute=0,sharedLength=0;\n for(let i=0;i<boxes.length;i++)for(const b of boxes.slice(i+1))nodeOverlap+=intersect(boxes[i],b)?1:0;\n for(let i=0;i<l.edges.length;i++)for(const s of allSeg[i]) {for(const box of boxes) routeNodeHit+=hit(s,box)?1:0;for(let j=i+1;j<l.edges.length;j++)for(const t of allSeg[j])sharedLength+=shared(s,t);}\n for(let i=0;i<labels.length;i++){const e=labels[i]; for(const b of boxes)maskNodeHit+=intersect(e.labelBox,b)?1:0;for(const o of labels.slice(i+1))maskOverlap+=intersect(e.labelBox,o.labelBox)?1:0;for(let j=0;j<l.edges.length;j++)if(l.edges[j]!==e)for(const s of allSeg[j])maskOtherRoute+=hit(s,e.labelBox)?1:0;}\n assert.equal(nodeOverlap+routeNodeHit+maskNodeHit+maskOverlap+maskOtherRoute+sharedLength,0);\n rows.push({type,n,nodes:g.nodes.length,edges:g.edges.length,width:l.width,height:l.height,timesMs:times,nodeOverlap,routeNodeHit,maskNodeHit,maskOverlap,maskOtherRoute,sharedLength});\n}\nconsole.log(JSON.stringify(rows,null,2));\n",
+      "browser.mjs": "import {readFileSync,writeFileSync,mkdtempSync,mkdirSync,rmSync} from 'node:fs';\nimport {createServer} from 'node:http';\nimport {spawn} from 'node:child_process';\nimport assert from 'node:assert/strict';\nconst root=process.cwd()+'/src/graph-view/';\nconst app=readFileSync(root+'app.js','utf8').split('await refreshRuns();\\nlet tick = 0;')[0];\nconst expose=`\nconst rNode=(id,kind='branch')=>({id,kind,status:'unvisited',activations:[],children:[],branches:0});\nfunction rChain(n){return {id:'main',entry:'n0',nodes:Array.from({length:n},(_,i)=>rNode('n'+i,i===n-1?'end':'transform')),edges:Array.from({length:n-1},(_,i)=>({from:'n'+i,to:'n'+(i+1)}))};}\nfunction rFan(n,long=false){const ids=Array.from({length:n},(_,i)=>long&&i===0?'W'.repeat(30):'c'+i);return {id:'main',entry:'start',nodes:['start',...ids,'join','done'].map(id=>rNode(id,id==='done'?'end':'branch')),edges:[...ids.map((to,i)=>({from:'start',to,conditional:i<n-1,condition:i<n-1?{op:'literal',value:false}:null})),...ids.map(from=>({from,to:'join'})),{from:'join',to:'start',conditional:true},{from:'join',to:'join',conditional:true},{from:'join',to:'done'}]};}\nfunction rLoad(graph){state.id='r11-fixture';state.tab='graph';state.graph='main';state.scope='';state.node=null;state.transition=null;state.cameras.clear();state.run={entryGraph:'main',graphs:[graph]};$('workspace').hidden=false;renderPanel();}\nconst rRect=el=>{const b=el.getBoundingClientRect();return {x:b.x,y:b.y,width:b.width,height:b.height,right:b.right,bottom:b.bottom}};\nconst rObs=()=>{const a=document.activeElement;return {tag:a.tagName,id:a.id,role:a.getAttribute('role'),name:a.getAttribute('aria-label'),pressed:a.getAttribute('aria-pressed'),viewBox:$('graph').getAttribute('viewBox'),activeRect:rRect(a),svgRect:rRect($('graph')),scrollY:window.scrollY,node:state.node}};\nglobalThis.r11={state,selectedGraph,chain:rChain,fan:rFan,load:rLoad,obs:rObs,rect:rRect,fit,zoom,renderPanel,selectNode,get layout(){return layout},get camera(){return camera}};\n`;\nconst server=createServer((req,res)=>{const name=req.url==='/'?'index.html':req.url?.slice(1);if(!['index.html','app.js','layout.js','style.css','usage-pages.js','task-scope.js'].includes(name)){res.writeHead(404).end();return;}res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html');res.end(name==='app.js'?app+expose:readFileSync(root+name));});\nawait new Promise(r=>server.listen(0,'127.0.0.1',r));\nconst profile=mkdtempSync('/tmp/r11-chrome-');mkdirSync(profile+'/home');\nconst chrome=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',['--headless','--remote-debugging-port=0','--no-sandbox','--enable-automation','--no-default-browser-check','--disable-component-update','--disable-default-apps','--no-service-autorun','--password-store=basic','--use-mock-keychain','--disable-gpu','--disable-background-networking','--no-proxy-server','--disable-background-timer-throttling','--disable-renderer-backgrounding','--no-first-run','--window-size=1600,1000','--user-data-dir='+profile,'http://127.0.0.1:'+server.address().port+'/'],{env:{...process.env,HOME:profile+'/home'},stdio:['ignore','ignore','pipe'],detached:true});\nlet socket;\nconst pause=ms=>new Promise(r=>setTimeout(r,ms));\ntry{\n const endpoint=await new Promise((resolve,reject)=>{let stderr='';const timer=setTimeout(()=>reject(Error('r11 Chrome startup timeout')),15000);chrome.stderr.on('data',s=>{stderr+=s;const m=stderr.match(/DevTools listening on (ws:\\/\\/[^\\s]+)/);if(m){clearTimeout(timer);resolve(m[1]);}});chrome.on('error',reject);});\n const targets=await(await fetch('http://'+new URL(endpoint).host+'/json/list')).json();\n socket=new WebSocket(targets.find(p=>p.type==='page').webSocketDebuggerUrl);await new Promise((r,j)=>{socket.onopen=r;socket.onerror=j});\n let seq=0;const send=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq;const f=e=>{const m=JSON.parse(String(e.data));if(m.id!==id)return;socket.removeEventListener('message',f);m.error?reject(Error(JSON.stringify(m.error))):resolve(m.result);};socket.addEventListener('message',f);socket.send(JSON.stringify({id,method,params}));});\n const evaluate=async(expression)=>{const result=await send('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true});if(result.exceptionDetails)throw Error(JSON.stringify(result.exceptionDetails));return result.result.value};\n for(let i=0;i<100;i++){if(await evaluate('!!globalThis.r11'))break;await pause(20)}\n await send('Emulation.setDeviceMetricsOverride',{width:1600,height:1000,deviceScaleFactor:1,mobile:false});\n const key=async(key,code,keyCode)=>{await send('Input.dispatchKeyEvent',{type:'keyDown',key,code,windowsVirtualKeyCode:keyCode});await send('Input.dispatchKeyEvent',{type:'keyUp',key,code,windowsVirtualKeyCode:keyCode});};\n const results={};\n results.environment=await evaluate('({ua:navigator.userAgent,width:innerWidth,height:innerHeight})');\n await evaluate(`r11.load(r11.chain(10));document.getElementById('fit').focus();`);\n await key('Tab','Tab',9);results.keyboardBefore=await evaluate('r11.obs()');\n await key('Enter','Enter',13);results.keyboardAfterEnter=await evaluate('r11.obs()');\n await key('Tab','Tab',9);results.keyboardNextTab=await evaluate('r11.obs()');\n await evaluate(`document.querySelectorAll('#graph .graph-node')[1].focus();r11.state.run.graphs[0].nodes[0].status='running';r11.renderPanel();`);results.keyboardAfterUpdate=await evaluate('r11.obs()');\n await evaluate(`r11.load(r11.chain(20));document.getElementById('fit').focus();`);\n for(let i=0;i<11;i++)await key('Tab','Tab',9);results.offscreenTab=await evaluate('r11.obs()');\n results.zoom=await evaluate(`r11.load(r11.chain(250));document.getElementById('fit').click();const before={...r11.camera};const visible=()=>{const c=r11.camera;return [...r11.layout.positions.values()].filter(b=>b.x>=c.x&&b.x+b.width<=c.x+c.width&&b.y>=c.y&&b.y+b.height<=c.y+c.height).length};const nBefore=visible();document.getElementById('zoom-out').click();({layout:{width:r11.layout.width,height:r11.layout.height},before,after:{...r11.camera},nBefore,nAfter:visible()})`);\n results.zoomSmall=await evaluate(`(()=>{r11.load(r11.chain(10));document.getElementById('fit').click();const before=r11.camera.width;document.getElementById('zoom-out').click();return {before,after:r11.camera.width}})()`);\n results.text=await evaluate(`r11.load(r11.fan(4,true));(()=>{const g=document.querySelectorAll('#graph .graph-node')[1],text=g.querySelector('.node-meta'),box=g.querySelector('.node-box'),next=document.querySelectorAll('#graph .graph-node')[2],b=text.getBBox();return {text:text.textContent,textBBox:{x:b.x,y:b.y,width:b.width,height:b.height},nodeWidth:box.width.baseVal.value,textRect:r11.rect(text),nextBoxRect:r11.rect(next.querySelector('.node-box')),font:getComputedStyle(text).font,svgTitle:g.querySelector('title').textContent}})()`);\n results.renderTime=await evaluate(`(()=>{const rows=[];for(const n of [30,120,300,500]){const g=r11.fan(n);const times=[];for(let i=0;i<3;i++){const t=performance.now();r11.load(g);document.getElementById('graph').getBoundingClientRect();times.push(Math.round((performance.now()-t)*100)/100)}rows.push({n,nodes:g.nodes.length,edges:g.edges.length,timesMs:times,domCount:document.getElementById('graph').querySelectorAll('*').length})}return rows})()`);\n\n results.dynamicScopes=await evaluate(`(()=>{const rows=[];for(const count of [100,1000,5000]){const g=r11.chain(3);g.id='child';for(const node of g.nodes){node.status='succeeded';node.branches=count;node.activations=Array.from({length:count},(_,i)=>({scope:JSON.stringify(['graph','main','node','mapped','visit','0','map',String(i),'graph','child']),key:node.id+i,path:'mapped #1 / элемент '+(i+1)+' / '+node.id+' · проход 1',status:'succeeded',visit:1,attempt:1,startedAt:i,finishedAt:i+1,findings:[],result:null})).reverse();}let t=performance.now();r11.load(g);document.getElementById('graph').getBoundingClientRect();const draw=performance.now()-t;t=performance.now();r11.selectNode('child','n0');document.getElementById('inspector').getBoundingClientRect();const selection=performance.now()-t;rows.push({scopes:count,activations:count*3,svgNodes:document.querySelectorAll('#graph .graph-node').length,scopeOptions:document.getElementById('scope-select').options.length,renderMs:Math.round(draw*100)/100,selectMs:Math.round(selection*100)/100,inspectorElements:document.getElementById('inspector').querySelectorAll('*').length});}return rows})()`);\n // Child graph reused by a map and by a parallel: real scope segments, no executing run.\n results.scope=await evaluate(`(()=>{const graph=r11.chain(3);graph.id='child';const scopes=[['graph','main','node','mapped','visit','0','map','0','graph','child'],['graph','main','node','fork','visit','1','parallel','right','graph','child']];const a=(scope,i,visit,result)=>({scope:JSON.stringify(scope),key:'key'+i+visit,path:'fixture '+i+' / n0 · проход '+(visit+1),status:'succeeded',visit:visit+1,attempt:1,startedAt:i*10+visit,finishedAt:i*10+visit+1,findings:[],result});graph.nodes[0].activations=[a(scopes[1],1,0,'approve'),a(scopes[0],0,1,'approve'),a(scopes[0],0,0,'request_changes')];graph.nodes[0].status='succeeded';graph.nodes[0].branches=2;graph.edges[0].traversals=[{scope:JSON.stringify(scopes[0]),count:2},{scope:JSON.stringify(scopes[1]),count:1}];r11.load(graph);const all={attention:document.querySelector('.graph-node').classList.contains('attention'),edgeTitle:document.querySelector('.edge title').textContent};document.getElementById('scope-select').value=JSON.stringify(scopes[0]);document.getElementById('scope-select').dispatchEvent(new Event('change'));return {all,selected:{attention:document.querySelector('.graph-node').classList.contains('attention'),edgeTitle:document.querySelector('.edge title').textContent,activations:r11.selectedGraph().nodes[0].activations.length},scopes:document.getElementById('scope-select').options.length}})()`);\n assert.equal(results.keyboardBefore.role,'button');assert.equal(results.keyboardAfterEnter.tag,'BODY');assert.equal(results.keyboardAfterEnter.node,'n0');assert.equal(results.keyboardAfterUpdate.tag,'BODY');\n assert.ok(results.offscreenTab.activeRect.y>results.offscreenTab.svgRect.bottom);\n assert.ok(results.zoom.after.width<results.zoom.before.width);assert.equal(results.zoomSmall.after,results.zoomSmall.before*1.25);\n assert.ok(results.text.textBBox.x+results.text.textBBox.width>results.text.nodeWidth+48);\n console.log(JSON.stringify(results,null,2));\n}finally{socket?.close();try{process.kill(-chrome.pid,'SIGKILL')}catch(e){if(e.code!=='ESRCH')throw e}chrome.stderr.destroy();chrome.unref();server.closeAllConnections();await new Promise(r=>server.close(r));rmSync(profile,{recursive:true,force:true,maxRetries:3,retryDelay:100});}\n",
+      "validate.mts": "import assert from 'node:assert/strict';\nconst dev='/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev';\nconst {parseWorkflow}=await import(dev+'/src/graph.ts');\nconst lit=(value:any)=>({op:'literal',value});\nconst workflow=(graph:any)=>({schemaVersion:1,id:'r11',name:'r11 offline',revision:1,entryGraph:'main',graphs:{main:graph}});\nfunction chain(n:number){return {entry:'n0',nodes:Array.from({length:n},(_,i)=>({id:'n'+i,kind:i===n-1?'end':'transform',value:lit(null)})),edges:Array.from({length:n-1},(_,i)=>({from:'n'+i,to:'n'+(i+1)}))}}\nfunction fan(n:number){const ids=Array.from({length:n},(_,i)=>i===0?'W'.repeat(30):'c'+i);return {entry:'start',nodes:['start',...ids,'join','done'].map(id=>id==='done'?{id,kind:'end',value:lit(null)}:{id,kind:'branch'}),edges:[...ids.map((to,i)=>({from:'start',to,...(i<n-1?{when:lit(false)}:{})})),...ids.map(from=>({from,to:'join'})),{from:'join',to:'start',when:lit(false)},{from:'join',to:'join',when:lit(false)},{from:'join',to:'done'}]}}\nfor(const n of [10,20,100,250,500,1000])assert.equal(parseWorkflow(workflow(chain(n))).graphs.main.nodes.length,n);\nfor(const n of [4,30,120,300,500])assert.equal(parseWorkflow(workflow(fan(n))).graphs.main.nodes.length,n+3);\nconst nested=workflow({entry:'fork',nodes:[{id:'fork',kind:'parallel',failurePolicy:'collect',children:[{id:'left',graphId:'child',input:lit(null)},{id:'right',graphId:'child',input:lit(null)}]},{id:'mapped',kind:'map',graphId:'child',items:lit([null,null])},{id:'done',kind:'end',value:lit(null)}],edges:[{from:'fork',to:'mapped'},{from:'mapped',to:'done'}]});\nnested.graphs.child={entry:'n0',nodes:[{id:'n0',kind:'check',command:'node',args:['--version']},{id:'n1',kind:'end',value:lit(null)}],edges:[{from:'n0',to:'n1'}]};\nassert.ok(parseWorkflow(nested));\nconsole.log('12 workflow fixtures validate (6 chains, 5 fan/loop variants, 1 parallel+map); no graph executed');\n",
+      "mixed.mts": "const dev='/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev';\nconst {parseWorkflow}=await import(dev+'/src/graph.ts');\nconst {graphSnapshot}=await import(dev+'/src/graph-view/model.ts');\nconst lit=(value:any)=>({op:'literal',value});\nconst workflow=parseWorkflow({schemaVersion:1,id:'r11-mixed',name:'r11 mixed',revision:1,entryGraph:'main',graphs:{main:{entry:'fork',nodes:[{id:'fork',kind:'parallel',failurePolicy:'collect',children:['left','right'].map(id=>({id,graphId:'child',input:lit(null)}))},{id:'done',kind:'end',value:lit(null)}],edges:[{from:'fork',to:'done'}]},child:{entry:'work',nodes:[{id:'work',kind:'check',command:'node',args:['--version']},{id:'done',kind:'end',value:lit(null)}],edges:[{from:'work',to:'done'}]}}});\nconst run:any={id:'r11-fixture',cwd:'/tmp/r11-fixture',status:'succeeded',desired:'running',createdAt:0,updatedAt:9,plan:{workflow,agents:{},hash:'fixture'},output:null};\nconst records=['left','right'].map((branch,i)=>({runId:run.id,key:branch,context:{scope:['graph','main','node','fork','visit','0','parallel',branch,'graph','child'],graphId:'child',nodeId:'work',visit:0},kind:'check',sideEffect:true,status:i?'succeeded':'failed',attempt:1,startedAt:i+1,finishedAt:i+2,metadata:{},...(i?{output:{exitCode:0}}:{error:'offline fixture failure'})}));\nconst node=graphSnapshot(run,records as any).graphs.find(g=>g.id==='child')!.nodes[0]!;\nconsole.log(JSON.stringify({aggregate:node.status,branches:node.branches,states:node.activations.map(a=>({scope:a.scope,status:a.status,error:a.error}))},null,2));\n"
+    }
+  },
+  "measurements": {
+    "geometry": [
+      {
+        "type": "chain",
+        "n": 10,
+        "nodes": 10,
+        "edges": 9,
+        "width": 376,
+        "height": 2044,
+        "timesMs": [
+          0.57,
+          0.17,
+          0.07
+        ],
+        "nodeOverlap": 0,
+        "routeNodeHit": 0,
+        "maskNodeHit": 0,
+        "maskOverlap": 0,
+        "maskOtherRoute": 0,
+        "sharedLength": 0
+      },
+      {
+        "type": "chain",
+        "n": 100,
+        "nodes": 100,
+        "edges": 99,
+        "width": 376,
+        "height": 19684,
+        "timesMs": [
+          1.07,
+          0.59,
+          0.38
+        ],
+        "nodeOverlap": 0,
+        "routeNodeHit": 0,
+        "maskNodeHit": 0,
+        "maskOverlap": 0,
+        "maskOtherRoute": 0,
+        "sharedLength": 0
+      },
+      {
+        "type": "chain",
+        "n": 250,
+        "nodes": 250,
+        "edges": 249,
+        "width": 376,
+        "height": 49084,
+        "timesMs": [
+          3.47,
+          1.51,
+          1.41
+        ],
+        "nodeOverlap": 0,
+        "routeNodeHit": 0,
+        "maskNodeHit": 0,
+        "maskOverlap": 0,
+        "maskOtherRoute": 0,
+        "sharedLength": 0
+      },
+      {
+        "type": "chain",
+        "n": 500,
+        "nodes": 500,
+        "edges": 499,
+        "width": 376,
+        "height": 98084,
+        "timesMs": [
+          3.53,
+          3.68,
+          4.19
+        ],
+        "nodeOverlap": 0,
+        "routeNodeHit": 0,
+        "maskNodeHit": 0,
+        "maskOverlap": 0,
+        "maskOtherRoute": 0,
+        "sharedLength": 0
+      },
+      {
+        "type": "chain",
+        "n": 1000,
+        "nodes": 1000,
+        "edges": 999,
+        "width": 376,
+        "height": 196084,
+        "timesMs": [
+          50.48,
+          49.43,
+          33.49
+        ],
+        "nodeOverlap": 0,
+        "routeNodeHit": 0,
+        "maskNodeHit": 0,
+        "maskOverlap": 0,
+        "maskOtherRoute": 0,
+        "sharedLength": 0
+      },
+      {
+        "type": "fan-loop",
+        "n": 4,
+        "nodes": 7,
+        "edges": 11,
+        "width": 1303,
+        "height": 1148,
+        "timesMs": [
+          0.46,
+          0.47,
+          0.33
+        ],
+        "nodeOverlap": 0,
+        "routeNodeHit": 0,
+        "maskNodeHit": 0,
+        "maskOverlap": 0,
+        "maskOtherRoute": 0,
+        "sharedLength": 0
+      },
+      {
+        "type": "fan-loop",
+        "n": 30,
+        "nodes": 33,
+        "edges": 63,
+        "width": 8531,
+        "height": 2604,
+        "timesMs": [
+          9.96,
+          10.65,
+          0.51
+        ],
+        "nodeOverlap": 0,
+        "routeNodeHit": 0,
+        "maskNodeHit": 0,
+        "maskOverlap": 0,
+        "maskOtherRoute": 0,
+        "sharedLength": 0
+      },
+      {
+        "type": "fan-loop",
+        "n": 120,
+        "nodes": 123,
+        "edges": 243,
+        "width": 33551,
+        "height": 7644,
+        "timesMs": [
+          14.6,
+          16.4,
+          53.04
+        ],
+        "nodeOverlap": 0,
+        "routeNodeHit": 0,
+        "maskNodeHit": 0,
+        "maskOverlap": 0,
+        "maskOtherRoute": 0,
+        "sharedLength": 0
+      },
+      {
+        "type": "fan-loop",
+        "n": 300,
+        "nodes": 303,
+        "edges": 603,
+        "width": 83591,
+        "height": 17724,
+        "timesMs": [
+          122.78,
+          186.34,
+          173.31
+        ],
+        "nodeOverlap": 0,
+        "routeNodeHit": 0,
+        "maskNodeHit": 0,
+        "maskOverlap": 0,
+        "maskOtherRoute": 0,
+        "sharedLength": 0
+      },
+      {
+        "type": "fan-loop",
+        "n": 500,
+        "nodes": 503,
+        "edges": 1003,
+        "width": 139191,
+        "height": 28924,
+        "timesMs": [
+          547.46,
+          453.58,
+          678.89
+        ],
+        "nodeOverlap": 0,
+        "routeNodeHit": 0,
+        "maskNodeHit": 0,
+        "maskOverlap": 0,
+        "maskOtherRoute": 0,
+        "sharedLength": 0
+      }
+    ],
+    "browser": {
+      "environment": {
+        "ua": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.0.0 Safari/537.36",
+        "width": 1600,
+        "height": 1000
+      },
+      "keyboardBefore": {
+        "tag": "g",
+        "id": "",
+        "role": "button",
+        "name": "Преобразование: n0, Не запускался",
+        "pressed": "false",
+        "viewBox": "-352 0 1080 688.8888888888889",
+        "activeRect": {
+          "x": 663.5,
+          "y": 372.6000061035156,
+          "width": 207,
+          "height": 93.60000610351562,
+          "right": 870.5,
+          "bottom": 466.20001220703125
+        },
+        "svgRect": {
+          "x": 281,
+          "y": 315,
+          "width": 972,
+          "height": 620,
+          "right": 1253,
+          "bottom": 935
+        },
+        "scrollY": 0,
+        "node": null
+      },
+      "keyboardAfterEnter": {
+        "tag": "BODY",
+        "id": "",
+        "role": null,
+        "name": null,
+        "pressed": null,
+        "viewBox": "-352 0 1080 688.8888888888889",
+        "activeRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1600,
+          "height": 1031,
+          "right": 1600,
+          "bottom": 1031
+        },
+        "svgRect": {
+          "x": 281,
+          "y": 315,
+          "width": 972,
+          "height": 620,
+          "right": 1253,
+          "bottom": 935
+        },
+        "scrollY": 0,
+        "node": "n0"
+      },
+      "keyboardNextTab": {
+        "tag": "g",
+        "id": "",
+        "role": "button",
+        "name": "Преобразование: n0, Не запускался",
+        "pressed": "true",
+        "viewBox": "-352 0 1080 688.8888888888889",
+        "activeRect": {
+          "x": 663.5,
+          "y": 372.6000061035156,
+          "width": 207,
+          "height": 93.60000610351562,
+          "right": 870.5,
+          "bottom": 466.20001220703125
+        },
+        "svgRect": {
+          "x": 281,
+          "y": 315,
+          "width": 972,
+          "height": 620,
+          "right": 1253,
+          "bottom": 935
+        },
+        "scrollY": 0,
+        "node": "n0"
+      },
+      "keyboardAfterUpdate": {
+        "tag": "BODY",
+        "id": "",
+        "role": null,
+        "name": null,
+        "pressed": null,
+        "viewBox": "-352 0 1080 688.8888888888889",
+        "activeRect": {
+          "x": 0,
+          "y": 0,
+          "width": 1600,
+          "height": 1031,
+          "right": 1600,
+          "bottom": 1031
+        },
+        "svgRect": {
+          "x": 281,
+          "y": 315,
+          "width": 972,
+          "height": 620,
+          "right": 1253,
+          "bottom": 935
+        },
+        "scrollY": 0,
+        "node": "n0"
+      },
+      "offscreenTab": {
+        "tag": "g",
+        "id": "",
+        "role": "button",
+        "name": "Преобразование: n10, Не запускался",
+        "pressed": "false",
+        "viewBox": "-352 0 1080 688.8888888888889",
+        "activeRect": {
+          "x": 663.5,
+          "y": 2105.60009765625,
+          "width": 207,
+          "height": 93.599853515625,
+          "right": 870.5,
+          "bottom": 2199.199951171875
+        },
+        "svgRect": {
+          "x": 281,
+          "y": 284,
+          "width": 972,
+          "height": 620,
+          "right": 1253,
+          "bottom": 904
+        },
+        "scrollY": 31,
+        "node": null
+      },
+      "zoom": {
+        "layout": {
+          "width": 376,
+          "height": 49084
+        },
+        "before": {
+          "x": -38287.522580645156,
+          "y": 0,
+          "width": 76951.04516129031,
+          "height": 49084
+        },
+        "after": {
+          "x": -14812,
+          "y": 14974.098765432098,
+          "width": 30000,
+          "height": 19135.802469135804
+        },
+        "nBefore": 250,
+        "nAfter": 97
+      },
+      "zoomSmall": {
+        "before": 3204.464516129032,
+        "after": 4005.58064516129
+      },
+      "text": {
+        "text": "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+        "textBBox": {
+          "x": 16,
+          "y": 35.88888931274414,
+          "width": 348.0903015136719,
+          "height": 13.333333969116211
+        },
+        "nodeWidth": 230,
+        "textRect": {
+          "x": 238.25001525878906,
+          "y": 651.0999755859375,
+          "width": 313.28125,
+          "height": 12,
+          "right": 551.5312652587891,
+          "bottom": 663.0999755859375
+        },
+        "nextBoxRect": {
+          "x": 474.0500183105469,
+          "y": 618.7999877929688,
+          "width": 207.00003051757812,
+          "height": 93.60003662109375,
+          "right": 681.050048828125,
+          "bottom": 712.4000244140625
+        },
+        "font": "12px Inter, -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+        "svgTitle": "Развилка: WWWWWWWWWWWWWWWWWWWWWWWWWWWWWW"
+      },
+      "renderTime": [
+        {
+          "n": 30,
+          "nodes": 33,
+          "edges": 63,
+          "timesMs": [
+            3.7,
+            2.3,
+            2.4
+          ],
+          "domCount": 487
+        },
+        {
+          "n": 120,
+          "nodes": 123,
+          "edges": 243,
+          "timesMs": [
+            13.8,
+            14.8,
+            9.6
+          ],
+          "domCount": 1837
+        },
+        {
+          "n": 300,
+          "nodes": 303,
+          "edges": 603,
+          "timesMs": [
+            46.6,
+            61.3,
+            58.2
+          ],
+          "domCount": 4537
+        },
+        {
+          "n": 500,
+          "nodes": 503,
+          "edges": 1003,
+          "timesMs": [
+            250.9,
+            326.5,
+            173.4
+          ],
+          "domCount": 7537
+        }
+      ],
+      "dynamicScopes": [
+        {
+          "scopes": 100,
+          "activations": 300,
+          "svgNodes": 3,
+          "scopeOptions": 101,
+          "renderMs": 4.1,
+          "selectMs": 9.8,
+          "inspectorElements": 609
+        },
+        {
+          "scopes": 1000,
+          "activations": 3000,
+          "svgNodes": 3,
+          "scopeOptions": 1001,
+          "renderMs": 8.8,
+          "selectMs": 48.1,
+          "inspectorElements": 6009
+        },
+        {
+          "scopes": 5000,
+          "activations": 15000,
+          "svgNodes": 3,
+          "scopeOptions": 5001,
+          "renderMs": 42.3,
+          "selectMs": 231.9,
+          "inspectorElements": 30009
+        }
+      ],
+      "scope": {
+        "all": {
+          "attention": false,
+          "edgeTitle": "n0 → n1 · ребро #1 · исходящий переход 1 · записанных выборов: 3 · без условия"
+        },
+        "selected": {
+          "attention": false,
+          "edgeTitle": "n0 → n1 · ребро #1 · исходящий переход 1 · записанных выборов: 2 · без условия",
+          "activations": 2
+        },
+        "scopes": 3
+      }
+    },
+    "mixedProjection": {
+      "aggregate": "succeeded",
+      "branches": 2,
+      "states": [
+        {
+          "scope": "[\"graph\",\"main\",\"node\",\"fork\",\"visit\",\"0\",\"parallel\",\"right\",\"graph\",\"child\"]",
+          "status": "succeeded",
+          "error": null
+        },
+        {
+          "scope": "[\"graph\",\"main\",\"node\",\"fork\",\"visit\",\"0\",\"parallel\",\"left\",\"graph\",\"child\"]",
+          "status": "failed",
+          "error": "offline fixture failure"
+        }
+      ]
+    },
+    "timingCaveat": "Это компактные измерения fixtures, не сырые логи; локальная нагрузка/JIT не контролировались. Node и Chrome timings несопоставимы напрямую."
+  }
+}

@@ -1,0 +1,1106 @@
+{
+  "metadata": {
+    "researchId": "r13",
+    "topic": "Безопасность bridge/model/provider и отмена",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "date": "2026-09-20",
+    "timezone": "UTC",
+    "language": "ru",
+    "cwd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/0f47b6cc04ca6586af79878fc6baffeb8f730bc1e699065bb43d5e7a2c47d827",
+    "mode": "research-only",
+    "environment": {
+      "platform": "darwin",
+      "architecture": "arm64",
+      "node": "v26.8.1",
+      "piAi": "0.85.1",
+      "piCodingAgent": "0.85.1",
+      "awsBedrockSdk": "3.1048.0",
+      "testLocation": "Разрешённый integration-dev с существующими node_modules; в worktree зависимости отсутствуют",
+      "devHeadMatched": true,
+      "trackedFilesCompared": 185,
+      "trackedContentDifferences": 0,
+      "comparisonScope": [
+        "src",
+        "tests",
+        "package.json",
+        "package-lock.json",
+        "patches",
+        "scripts"
+      ],
+      "period": "Только исторические E00–E07; не текущий HEAD dev"
+    },
+    "webUsed": false,
+    "liveProviderCalls": false,
+    "userCredentialFilesOpened": false,
+    "otherResearchReportsRead": false,
+    "sourceOrDependencyChanges": false,
+    "rawLogsPublished": false,
+    "fullNpmTestRun": false,
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "continuationDate": "2026-09-20",
+    "continuationEnvironment": {
+      "node": "v26.8.1",
+      "sourceHead": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "inspectedDevHead": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "worktreeDependenciesPresent": false,
+      "newRegressionTestExecutions": 0,
+      "newBehavioralProbeExecutions": 0,
+      "syntaxOnlyScriptsChecked": 4
+    }
+  },
+  "summary": {
+    "text": "На study-source подтверждён один bug: Bedrock transport даёт 3 HTTP-запроса на один ход при 503 несмотря на maxRetries:0. Сохранённые offline результаты и код независимо сверены; частичный прежний пакет дополнен приложениями A–C и provenance без повторных provider/cancel probes. Исправленные Codex/OpenAI/xAI и graceful OAuth/cancel не переоткрываются; credential-outcome wording — idea, forced-kill persistence — unknown.",
+    "findingCount": 7,
+    "counts": {
+      "bug": 1,
+      "idea": 1,
+      "unknown": 1,
+      "already-fixed": 4
+    },
+    "existingTests": {
+      "executed": 141,
+      "passed": 141,
+      "failed": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "executionPeriod": "Исполнено только в sourceRun; сводки сохранённых логов перепроверены при continuation, без перезапуска"
+    },
+    "customFixtures": 3,
+    "blockers": [],
+    "newRegressionTestExecutions": 0,
+    "findingCountScope": "Семь findings r13 на study-source; два post-study already-fixed учтены отдельно как контекст и не включены в число"
+  },
+  "coverage": [
+    {
+      "area": "Граф/config/model/thinking/tools",
+      "inspected": [
+        "src/execution-plan.ts",
+        "src/catalog.ts",
+        "src/pi-worker.ts",
+        "src/model-runtime.ts"
+      ],
+      "checked": "Явный выбор модели/уровня, allowlist, read-only, frozen skill delivery, отказ removed xai-auth, отключение project context/extensions, schema до inference",
+      "limits": "Не OS sandbox, не оценка качества следования модели инструкциям"
+    },
+    {
+      "area": "HTTP/provider retry и наблюдение",
+      "inspected": [
+        "src/pi-worker.ts",
+        "src/provider-response.ts",
+        "src/request-observation.ts",
+        "src/provider-failure-message.ts",
+        "src/retry-policy.ts",
+        "SDK Bedrock adapter"
+      ],
+      "checked": "Codex SSE/OpenAI/xAI offline transport, отсутствие stale HTTP state, числовой Retry-After, explicit graph retry; Bedrock SDK к собственному loopback endpoint",
+      "limits": "Не права аккаунта/квоты/платёж, не все API и не live server behaviour"
+    },
+    {
+      "area": "Credential persistence и auth cancel",
+      "inspected": [
+        "src/credential-persistence.ts",
+        "src/sdk-auth-storage.ts",
+        "src/model-runtime.ts",
+        "SDK auth resolve/storage"
+      ],
+      "checked": "Pre-abort, lock wait, завершившийся и неудачный refresh, два fixture-процесса под исходным lock; искусственный отказ toAuth после сохранения",
+      "limits": "Не реальные credentials, не crash/power-loss durability, не server-side rotation"
+    },
+    {
+      "area": "IPC, отмена, child cleanup",
+      "inspected": [
+        "src/pi-worker-process.ts",
+        "src/process-client.ts",
+        "src/check-worker-process.ts",
+        "src/process-groups.ts",
+        "SDK bash/shell"
+      ],
+      "checked": "Единственный terminal result, первая failure, отсутствие raw stderr, drained pipes, очередь/repair cancel, настоящий pi child с активным bash при cancel и потере IPC-parent",
+      "limits": "Не враждебный локальный процесс, не все daemonized descendants и не SIGKILL самого worker"
+    }
+  ],
+  "findings": [
+    {
+      "id": "R13-B01",
+      "classification": "bug",
+      "title": "Bedrock transport сохраняет скрытые HTTP-повторы при maxRetries:0",
+      "priority": "high",
+      "confidence": "high для воспроизведённого SDK-маршрута; live частота неизвестна",
+      "locations": [
+        "src/pi-worker.ts:164",
+        "src/pi-worker.ts:223-236",
+        "src/model-runtime.ts:34-38",
+        "package-lock.json:104-106,983-993",
+        "node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js:47-120,126,155-156",
+        "node_modules/@earendil-works/pi-ai/dist/api/simple-options.js:30",
+        "node_modules/@aws-sdk/client-bedrock-runtime/dist-cjs/runtimeConfig.js:60"
+      ],
+      "trigger": "Один executePiWorker, bedrock-converse-stream, без graph retryPolicy; dummy endpoint возвращает 503, AWS_MAX_ATTEMPTS отсутствует",
+      "expected": "Один HTTP-запрос и provider failure; новая попытка только по явной политике графа",
+      "observed": "3 HTTP-запроса при одном assistant turn. Контроли 400, AWS_MAX_ATTEMPTS=1 и cancel-after-first дали по одному запросу. Два успешных воспроизведения",
+      "rootCause": "Dynamicwf передаёт maxRetries:0, но закреплённый Bedrock adapter не переводит его в AWS maxAttempts. BedrockRuntimeClient получает собственные настройки повторов из SDK/среды. Это не повтор session.prompt, не output repair и не повтор локального инструмента",
+      "impact": "Число HTTP-отправок не совпадает с учтёнными попытками графа. Возможна повторная отправка запроса при неопределённом transport-исходе; fixture не доказывает списание средств, обработку реальной модели или повтор write",
+      "experimentIds": [
+        "E05"
+      ],
+      "reproduction": {
+        "fixture": "bedrock-retry.mjs",
+        "embeddedIn": "r13-security-provider-cancel.md, приложение A",
+        "sha256": "2c218f89d5accbae7fa562cd570b3b7c78ee64e5918da8a4a9dddb05d6f1c213",
+        "command": "cd \"$DWF_DEV\" && env -i PATH=\"$PATH\" HOME=\"$P/home\" TMPDIR=\"$P/tmp\" node --import tsx \"$P/bedrock-retry.mjs\"",
+        "fixtureBoundary": "InMemory credential/model stores, modelsPath:null, allowModelNetwork:false; AWS dummy auth, HTTP1; сервер только 127.0.0.1. Настоящие worker/session/Bedrock SDK, без внешнего провайдера"
+      },
+      "counterEvidence": [
+        "E01/E04: Codex/OpenAI/xAI отправляют по одному HTTP-запросу на проверенных ошибках; старые исправления не переоткрываются",
+        "E02: explicit graph retry работает отдельно; write перед invalid output не повторяется",
+        "E05: cancel после первого запроса останавливает SDK retry; 400 не повторяется",
+        "Локальный alias provider использует настоящий bedrock-converse-stream, но не проверяет auth/account live amazon-bedrock"
+      ],
+      "recommendation": {
+        "minimalChange": "На закреплённой Bedrock-границе преобразовать явный maxRetries:0 в AWS maxAttempts:1; в общем случае attempts=retries+1. Проверяемый точечный SDK patch или поддержанный upstream fix; добавить offline route regression и до исправления сузить документационное обещание",
+        "risk": "Изменение SDK требует проверки версии/байтов и сохранения прочих маршрутов. Не менять пользовательский AWS_MAX_ATTEMPTS глобально и не добавлять скрытые лимиты графа",
+        "acceptance": [
+          "503/429/transport failure: одна отправка на worker turn без graph policy",
+          "Явный retry графа создаёт отдельные учтённые попытки",
+          "Cancel прекращает последующие отправки",
+          "Codex SSE и native xAI single-request проверки сохраняются"
+        ],
+        "implemented": false
+      },
+      "revisionScope": "study-source",
+      "continuationDisposition": "Вывод перенесён; ключевые причины/границы и сохранённое evidence сверены, поведенческие probes не повторялись"
+    },
+    {
+      "id": "R13-I01",
+      "classification": "idea",
+      "title": "Не обещать неизменность credentials по одному семейству ModelsError",
+      "priority": "low",
+      "locations": [
+        "src/pi-worker.ts:155-160",
+        "node_modules/@earendil-works/pi-ai/dist/auth/resolve.js:77-113"
+      ],
+      "fact": "Worker без отдельного store outcome пишет Stored credentials were not replaced для любых ModelsError oauth/auth. SDK может сохранить результат refresh до вызова toAuth",
+      "experimentIds": [
+        "E07"
+      ],
+      "observed": "В dummy fault injection refresh=1, fetch=0, credential изменена, затем toAuth бросает исключение. Публичная failure сообщает обратное, но не раскрывает dummy sensitive error text",
+      "classificationReason": "Отказ toAuth внедрён через тестовую DI. Достижимость на штатных native xAI/Codex не установлена: inspected toAuth просто возвращают token. Поэтому не заявляется второй production bug",
+      "reproduction": {
+        "fixture": "auth-outcome.mjs",
+        "embeddedIn": "r13-security-provider-cancel.md, приложение C",
+        "sha256": "8c8d84186d43eb7c47f31b14161c0e89670cb21cbce78336165aa3604b54e92e",
+        "command": "cd \"$DWF_DEV\" && env -i PATH=\"$PATH\" HOME=\"$P/home\" TMPDIR=\"$P/tmp\" node --import tsx \"$P/auth-outcome.mjs\""
+      },
+      "counterEvidence": [
+        "Штатные failed-refresh fixtures сохраняют старую credential (R13-A01)",
+        "Тест не моделирует live native OAuth error и не доказывает потерю токена"
+      ],
+      "recommendation": {
+        "minimalChange": "Убрать безусловное предложение о сохранённом состоянии либо выдавать его только при наблюдённом исходе store; сохранить нейтральный not-dispatched модельного запроса и sanitization",
+        "risk": "Низкий, изменение текста публичной диагностики и связанных assertions; не менять credential ownership",
+        "acceptance": [
+          "E07 не утверждает неизменность после успешной mutation",
+          "Successful/failed/aborted-refresh регрессии остаются зелёными",
+          "Нет новых автоматических refresh/retries"
+        ],
+        "implemented": false
+      },
+      "revisionScope": "study-source",
+      "continuationDisposition": "Вывод перенесён; ключевые причины/границы и сохранённое evidence сверены, поведенческие probes не повторялись"
+    },
+    {
+      "id": "R13-U01",
+      "classification": "unknown",
+      "title": "Forced-kill persistence не доказана cooperative-abort тестами",
+      "locations": [
+        "src/credential-persistence.ts:12-25",
+        "src/pi-worker.ts:358-366",
+        "src/process-client.ts:29-49",
+        "tests/oauth-refresh-abort.test.ts:36-50",
+        "node_modules/@earendil-works/pi-ai/dist/auth/resolve.js:26-28"
+      ],
+      "known": "Внешний SDK getAuth abort race может закончиться раньше persistence; существующий тест дожидается store отдельно. Worker cleanup ждёт session, если она создана. Parent имеет TERM→KILL cleanup deadline 2 секунды, не workflow budget",
+      "unresolved": "Не установлено реалистичное окно потери уже завершённой ротации при обычном cancel настоящего worker. SIGKILL во время persistence, filesystem failure и power loss не проверялись",
+      "bugReproduced": false,
+      "counterEvidence": [
+        "E01 подтверждает graceful abort preservation",
+        "E06 подтверждает активный bash cleanup, не credential crash consistency"
+      ],
+      "recommendation": {
+        "minimalChange": "Сначала regression fixture с собственным child и barriers вокруг refresh completion/persistence; отдельно cooperative cancel и forced kill. Документировать проверенную границу",
+        "risk": "Искусственная задержка store может не соответствовать синхронной записи закреплённого backend. Нельзя лечить гипотезу скрытыми retries или повышением deadline",
+        "acceptance": [
+          "Проверить отсутствие successful result отменённому caller и отсутствие второго refresh",
+          "В bug переводить только при фактической потере завершённой mutation на реалистичном child lifecycle"
+        ],
+        "implemented": false,
+        "proposedCheckExecuted": false
+      },
+      "revisionScope": "study-source",
+      "continuationDisposition": "Вывод перенесён; ключевые причины/границы и сохранённое evidence сверены, поведенческие probes не повторялись"
+    },
+    {
+      "id": "R13-A01",
+      "classification": "already-fixed",
+      "title": "Завершившийся OAuth refresh сохраняется при caller abort; failed refresh не стирает credential",
+      "locations": [
+        "src/credential-persistence.ts:9-25",
+        "src/model-runtime.ts:16-18",
+        "src/sdk-auth-storage.ts:11-23",
+        "tests/oauth-refresh-abort.test.ts",
+        "node_modules/@earendil-works/pi-ai/dist/auth/resolve.js:20-24,40-54"
+      ],
+      "observed": "Все шесть OAuth regression cases прошли: file/memory completed refresh+abort, failed refresh с/без abort, pre-abort/lock wait/mutation failure, межпроцессная единственная ротация под исходным lock",
+      "experimentIds": [
+        "E01"
+      ],
+      "boundary": "Не live server rotation и не SIGKILL/power-loss гарантия. SDK не делает env fallback после отказа сохранённой credential",
+      "disposition": "Не переоткрывать исправление; сохранять регрессии, отдельно исследовать R13-U01",
+      "revisionScope": "study-source",
+      "continuationDisposition": "Вывод перенесён; ключевые причины/границы и сохранённое evidence сверены, поведенческие probes не повторялись"
+    },
+    {
+      "id": "R13-A02",
+      "classification": "already-fixed",
+      "title": "OpenAI/Codex/xAI: проверенные no-retry и безопасные HTTP observations",
+      "locations": [
+        "src/pi-worker.ts:164,223-281",
+        "src/provider-response.ts:6-33",
+        "src/provider-failure-message.ts",
+        "src/retry-policy.ts:17-28"
+      ],
+      "observed": "Codex 200/401/403/429/503 и OpenAI 503 дали по одному HTTP вызову; xAI 429 также один. Старая HTTP failure не переносится на новый request. В публичные errors не попали dummy body/cookie/headers. xhigh наблюдён в сформированном xAI body. Explicit graph retry и writer no-retry прошли",
+      "experimentIds": [
+        "E01",
+        "E02",
+        "E04"
+      ],
+      "boundary": "Не универсальная гарантия для всех API: контрпример R13-B01. Не права live аккаунта, не доказательство тарификации",
+      "disposition": "Сохранить SSE Codex, per-request maxRetries:0 и sanitization; исправить конкретную Bedrock-границу отдельно",
+      "revisionScope": "study-source",
+      "continuationDisposition": "Вывод перенесён; ключевые причины/границы и сохранённое evidence сверены, поведенческие probes не повторялись"
+    },
+    {
+      "id": "R13-A03",
+      "classification": "already-fixed",
+      "title": "Frozen model/thinking/tools и skill delivery проверяются до inference",
+      "locations": [
+        "src/execution-plan.ts:43-54",
+        "src/pi-worker.ts:108-116,145-173,207-218",
+        "src/model-runtime.ts:14-15",
+        "src/catalog.ts:31-35,85-95"
+      ],
+      "observed": "Недоступная явно выбранная модель и unsupported explicit thinking отвергаются без fallback. При отсутствии model/defaultModel подготовка вправе выбрать модель каталога до freeze; worker получает конкретный ID. SDK clamping/tool drift не принимаются. Нет автоматического AGENTS/SYSTEM/extensions. Skills требуют read/bash до auth и доступны после удаления исходного каталога. Старый xai-auth не мигрирует молча",
+      "experimentIds": [
+        "E01",
+        "E02",
+        "E04"
+      ],
+      "boundary": "Permissions ограничивают инструменты, не файловые пути/сеть/права ОС. Доставка skill не доказывает качество применения",
+      "disposition": "Не переоткрывать актуальный skill fix 2d9f9d2; не называть workspace-write sandbox",
+      "revisionScope": "study-source",
+      "continuationDisposition": "Вывод перенесён; ключевые причины/границы и сохранённое evidence сверены, поведенческие probes не повторялись"
+    },
+    {
+      "id": "R13-A04",
+      "classification": "already-fixed",
+      "title": "Cancel, IPC и output repair закрывают проверенные lifecycle-гонки",
+      "locations": [
+        "src/pi-worker.ts:126-136,317-330,358-366",
+        "src/pi-worker-process.ts:9-18,29-42",
+        "src/process-client.ts:54-64,102-130",
+        "scripts/apply-sdk-bash-signal.mjs:14-17"
+      ],
+      "observed": "Queue clear/abort/idle/dispose, cancel repair, incomplete stdin и strict IPC прошли. С настоящим pi child fixture после parent cancel и после SIGKILL только собственного IPC-parent перестала находить worker и активный SDK bash живыми по двум PID через ps (zombie не считается живым). После submit-only исходные семь tools недоступны. Установленный bash signal patch имеет ожидаемый SHA256",
+      "experimentIds": [
+        "E01",
+        "E02",
+        "E03",
+        "E06"
+      ],
+      "boundary": "E06 не убивает SIGKILL сам worker и не доказывает очистку всех daemonized descendants. Успех узких tests не объясняет flakiness полного npm test",
+      "disposition": "Сохранить cleanup/IPC регрессии; не ослаблять unknown effects после cleanup failure",
+      "revisionScope": "study-source",
+      "continuationDisposition": "Вывод перенесён; ключевые причины/границы и сохранённое evidence сверены, поведенческие probes не повторялись"
+    }
+  ],
+  "experiments": [
+    {
+      "id": "E00",
+      "command": "pwd; git rev-parse HEAD; git log -18 --oneline; git log -18 --oneline -- src/pi-worker.ts src/credential-persistence.ts src/sdk-auth-storage.ts src/pi-worker-process.ts src/process-client.ts src/model-runtime.ts; Python byte comparison of git ls-files src tests package.json package-lock.json patches scripts",
+      "outcome": "Ревизии совпали; 185 tracked файлов worktree и dev равны",
+      "boundaries": "Read-only анализ. Соседние отчёты и пользовательский runtime не открывались/не управлялись",
+      "executionPeriod": "Историческая операция sourceRun E00–E07; в continuation не перезапускалось",
+      "continuationEvidence": "Исторический dev/worktree результат перенесён из hashed report; заново проверено равенство 185 файлов старого и нового study-worktree, а не прежнего состояния dev."
+    },
+    {
+      "id": "E01",
+      "command": "HOME=\"$P/home\" TMPDIR=\"$P/tmp\" node --import tsx --test --test-concurrency=1 tests/oauth-refresh-abort.test.ts tests/pi-worker.test.ts tests/provider-response.test.ts tests/native-xai.test.ts tests/process-client.test.ts",
+      "passed": 86,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "durationMsApprox": 25012,
+      "outcome": "Все целевые cases прошли",
+      "boundaries": "Dummy auth/models; временные fixture-процессы/БД, local projection HTTP; не live provider. HOME/TMPDIR изолированы, остальные env переменные в этом первом прогоне не обнулялись",
+      "executionPeriod": "Историческая операция sourceRun E00–E07; в continuation не перезапускалось",
+      "continuationEvidence": "Сохранённые команды и собственный отчёт; для E01–E07 дополнительно сохранённые log summaries. См. retainedEvidenceManifest."
+    },
+    {
+      "id": "E02",
+      "command": "env -i PATH=\"$PATH\" HOME=\"$P/home\" TMPDIR=\"$P/tmp\" node --import tsx --test --test-concurrency=1 tests/provider-retry.test.ts tests/retry-worker.test.ts tests/bash-signal-worker.test.ts tests/execution-plan.test.ts",
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "durationMsApprox": 11914,
+      "outcome": "Explicit retries, writer no-retry, bash signal и frozen plans прошли",
+      "boundaries": "Локальные файлы/БД и настоящий SDK с dummy ответами; без провайдера",
+      "executionPeriod": "Историческая операция sourceRun E00–E07; в continuation не перезапускалось",
+      "continuationEvidence": "Сохранённые команды и собственный отчёт; для E01–E07 дополнительно сохранённые log summaries. См. retainedEvidenceManifest."
+    },
+    {
+      "id": "E03",
+      "command": "env -i PATH=\"$PATH\" HOME=\"$P/home\" TMPDIR=\"$P/tmp\" node --import tsx --test --test-concurrency=1 --test-name-pattern='malformed worker stdout|worker IPC|failure protocol is closed' tests/execution-failure.test.ts",
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "durationMsApprox": 3137,
+      "outcome": "4 selected top-level tests с 19 IPC subtests прошли",
+      "boundaries": "Не полный execution-failure suite. Child preloads выходят до SDK/auth",
+      "executionPeriod": "Историческая операция sourceRun E00–E07; в continuation не перезапускалось",
+      "continuationEvidence": "Сохранённые команды и собственный отчёт; для E01–E07 дополнительно сохранённые log summaries. См. retainedEvidenceManifest."
+    },
+    {
+      "id": "E04",
+      "command": "env -i PATH=\"$PATH\" HOME=\"$P/home\" TMPDIR=\"$P/tmp\" node --import tsx --test --test-concurrency=1 --test-name-pattern='PNG and JPEG|malformed and unsupported|incompatible restored|frozen image requirements' tests/repair-core.test.ts",
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "durationMsApprox": 5713,
+      "outcome": "Native xAI serialization/xhigh, image history, HTTP sanitization и capability drift прошли",
+      "boundaries": "Dummy fetch и локальные изображения; не live модель или реальная семантика vision",
+      "executionPeriod": "Историческая операция sourceRun E00–E07; в continuation не перезапускалось",
+      "continuationEvidence": "Сохранённые команды и собственный отчёт; для E01–E07 дополнительно сохранённые log summaries. См. retainedEvidenceManifest."
+    },
+    {
+      "id": "E05",
+      "command": "env -i PATH=\"$PATH\" HOME=\"$P/home\" TMPDIR=\"$P/tmp\" node --import tsx \"$P/bedrock-retry.mjs\"",
+      "outcome": "4 assertions cases прошли; default 503 повторён в двух успешных запусках",
+      "cases": [
+        {
+          "mode": "503-default",
+          "requests": 3,
+          "assistantTurns": 1,
+          "code": "provider",
+          "status": 503
+        },
+        {
+          "mode": "400-control",
+          "requests": 1,
+          "assistantTurns": 1,
+          "code": "provider",
+          "status": 400
+        },
+        {
+          "mode": "503-maxAttempts1",
+          "requests": 1,
+          "assistantTurns": 1,
+          "code": "provider",
+          "status": 503
+        },
+        {
+          "mode": "cancel-after-first",
+          "requests": 1,
+          "assistantTurns": 1,
+          "code": "cancelled"
+        }
+      ],
+      "setupFailure": "Первоначальный CommonJS require.resolve отказал с ERR_PACKAGE_PATH_NOT_EXPORTED для ESM-only SDK. Изменён только временный fixture на абсолютные SDK ESM imports; последующие запуски прошли",
+      "boundaries": "Только собственный 127.0.0.1 HTTP endpoint; настоящие AWS transport retry/session/worker, синтетическая auth. Нет graph retries, output repair или local write",
+      "executionPeriod": "Историческая операция sourceRun E00–E07; в continuation не перезапускалось",
+      "continuationEvidence": "Сохранённые команды и собственный отчёт; для E01–E07 дополнительно сохранённые log summaries. См. retainedEvidenceManifest."
+    },
+    {
+      "id": "E06",
+      "command": "env -i PATH=\"$PATH\" HOME=\"$P/home\" TMPDIR=\"$P/tmp\" R13_SOURCE=\"$DWF_DEV\" NODE_OPTIONS=\"--import=$P/cancel-preload.mjs\" node --import tsx \"$P/worker-cancel.mjs\"",
+      "outcome": "cancel и disconnect: workerGone=true, activeBashGone=true",
+      "fixtures": [
+        {
+          "file": "worker-cancel.mjs",
+          "sha256": "414714d3b2596c3f3a50f73c6ee264acd14a347e1407782c457c2e5be316faef"
+        },
+        {
+          "file": "cancel-preload.mjs",
+          "sha256": "e6d5f3e8bf682cbae96833eaf0f34ad35d4a4916151a51dfe86194760443d041"
+        }
+      ],
+      "embeddedIn": "r13-security-provider-cancel.md, приложение B",
+      "boundaries": "Настоящий runPiProcess/pi-worker-process, dummy runtime через preload. SIGKILL только собственного IPC-parent, не worker. Чистит лишь свои процессы",
+      "executionPeriod": "Историческая операция sourceRun E00–E07; в continuation не перезапускалось",
+      "continuationEvidence": "Сохранённые команды и собственный отчёт; для E01–E07 дополнительно сохранённые log summaries. См. retainedEvidenceManifest."
+    },
+    {
+      "id": "E07",
+      "command": "env -i PATH=\"$PATH\" HOME=\"$P/home\" TMPDIR=\"$P/tmp\" node --import tsx \"$P/auth-outcome.mjs\"",
+      "outcome": {
+        "refreshes": 1,
+        "fetches": 0,
+        "credentialChanged": true,
+        "publicSaysUnchanged": true,
+        "code": "provider",
+        "phase": "setup",
+        "effects": "not-started"
+      },
+      "embeddedIn": "r13-security-provider-cancel.md, приложение C",
+      "boundaries": "Настоящий файловый SDK store с dummy credential; намеренно бросающий toAuth, не доказанный native production отказ",
+      "executionPeriod": "Историческая операция sourceRun E00–E07; в continuation не перезапускалось",
+      "continuationEvidence": "Сохранённые команды и собственный отчёт; для E01–E07 дополнительно сохранённые log summaries. См. retainedEvidenceManifest."
+    }
+  ],
+  "alreadyFixedRefutations": [
+    {
+      "findingId": "R13-A01",
+      "claim": "Не переоткрывать старую потерю completed refresh при graceful abort",
+      "evidence": [
+        "E01",
+        "src/credential-persistence.ts:9-25"
+      ]
+    },
+    {
+      "findingId": "R13-A02",
+      "claim": "Bedrock контрпример не означает сломанный Codex SSE/OpenAI/xAI fix",
+      "evidence": [
+        "E01",
+        "E02",
+        "E04"
+      ]
+    },
+    {
+      "findingId": "R13-A03",
+      "claim": "Frozen skill без reading tool уже отвергается до auth на текущем dev",
+      "evidence": [
+        "E01",
+        "src/pi-worker.ts:114-115",
+        "git commit 2d9f9d2"
+      ]
+    },
+    {
+      "findingId": "R13-A04",
+      "claim": "Неполный stdin, очереди, активный bash и IPC проверены; не утверждается стабильность всего npm test",
+      "evidence": [
+        "E01",
+        "E03",
+        "E06",
+        "PROJECT_INFO/known-issues.md"
+      ]
+    },
+    {
+      "claim": "SDK GitHub Copilot enable-policy maxRetries:2 не принят за retry worker",
+      "evidence": [
+        "node_modules/@earendil-works/pi-ai/dist/auth/oauth/github-copilot.js:274-279,289-366",
+        "node_modules/@earendil-works/pi-ai/dist/providers/github-copilot.js"
+      ],
+      "reason": "Enable-policy вызывается login; worker refresh задаёт maxRetries:0 для catalog fetch"
+    },
+    {
+      "claim": "UI ownership/control/await/disclosure не переоткрывались по старому main",
+      "evidence": [
+        "git log e15bc40, fea2136, d72df5d, b04ef8d, 1ee48ff, 10d5cc6",
+        "PROJECT_INFO/known-issues.md"
+      ],
+      "reason": "Учтены как актуальные исправления; UI вне независимой роли и не тестировался заново"
+    }
+  ],
+  "sources": [
+    {
+      "id": "S01",
+      "kind": "repository-docs",
+      "paths": [
+        "AGENTS.md",
+        "PROJECT_INFO/architecture.md",
+        "PROJECT_INFO/development.md",
+        "PROJECT_INFO/known-issues.md"
+      ],
+      "accessDate": "2026-09-20",
+      "inspectionPeriod": "Исходное исследование; конкретные перепроверки новой операции перечислены в C01/continuationProvenance"
+    },
+    {
+      "id": "S02",
+      "kind": "repository-docs",
+      "paths": [
+        "PROJECT_INFO/models-and-setup.md",
+        "PROJECT_INFO/retry-and-failures.md",
+        "PROJECT_INFO/run-journal.md:133-177",
+        "PROJECT_INFO/service.md:147-166",
+        "PROJECT_INFO/workspaces.md:121-135"
+      ],
+      "accessDate": "2026-09-20",
+      "inspectionPeriod": "Исходное исследование; конкретные перепроверки новой операции перечислены в C01/continuationProvenance"
+    },
+    {
+      "id": "S03",
+      "kind": "source",
+      "paths": [
+        "src/pi-worker.ts",
+        "src/pi-worker-process.ts",
+        "src/process-client.ts",
+        "src/process-groups.ts",
+        "src/check-worker-process.ts"
+      ],
+      "accessDate": "2026-09-20",
+      "inspectionPeriod": "Исходное исследование; конкретные перепроверки новой операции перечислены в C01/continuationProvenance"
+    },
+    {
+      "id": "S04",
+      "kind": "source",
+      "paths": [
+        "src/credential-persistence.ts",
+        "src/sdk-auth-storage.ts",
+        "src/model-runtime.ts",
+        "src/catalog.ts",
+        "src/execution-plan.ts",
+        "src/execution-types.ts",
+        "src/retry-policy.ts"
+      ],
+      "accessDate": "2026-09-20",
+      "inspectionPeriod": "Исходное исследование; конкретные перепроверки новой операции перечислены в C01/continuationProvenance"
+    },
+    {
+      "id": "S05",
+      "kind": "source",
+      "paths": [
+        "src/provider-response.ts",
+        "src/provider-failure-message.ts",
+        "src/request-observation.ts",
+        "src/run-controller.ts:26-86,230-247",
+        "src/run-runtime.ts:348-357"
+      ],
+      "accessDate": "2026-09-20",
+      "inspectionPeriod": "Исходное исследование; конкретные перепроверки новой операции перечислены в C01/continuationProvenance"
+    },
+    {
+      "id": "S06",
+      "kind": "executed-tests",
+      "paths": [
+        "tests/oauth-refresh-abort.test.ts",
+        "tests/pi-worker.test.ts",
+        "tests/provider-response.test.ts",
+        "tests/native-xai.test.ts",
+        "tests/process-client.test.ts",
+        "tests/provider-retry.test.ts",
+        "tests/retry-worker.test.ts",
+        "tests/bash-signal-worker.test.ts",
+        "tests/execution-plan.test.ts",
+        "tests/execution-failure.test.ts (selected)",
+        "tests/repair-core.test.ts (selected)"
+      ],
+      "accessDate": "2026-09-20",
+      "inspectionPeriod": "Исходное исследование; конкретные перепроверки новой операции перечислены в C01/continuationProvenance"
+    },
+    {
+      "id": "S07",
+      "kind": "dependency-provenance",
+      "paths": [
+        "package.json",
+        "package-lock.json:104-123,983-999",
+        "patches/pi-coding-agent-0.85.1-bash-signal.patch",
+        "scripts/apply-sdk-bash-signal.mjs:5-35"
+      ],
+      "accessDate": "2026-09-20",
+      "inspectionPeriod": "Исходное исследование; конкретные перепроверки новой операции перечислены в C01/continuationProvenance"
+    },
+    {
+      "id": "S08",
+      "kind": "installed-pinned-dependency",
+      "paths": [
+        "node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js:47-156",
+        "node_modules/@earendil-works/pi-ai/dist/api/simple-options.js:17-34",
+        "node_modules/@aws-sdk/client-bedrock-runtime/dist-cjs/runtimeConfig.js:60"
+      ],
+      "bedrockAdapterSha256": "13d6fec97d08f4303714aca50f3113ba0263706e961fc220ccb1cc023c520e6b",
+      "accessDate": "2026-09-20",
+      "inspectionPeriod": "Исходное исследование; конкретные перепроверки новой операции перечислены в C01/continuationProvenance"
+    },
+    {
+      "id": "S09",
+      "kind": "installed-pinned-dependency",
+      "paths": [
+        "node_modules/@earendil-works/pi-ai/dist/auth/resolve.js:20-129",
+        "node_modules/@earendil-works/pi-coding-agent/dist/core/auth-storage.js:76-155,234-257,369-410",
+        "node_modules/@earendil-works/pi-coding-agent/dist/core/model-runtime.js:73-108,339-353"
+      ],
+      "accessDate": "2026-09-20",
+      "inspectionPeriod": "Исходное исследование; конкретные перепроверки новой операции перечислены в C01/continuationProvenance"
+    },
+    {
+      "id": "S10",
+      "kind": "installed-pinned-dependency",
+      "paths": [
+        "node_modules/@earendil-works/pi-coding-agent/dist/core/tools/bash.js:35-115",
+        "node_modules/@earendil-works/pi-coding-agent/dist/utils/shell.js:165-211"
+      ],
+      "bashToolSha256": "626ad6cd341a436ce6c2e8d0f6769c72574bfefdf25e0f31a36a9be12f4802a1",
+      "accessDate": "2026-09-20",
+      "inspectionPeriod": "Исходное исследование; конкретные перепроверки новой операции перечислены в C01/continuationProvenance"
+    },
+    {
+      "id": "S11",
+      "kind": "installed-pinned-dependency",
+      "paths": [
+        "node_modules/@earendil-works/pi-ai/dist/auth/oauth/xai.js:169-189",
+        "node_modules/@earendil-works/pi-ai/dist/auth/oauth/openai-codex.js:445-450",
+        "node_modules/@earendil-works/pi-ai/dist/auth/oauth/github-copilot.js:274-390",
+        "node_modules/@earendil-works/pi-ai/dist/providers/github-copilot.js"
+      ],
+      "accessDate": "2026-09-20",
+      "inspectionPeriod": "Исходное исследование; конкретные перепроверки новой операции перечислены в C01/continuationProvenance"
+    },
+    {
+      "id": "S12",
+      "kind": "git-history",
+      "commands": [
+        "git log -18 --oneline",
+        "git log -18 --oneline -- src/pi-worker.ts src/credential-persistence.ts src/sdk-auth-storage.ts src/pi-worker-process.ts src/process-client.ts src/model-runtime.ts"
+      ],
+      "commitsOfInterest": [
+        "61fdb9a",
+        "20b9758",
+        "deabd6d",
+        "2d9f9d2",
+        "e15bc40"
+      ],
+      "accessDate": "2026-09-20",
+      "inspectionPeriod": "Исходное исследование; конкретные перепроверки новой операции перечислены в C01/continuationProvenance"
+    },
+    {
+      "id": "S13",
+      "kind": "retained-own-reports-and-action-history",
+      "paths": [
+        "research/2026-09-20-astra-max/r13-security-provider-cancel.md",
+        "research/2026-09-20-astra-max/r13-security-provider-cancel.json",
+        "r13-actions.json"
+      ],
+      "provenance": "Только oldWorkspace; точные пути/хеши в continuationProvenance",
+      "accessDate": "2026-09-20"
+    },
+    {
+      "id": "S14",
+      "kind": "retained-own-fixtures-and-sanitized-log-summaries",
+      "paths": [
+        "focused-tests.log",
+        "additional-tests.log",
+        "ipc-tests.log",
+        "xai-tests.log",
+        "bedrock-retry.log",
+        "bedrock-confirm.log",
+        "worker-cancel.log",
+        "auth-outcome.log",
+        "bedrock-retry.mjs",
+        "cancel-preload.mjs",
+        "worker-cancel.mjs",
+        "auth-outcome.mjs"
+      ],
+      "provenance": "retainedProbeDirectory, только чтение; хеши в retainedEvidenceManifest",
+      "accessDate": "2026-09-20"
+    },
+    {
+      "id": "S15",
+      "kind": "post-study-git-history",
+      "commits": [
+        "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+        "3d8ba65ee84402c0e3b0587f70095b7847824a9f"
+      ],
+      "scope": "Только указанные изменения исходников/документов; чужие исследовательские отчёты не читались",
+      "accessDate": "2026-09-20"
+    }
+  ],
+  "unknowns": [
+    {
+      "relatedFinding": "R13-U01",
+      "question": "Сохранение завершённого refresh при forced kill и реальная достижимость окна при ordinary cancel",
+      "status": "Не воспроизведено, предложенная barrier-проверка не выполнялась"
+    },
+    {
+      "question": "Полный перечень API с соблюдением maxRetries:0",
+      "status": "Проверены Codex/OpenAI/xAI и контрпример Bedrock; exhaustive provider matrix не выполнялась"
+    },
+    {
+      "question": "Реальная ротация OAuth, права/квоты аккаунта, live sent thinking и provider billing",
+      "status": "За пределами source/dummy-fixture исследования; успешные mocks не подтверждают"
+    },
+    {
+      "question": "Произвольные daemonized descendants после SIGKILL самого worker",
+      "status": "Не моделировались; E06 убивала только собственного IPC-parent"
+    },
+    {
+      "question": "Причина нестабильности полного process suite и поведение на минимальной Node 22.19",
+      "status": "Полный npm test и Node 22.19 здесь не запускались"
+    }
+  ],
+  "artifacts": {
+    "markdown": "research/2026-09-20-astra-max/r13-security-provider-cancel.md",
+    "json": "research/2026-09-20-astra-max/r13-security-provider-cancel.json",
+    "fixturePublication": "Точные финальные scripts сохранённой исходной операции теперь полностью встроены в Markdown (A–C), хеши проверены; в прежнем partial Markdown их не было. Сырые логи не опубликованы.",
+    "hashProtocol": "SHA256 обоих окончательных файлов вычисляются после последней записи и возвращаются через submit_result; artifactRevision = sha256:JSON_HASH",
+    "status": "complete-research-package-after-continuation"
+  },
+  "continuationProvenance": {
+    "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+    "continuationRunId": "run-9dbb044c-664f-4dd8-96c0-57192dc4ed89",
+    "oldWorkspace": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/0f47b6cc04ca6586af79878fc6baffeb8f730bc1e699065bb43d5e7a2c47d827",
+    "newWorkspace": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/0f47b6cc04ca6586af79878fc6baffeb8f730bc1e699065bb43d5e7a2c47d827",
+    "oldOperationStatus": "failed",
+    "priorOperationFailure": {
+      "code": "provider",
+      "phase": "execution",
+      "effects": "unknown",
+      "providerResponse": {
+        "status": 429
+      },
+      "diagnostic": {
+        "dispatch": "http-observed"
+      },
+      "interpretation": "Сбой обслуживания прежней graph operation; не E05 и не доказательство квоты либо допустимости скрытого повтора",
+      "countedAsFinding": false
+    },
+    "priorSuccessfulSubmissionClaimed": false,
+    "oldReports": [
+      {
+        "path": "research/2026-09-20-astra-max/r13-security-provider-cancel.md",
+        "bytes": 33833,
+        "sha256": "7887553ed2b5e20af1fffd72ce4799775300065fb8f1486fdb765b088701fbb5",
+        "hashMatchesRetainedEvidence": true
+      },
+      {
+        "path": "research/2026-09-20-astra-max/r13-security-provider-cancel.json",
+        "bytes": 32300,
+        "sha256": "09826573b8f7d2fa856dfb4e6fcb3480262dcba3b21d44fa2b896d0756cbd8f5",
+        "hashMatchesRetainedEvidence": true,
+        "jsonValid": true
+      }
+    ],
+    "retainedPackageWasComplete": false,
+    "missingPart": "Markdown заканчивался FIXTURE_APPENDICES без приложений A–C; ссылки JSON embeddedIn и fixturePublication были преждевременными. Старый JSON parseable, но это не complete output.",
+    "preservedActionEvidence": {
+      "path": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r13-actions.json",
+      "sha256": "31d56e7b545b61f424b032e6f413b3155c747b9696072833ca0601fbeb1e4279",
+      "commandCount": 29,
+      "containsToolResults": false,
+      "commandsExecutedAgain": false
+    },
+    "retainedProbeDirectory": "/tmp/r13-security-provider-Q20Xv5",
+    "newSyntaxCheckDirectory": "/tmp/r13-continuation-fmwkefga",
+    "transferredFacts": [
+      "Семь findings R13-B01/I01/U01/A01–A04 с прежними устойчивыми ID и классификациями",
+      "Исторические E00–E07: команды, исходы и ограничения; не новый успешный прогон",
+      "Среда sourceRun и историческое сравнение dev/worktree — факт из сохранённого отчёта, а не наблюдение нынешнего состояния dev"
+    ],
+    "recheckedFacts": [
+      "Размеры и SHA256 старых отчётов совпали с retainedEvidence",
+      "Хеши четырёх исходных fixtures совпали с прежним JSON; восемь собственных логов сведены без публикации сырого содержимого",
+      "Исторические E01–E04: 141/141; E05: 3/1/1/1 запросов в двух итоговых логах; E06: два cleanup-сценария; E07: dummy mutation против публичного текста",
+      "185 tracked файлов src/tests/package/patches/scripts побайтово равны между старым и новым study-worktree",
+      "Ключевые причины file:line и контрдоказательства перечитаны на e15bc407; версии зависимостей и хеши Bedrock/bash не изменились",
+      "Прочитан git diff профильных путей и двух post-study commits; независимо проверен HEAD публикационного dev"
+    ],
+    "addedMaterial": [
+      "Точные сохранённые fixtures в приложениях Markdown A–C",
+      "Continuation provenance и manifest целостности логов/fixtures",
+      "Отдельный post-study already-fixed контекст, не смешанный с study findings",
+      "Уточнение: недоступная явная модель отвергается, но отсутствующая модель может выбираться по default до freeze",
+      "Четыре новые временные копии scripts прошли только node --check; код не исполнялся",
+      "Проверка комплектности отчётов, ссылок и хешей; уточнение границы PID-наблюдения E06"
+    ],
+    "newBehavioralFindings": 0,
+    "newRegressionTestExecutions": 0,
+    "newProviderOrAuthProbes": 0,
+    "newCancellationProbes": 0,
+    "oldWorkspaceModified": false,
+    "oldProbeDirectoryModified": false,
+    "limits": "Сверка сохранённых результатов, а не новое наблюдение runtime поведения. Exit codes старых tool calls не содержатся в preservedActionEvidence; успешные итоги подтверждены сохранёнными summaries и отсутствием assertion-failure markers, не выдуманным новым прогоном."
+  },
+  "retainedEvidenceManifest": {
+    "logs": [
+      {
+        "experimentId": "E01",
+        "file": "focused-tests.log",
+        "sha256ComputedAtContinuation": "9b028c7374a75ba65933eb98afa7b999019fd9af046301b2a8de07aa01e11517",
+        "rawContentPublished": false,
+        "summary": {
+          "tests": 86,
+          "pass": 86,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "duration_ms": 25012.212458
+        },
+        "failureMarkersFound": false
+      },
+      {
+        "experimentId": "E02",
+        "file": "additional-tests.log",
+        "sha256ComputedAtContinuation": "08e037d5af4c531c4346d65fd0a219394a935ac5dd6b7476b6703efe19c05548",
+        "rawContentPublished": false,
+        "summary": {
+          "tests": 28,
+          "pass": 28,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "duration_ms": 11913.728666
+        },
+        "failureMarkersFound": false
+      },
+      {
+        "experimentId": "E03",
+        "file": "ipc-tests.log",
+        "sha256ComputedAtContinuation": "c45baf8d8acf4cd335e212c37939dce86a52c99716b649b933337bd6c23d51c7",
+        "rawContentPublished": false,
+        "summary": {
+          "tests": 23,
+          "pass": 23,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "duration_ms": 3136.672458
+        },
+        "failureMarkersFound": false
+      },
+      {
+        "experimentId": "E04",
+        "file": "xai-tests.log",
+        "sha256ComputedAtContinuation": "f222133276c1d64e6aa2851e6c1c69f2b2281256dad719d9e1992e895a09d83e",
+        "rawContentPublished": false,
+        "summary": {
+          "tests": 4,
+          "pass": 4,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0,
+          "duration_ms": 5713.234333
+        },
+        "failureMarkersFound": false
+      },
+      {
+        "experimentId": "E05",
+        "file": "bedrock-retry.log",
+        "sha256ComputedAtContinuation": "c743e9a275332ce42288687488843d1944bc3c6d46b504831d7a8758e8279adb",
+        "rawContentPublished": false,
+        "sanitizedResults": [
+          {
+            "mode": "503-default",
+            "requests": 3,
+            "assistantTurns": 1,
+            "code": "provider",
+            "effects": "read-only",
+            "providerResponse": {
+              "status": 503
+            }
+          },
+          {
+            "mode": "400-control",
+            "requests": 1,
+            "assistantTurns": 1,
+            "code": "provider",
+            "effects": "read-only",
+            "providerResponse": {
+              "status": 400
+            }
+          },
+          {
+            "mode": "503-maxAttempts1",
+            "requests": 1,
+            "assistantTurns": 1,
+            "code": "provider",
+            "effects": "read-only",
+            "providerResponse": {
+              "status": 503
+            }
+          },
+          {
+            "mode": "cancel-after-first",
+            "requests": 1,
+            "assistantTurns": 1,
+            "code": "cancelled",
+            "effects": "read-only"
+          }
+        ],
+        "failureMarkersFound": false
+      },
+      {
+        "experimentId": "E05",
+        "file": "bedrock-confirm.log",
+        "sha256ComputedAtContinuation": "d5051bc629bb44808175cf5f32122687302cae5515193c41e28696f3bf6b218f",
+        "rawContentPublished": false,
+        "sanitizedResults": [
+          {
+            "mode": "503-default",
+            "requests": 3,
+            "assistantTurns": 1,
+            "code": "provider",
+            "effects": "read-only",
+            "providerResponse": {
+              "status": 503
+            }
+          },
+          {
+            "mode": "400-control",
+            "requests": 1,
+            "assistantTurns": 1,
+            "code": "provider",
+            "effects": "read-only",
+            "providerResponse": {
+              "status": 400
+            }
+          },
+          {
+            "mode": "503-maxAttempts1",
+            "requests": 1,
+            "assistantTurns": 1,
+            "code": "provider",
+            "effects": "read-only",
+            "providerResponse": {
+              "status": 503
+            }
+          },
+          {
+            "mode": "cancel-after-first",
+            "requests": 1,
+            "assistantTurns": 1,
+            "code": "cancelled",
+            "effects": "read-only"
+          }
+        ],
+        "failureMarkersFound": false
+      },
+      {
+        "experimentId": "E06",
+        "file": "worker-cancel.log",
+        "sha256ComputedAtContinuation": "522ef556d925dd25b85311ef36ad5cf6e0b5ae98f05c2f5ff25ffb1669450900",
+        "rawContentPublished": false,
+        "sanitizedResults": [
+          {
+            "mode": "cancel",
+            "workerGone": true,
+            "activeBashGone": true
+          },
+          {
+            "mode": "disconnect",
+            "workerGone": true,
+            "activeBashGone": true
+          }
+        ],
+        "failureMarkersFound": false
+      },
+      {
+        "experimentId": "E07",
+        "file": "auth-outcome.log",
+        "sha256ComputedAtContinuation": "0ca44289e957eebbdff33c6657603f7b7787279af3173090c1e25e3901ebf66b",
+        "rawContentPublished": false,
+        "sanitizedResults": [
+          {
+            "refreshes": 1,
+            "fetches": 0,
+            "credentialChanged": true,
+            "publicSaysUnchanged": true,
+            "code": "provider",
+            "phase": "setup",
+            "effects": "not-started"
+          }
+        ],
+        "failureMarkersFound": false
+      }
+    ],
+    "fixtures": [
+      {
+        "file": "bedrock-retry.mjs",
+        "sha256": "2c218f89d5accbae7fa562cd570b3b7c78ee64e5918da8a4a9dddb05d6f1c213",
+        "matchesOldJson": true,
+        "embeddedIn": "r13-security-provider-cancel.md, приложение A",
+        "newCopySyntaxCheckExitCode": 0
+      },
+      {
+        "file": "cancel-preload.mjs",
+        "sha256": "e6d5f3e8bf682cbae96833eaf0f34ad35d4a4916151a51dfe86194760443d041",
+        "matchesOldJson": true,
+        "embeddedIn": "r13-security-provider-cancel.md, приложение B",
+        "newCopySyntaxCheckExitCode": 0
+      },
+      {
+        "file": "worker-cancel.mjs",
+        "sha256": "414714d3b2596c3f3a50f73c6ee264acd14a347e1407782c457c2e5be316faef",
+        "matchesOldJson": true,
+        "embeddedIn": "r13-security-provider-cancel.md, приложение B",
+        "newCopySyntaxCheckExitCode": 0
+      },
+      {
+        "file": "auth-outcome.mjs",
+        "sha256": "8c8d84186d43eb7c47f31b14161c0e89670cb21cbce78336165aa3604b54e92e",
+        "matchesOldJson": true,
+        "embeddedIn": "r13-security-provider-cancel.md, приложение C",
+        "newCopySyntaxCheckExitCode": 0
+      }
+    ],
+    "logHashTime": "Вычислены при continuation; более ранний внешний manifest хешей логов не предоставлен",
+    "rawLogsPublished": false
+  },
+  "continuationChecks": [
+    {
+      "id": "C00",
+      "command": "shasum -a 256 <old-own-md> <old-own-json>; Python json.loads / SHA256 r13-actions.json",
+      "outcome": "Размеры/хеши совпали с retainedEvidence; JSON валиден; 29 исторических команд; обнаружено отсутствие приложений",
+      "boundary": "Только чтение; прежний успешный submit не предполагается"
+    },
+    {
+      "id": "C01",
+      "command": "git rev-parse HEAD; git log -18 --oneline; nl -ba/read профильных docs/source/tests; Python byte comparison 185 tracked файлов; git diff e15bc407 3d8ba65 -- профильные пути; git show 86f5e07 / 3d8ba65; SHA256 файлов зависимостей",
+      "outcome": "Study-worktrees идентичны; ключевые причины/ссылки проверены; SDK 0.85.1 / Bedrock 3.1048.0 и два хеша зависимостей совпали; post-study исправления отделены",
+      "boundary": "Без изменений; тесты публикационной ревизии не запускались"
+    },
+    {
+      "id": "C02",
+      "command": "Python SHA256 четырёх собственных сохранённых scripts и восьми логов; regex summaries и разрешённые JSON-поля",
+      "outcome": "141/141 исторических тестов; E05–E07 согласуются с отчётом; scripts совпали с прежним JSON; маркеров проваленных assertions не найдено",
+      "boundary": "Сверка исторических артефактов, не новый прогон; сырые логи исключены"
+    },
+    {
+      "id": "C03",
+      "command": "Python копирует четыре scripts в новый /tmp/r13-continuation-*; subprocess.run([node,--check,new-copy], env={PATH, изолированные HOME/TMPDIR})",
+      "outcome": "Четыре syntax checks: exit 0; скопированные байты идентичны",
+      "boundary": "Код не исполнялся; без SDK import, сервера, worker, auth или cancel probe"
+    },
+    {
+      "id": "C04",
+      "command": "Python: JSON counts/IDs/classifications, диапазоны file:line, хеши встроенных fixtures; git status --short; shasum -a 256 окончательных md/json",
+      "outcome": "Проверки ID/count, диапазонов file:line, четырёх fixtures и перечня источников прошли; изменены только два отчёта. Хеши окончательных файлов возвращаются через submit_result после последней записи",
+      "boundary": "Только целостность доказательного пакета, не новая проверка runtime"
+    }
+  ],
+  "postStudyAlreadyFixed": [
+    {
+      "commit": "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+      "classification": "already-fixed",
+      "revisionScope": "Post-study контекст; не включён в study-source findingCount",
+      "topic": "Ранняя authoring parallel-writer isolation validation",
+      "evidence": [
+        "git show 86f5e07 -- src/graph.ts src/parallel-isolation.ts src/compiler.ts src/execution-plan.ts PROJECT_INFO/known-issues.md"
+      ],
+      "disposition": "Уже внедрено после study-source; не предлагать повторно; не меняет R13-B01",
+      "testsExecutedHere": false
+    },
+    {
+      "commit": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "classification": "already-fixed",
+      "revisionScope": "Post-study контекст; не включён в study-source findingCount",
+      "topic": "Документация верхнеуровневой reviewer artifactRevision binding",
+      "evidence": [
+        "git show 3d8ba65 -- skills/dynamic-workflows/SKILL.md skills/dynamic-workflows/references/authoring.md"
+      ],
+      "disposition": "Уже документировано; не новое provider/cancel исправление и не рекомендация r13",
+      "testsExecutedHere": false
+    }
+  ]
+}

@@ -1,0 +1,710 @@
+{
+  "metadata": {
+    "researchId": "r02",
+    "topic": "Effect execution и распространение ошибок",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "date": "2026-09-20",
+    "completedAt": "2026-09-20T13:17:08.607719+00:00",
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "language": "ru",
+    "reportType": "evidence-research-not-implementation",
+    "workingDirectory": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/1ba689599a7d25b37d97e1074c9b9456e535b7f0e51c0cc292f2e5064653b9b6",
+    "markdown": "research/2026-09-20-astra-max/r02-effect-execution.md",
+    "json": "research/2026-09-20-astra-max/r02-effect-execution.json",
+    "environment": {
+      "node": "v26.8.1",
+      "effect": "3.22.1",
+      "tsx": "4.20.6"
+    },
+    "findingCountDefinition": "Количество объектов findings; postStudyAlreadyFixed и опровержения не считаются отдельными находками."
+  },
+  "status": "complete",
+  "blockers": [],
+  "summary": "Три воспроизведённых дефекта: step сокращает составной Cause перед collect; clearPid в JS-finally замещает исходный отказ, а нетипизированный cleanup может пропустить следующий writer; interruption ждёт cleanup Promise, но теряет его ошибку. Терминальные ограждения и исправление pause/admission сохраняются.",
+  "findingCount": 4,
+  "findingCounts": {
+    "bug": 3,
+    "idea": 0,
+    "unknown": 0,
+    "already-fixed": 1
+  },
+  "continuationProvenance": {
+    "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+    "currentRunId": "run-9dbb044c-664f-4dd8-96c0-57192dc4ed89",
+    "oldOperationStatus": "failed",
+    "oldOperationFailureInterpretation": "Переданный provider/HTTP200/terminated описывает неуспех прежней операции, не доказательство ошибки Effect и не завершённый отчёт.",
+    "oldWorkspace": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/1ba689599a7d25b37d97e1074c9b9456e535b7f0e51c0cc292f2e5064653b9b6",
+    "oldReports": [
+      {
+        "path": "research/2026-09-20-astra-max/r02-effect-execution.md",
+        "observedExists": false,
+        "sha256": null
+      },
+      {
+        "path": "research/2026-09-20-astra-max/r02-effect-execution.json",
+        "observedExists": false,
+        "sha256": null
+      }
+    ],
+    "oldReportCheck": "В новой операции проверено отсутствие обоих файлов; partial отчёт не выдан за прошлый success. SHA256 отсутствующих файлов недоступны.",
+    "retainedActions": {
+      "path": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r02-actions.json",
+      "sha256": "fbdc7354aa53d7714ccd2a2ca4a6910ea157de77c2012e798acb4a23f71a75a7",
+      "contentBoundary": "Список команд, не полные ответы инструментов. Дополнительно прочитаны собственные сохранившиеся fixture/results/logs."
+    },
+    "transferredFacts": [
+      "E01–E04: сводки прочитанных тестовых логов, суммарно 234 pass/0 fail; в continuation не перезапускались.",
+      "E05: direct/generated матрица двух форм Cause, nested fail-fast, исходная ошибка при живом собственном потомке, cleanup checkpoint и interruption.",
+      "Старый raw-foreach имеет сохранённый исходник, но отдельного сохранённого вывода нет; результат его запуска не заявляется."
+    ],
+    "recheckedFacts": [
+      "Ссылки на текущую study revision; реализация catchAll/acquireUseRelease в Effect 3.22.1.",
+      "31 distinct records E05 разобраны и matrix assertions перепроверены без исполнения старого probe.",
+      "E06 повторно подтверждает generated Cause truncation, потерю ENOENT, следующий writer с pending group и отказ finish, потерю cleanup-диагностики при abort.",
+      "E07 отделяет текущий dev/publication от study; новая временная копия содержит 67 byte-identical файлов study."
+    ],
+    "addedEvidence": [
+      "E06: typed interrupted как второй член Cause.",
+      "E06: отказ SQLite внутри release-финализатора step сохраняет первичную ошибку и defect, не собирается.",
+      "E06: контрольный отсутствующий check без cleanup fault; наблюдение достижения settled callback при abort.",
+      "Впервые созданы оба отчёта и самодостаточный новый reproducer в Markdown."
+    ],
+    "historicalCorrections": "В старой истории была неверная гипотеза о второй cleanup-причине nested fail-fast. Итоговый retained результат подтверждает потерю interrupt, но не наличие этой второй cleanup в Cause. Промежуточные команды не объявлены все успешными.",
+    "safety": "Старые worktree/tmp не изменялись и старые команды не перезапускались. Новые проверки только в новом r02 /tmp. Соседние отчёты не читались.",
+    "hashBoundary": "Хеши retained evidence вычислены при текущем чтении; прежняя внешняя аттестация хешей отсутствует."
+  },
+  "coverage": {
+    "requiredReading": [
+      "AGENTS.md",
+      "PROJECT_INFO/architecture.md",
+      "PROJECT_INFO/development.md",
+      "PROJECT_INFO/known-issues.md",
+      "PROJECT_INFO/graph-contract.md",
+      "PROJECT_INFO/run-journal.md",
+      "PROJECT_INFO/outcomes-and-waits.md",
+      "PROJECT_INFO/retry-and-failures.md",
+      "git log"
+    ],
+    "areas": [
+      {
+        "area": "compiler/runtime boundary",
+        "sources": [
+          "src/runtime-contract.ts:15-25",
+          "src/compiler.ts:104-131"
+        ],
+        "result": "Каждый узел проходит step; map/parallel используют настоящий Effect.forEach; collect вне дочернего graph/step."
+      },
+      {
+        "area": "typed failure / defect / interruption",
+        "sources": [
+          "src/run-runtime.ts:26-79",
+          "src/run-runtime.ts:173-214"
+        ],
+        "result": "Определена точка сокращения Cause; defect path не превращается в данные."
+      },
+      {
+        "area": "process cleanup",
+        "sources": [
+          "src/run-runtime.ts:35-40",
+          "src/run-runtime.ts:270-285",
+          "src/run-runtime.ts:348-356",
+          "src/process-client.ts:145-187"
+        ],
+        "result": "Проверены Promise canceler, JS-finally, actual check, checkpoint fault."
+      },
+      {
+        "area": "admission/pause/retry",
+        "sources": [
+          "src/run-runtime.ts:82-116",
+          "src/run-runtime.ts:196-212",
+          "src/run-runtime.ts:327-333",
+          "src/run-store.ts:372-397",
+          "src/run-store.ts:459-474"
+        ],
+        "result": "Сохранённые профильные тесты подтверждают drain, atomic admission, отказ повтора опасной смеси."
+      },
+      {
+        "area": "terminal fences",
+        "sources": [
+          "src/run-store.ts:431-439",
+          "src/supervisor.ts:55-64"
+        ],
+        "result": "Pending группа блокирует terminal success; это не блок всех последующих узлов."
+      }
+    ],
+    "outOfScope": [
+      "live provider/API/quota",
+      "модельные вызовы",
+      "полный npm test",
+      "полный regression publication revision",
+      "реальные пользовательские run/processes",
+      "credentials",
+      "UI/skill повторное исследование"
+    ],
+    "sourceVsPublication": {
+      "initialWholeDevEqualityCheck": "Не прошёл на src/compiler.ts; утверждение о полном равенстве dev отвергнуто.",
+      "sameBytes": [
+        "src/run-runtime.ts",
+        "src/runtime-contract.ts",
+        "src/run-store.ts",
+        "src/process-client.ts",
+        "src/process-groups.ts",
+        "src/check-worker-process.ts",
+        "src/generated-module.ts",
+        "src/execution-failure.ts",
+        "src/supervisor.ts",
+        "package.json",
+        "package-lock.json",
+        "tests/run-runtime.test.ts",
+        "tests/pause-resume-admission.test.ts",
+        "tests/compiler.test.ts",
+        "tests/collection.test.ts",
+        "tests/retry-policy.test.ts",
+        "tests/provider-retry.test.ts",
+        "tests/retry-policy-contract.test.ts",
+        "tests/process-groups.test.ts",
+        "tests/run-controller.test.ts"
+      ],
+      "differentBytes": [
+        "src/compiler.ts",
+        "src/workspaces.ts",
+        "src/execution-plan.ts",
+        "tests/workspaces.test.ts"
+      ],
+      "compilerDiffConclusion": "Меняется signature/parse с frozen validation; emitNode/Effect.forEach не менялись.",
+      "newProbeSource": "git archive e15bc407da8753fd6b683c0aa4a68634e3c458a7 src package.json package-lock.json",
+      "archivedFilesVerified": 67,
+      "dependencies": "Существующие node_modules разрешённого dev через symlink; ни установки, ни записи в dev."
+    }
+  },
+  "findings": [
+    {
+      "id": "R02-B01",
+      "classification": "bug",
+      "title": "step.catchAll сокращает составной Cause перед collect",
+      "confidence": "high",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "locations": [
+        "src/run-runtime.ts:205-214",
+        "src/run-runtime.ts:69-76",
+        "src/compiler.ts:109-125"
+      ],
+      "trigger": "Обычная первая failure + cleanup/typed cancelled/interrupted/uncertain-effect/Effect interrupt в parallel или sequential Cause дочернего step; retry не разрешён.",
+      "expected": "Сохранить полный Cause после checkpoint; collect отклоняет запрещённую смесь без collection.settled.",
+      "observed": "Direct collect отказывает; generated graph после step возвращает Effect Success с failed-оболочкой первой причины. Новые cleanup/typed-interrupted/interrupt cases записали 1 коллекцию; defect case вернул Failure и 0. Две typed причины видны в metadata.failureCauses листа, но не в Cause родителя.",
+      "rootCause": "Effect 3.22.1 catchAll/matchEffect передаёт только первую typed failure, если нет defect; возврат Effect.fail(error) теряет остальной Cause. Проверка retry в release ещё использует полный Cause и работает консервативно.",
+      "factEvidence": [
+        "E05",
+        "E06"
+      ],
+      "inference": "Одинаковая граница step действует для map/parallel/structural nodes; системная причина не исправляется изменением только collect.",
+      "counterEvidence": [
+        "Direct collect корректно отвергает опасные mixtures; дефекты остаются Failure.",
+        "Retry policy анализирует все причины до catchAll; опасный retry не воспроизведён.",
+        "Нет доказательства успешного run.cancel: actual AbortController и desired=cancelled отдельно закрывают допуск.",
+        "Nested retained fail-fast подтверждает потерю interrupt, но его запланированная вторая typed cleanup не дошла до журнала."
+      ],
+      "reproduction": {
+        "fixture": "Markdown, приложение A, r02-offline-probe",
+        "command": "R02-TMP/verify.mts через node --import DEPS/tsx/dist/loader.mjs; полный bootstrap в Markdown",
+        "cases": [
+          "generated-cleanup",
+          "generated-typed-interrupted",
+          "generated-interrupt",
+          "generated-defect"
+        ],
+        "fixtureSha256": "1f7c80f94aec31c0372c0de9af675187786b0f5e885c27e7305d2b41fadbb22b"
+      },
+      "recommendation": {
+        "minimalChange": "Cause-aware обработчик; при отсутствии разрешённого admission/retry вернуть Effect.failCause(originalCause), сохранить guards executedAttempt/owner/cancel.",
+        "risk": "Наивный catchAllCause может поймать defect/interruption как разрешение новой работы; нельзя отменять уже исправленный admission race. Сохранение Cause затронет internal fail-fast sibling interruption, не только user cancel; нужна проверка совместимости вложенного fan-out.",
+        "acceptanceCriteria": [
+          "Generated map и parallel не собирают обе формы опасного mixed Cause и не выполняют следующий writer.",
+          "Исходные причины сохраняются, запись retry остаётся консервативной.",
+          "Обычные errors collect, replay, safe retry и pause/resume проходят."
+        ],
+        "implementationPerformed": false,
+        "acceptanceSuiteStatus": "proposed-not-run"
+      }
+    },
+    {
+      "id": "R02-B02",
+      "classification": "bug",
+      "title": "clearPid в finally замещает исходный отказ; untyped cleanup пропускает следующий writer",
+      "confidence": "high",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "locations": [
+        "src/run-runtime.ts:279-285",
+        "src/run-runtime.ts:270",
+        "src/run-runtime.ts:348-356",
+        "src/run-runtime.ts:26-39",
+        "src/workspaces.ts:287-294"
+      ],
+      "trigger": "Основная операция отклонилась, затем clearPid выбрасывает ошибку группы или транзакции workerLaunch=settled.",
+      "expected": "Первичная и cleanup причины сохранены раздельно; неполный cleanup не превращается в branch data и не допускает следующие узлы.",
+      "observed": "Контрольный ENOENT — process/setup/not-started и empty group. При SQLite trigger на cleanup остаётся только unknown/execution/unknown, ENOENT утрачен. Collect возвращает Effect Success, следующий реальный check пишет marker, прежняя group pending; finish(succeeded) отдельно отказывает. Retained живой собственный потомок также замещает SIGKILL на uncertain-effect/cleanup.",
+      "rootCause": "JS-finally замещает исходное отклонение. Сырые cleanup исключения не получают фазу cleanup; fallback execution позволяет collect собрать их как обычный отказ.",
+      "factEvidence": [
+        "E05",
+        "E06"
+      ],
+      "inference": "Agent и Git используют аналогичный finally/callback; последствия каждого из них отдельно не воспроизведены.",
+      "counterEvidence": [
+        "pending группа сохранена, retry той же активации блокируется.",
+        "RunStore.finish и supervisor cleanup_uncertain не признают terminal success.",
+        "SQL trigger — отказ транзакции fixture, не измерение реального дискового сбоя."
+      ],
+      "reproduction": {
+        "fixture": "Markdown, приложение A",
+        "cases": [
+          "ordinary-missing-check",
+          "cleanup-checkpoint-followed-by-writer"
+        ],
+        "injection": "SQLite BEFORE INSERT activation.metadata с workerLaunch=settled, только child scope",
+        "command": "Полный bootstrap приложения A; новый /tmp/r02-reproduce-*"
+      },
+      "recommendation": {
+        "minimalChange": "Разделить outcome операции и cleanup, скомпоновать причины, нормализовать инфраструктурные исключения на cleanup-границе как cleanup/unknown. Учесть Git callback; исправлять совместно с B01.",
+        "risk": "Нельзя очищать неподтверждённый PID/group или объявлять действия безопасно повторяемыми. AggregateError без поддержки Cause/классификации недостаточен.",
+        "acceptanceCriteria": [
+          "Обе причины доступны при ENOENT/SIGKILL + cleanup fault.",
+          "Нет collected failed data и следующий writer не стартует.",
+          "pending/ownership не скрываются; штатный ENOENT остаётся собираемым.",
+          "Отдельные agent/Git fault fixtures перед переносом решения."
+        ],
+        "implementationPerformed": false,
+        "acceptanceSuiteStatus": "proposed-not-run"
+      }
+    },
+    {
+      "id": "R02-B03",
+      "classification": "bug",
+      "title": "Interruption ждёт cleanup Promise, но подавляет ошибку очистки",
+      "confidence": "high",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "locations": [
+        "src/run-runtime.ts:35-40",
+        "src/run-runtime.ts:191-202"
+      ],
+      "trigger": "AbortController после старта собственного check; SQLite trigger отклоняет cleanup settled checkpoint.",
+      "expected": "Interruption остаётся управляющей причиной, после drain доступна отдельная реальная cleanup-ошибка без ложной ошибки для обычного ProcessCancelled.",
+      "observed": "В E06 подтверждено достижение cleanup callback. Exit Failure/interrupted=true, failures=[] и defects=[]; cleanup marker отсутствует в error активации, group=pending. E05 показывает такой же исход.",
+      "rootCause": "Async canceler ждёт promise.then(success=>undefined,rejection=>undefined); поздний reject через resume уже не доставляется в прерванную операцию.",
+      "factEvidence": [
+        "E05",
+        "E06"
+      ],
+      "counterEvidence": [
+        "Drain не отменён: существующий runtime-test проверяет ожидание реального процесса.",
+        "Новый эксперимент не доказывает живой процесс после Exit.",
+        "Отмена не стала Success; pending-group/ownership fence сохраняется."
+      ],
+      "reproduction": {
+        "fixture": "Markdown, приложение A",
+        "case": "interrupt-and-cleanup-checkpoint",
+        "command": "Полный bootstrap приложения A; новый /tmp/r02-reproduce-*"
+      },
+      "recommendation": {
+        "minimalChange": "Сохранить await/drain, различить ожидаемый отказ операции при отмене и cleanup outcome; скомпоновать последний с interruption либо отдельно надёжно сохранить diagnostics.",
+        "risk": "Просто вернуть rejected Promise нельзя: обычный ProcessCancelled станет ложным cleanup defect. Нельзя менять owner fencing или порядок drain.",
+        "acceptanceCriteria": [
+          "Abort+cleanup fault оставляет interruption и cleanup marker, не допускает collection/retry/следующий writer.",
+          "Обычный abort без cleanup fault остаётся штатной отменой и ждёт процесса.",
+          "Раздельные fixtures для первичного отказа, cleanup fault и их сочетания."
+        ],
+        "implementationPerformed": false,
+        "acceptanceSuiteStatus": "proposed-not-run"
+      }
+    },
+    {
+      "id": "R02-AF01",
+      "classification": "already-fixed",
+      "title": "Pause/resume admission race уже исправлена в study source",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "fixCommit": "6ee370a648e0e0f26430cbf1d5970297d2911f9e",
+      "locations": [
+        "src/run-store.ts:28-33",
+        "src/run-store.ts:459-462",
+        "src/run-runtime.ts:205-212",
+        "tests/pause-resume-admission.test.ts:29-113"
+      ],
+      "observed": "Типизированный отказ допуска без активации; retry только до executedAttempt при том же owner и без cancel. Retained тесты проверяют resume/cancel/owner-loss и отсутствие повтора уже допущенной работы; drain/commit-gate интеграции прошли.",
+      "factEvidence": [
+        "E01",
+        "E04"
+      ],
+      "recommendation": {
+        "minimalChange": "Не внедрять повторно; сохранить guards при исправлении B01.",
+        "risk": "Повтор уже допущенного эффекта при ослаблении границы.",
+        "acceptanceCriteria": [
+          "Существующие pause-resume-admission и drain/commit admission проверки остаются зелёными."
+        ],
+        "implementationPerformed": false
+      }
+    }
+  ],
+  "postStudyAlreadyFixed": [
+    {
+      "revision": "86f5e07",
+      "classification": "already-fixed",
+      "topic": "Ранняя parallel-isolation validation",
+      "boundary": "Post-study; подтверждено diff graph/compiler, не переоткрывать."
+    },
+    {
+      "revision": "3d8ba65",
+      "classification": "already-fixed",
+      "topic": "Документация reviewer binding",
+      "boundary": "Post-study clarification; runtime checkReviewInput/checkReviewOutput уже присутствует в e15."
+    }
+  ],
+  "alreadyFixedRefutations": [
+    {
+      "id": "R02-R01",
+      "claim": "collect не проверяет смешанные причины",
+      "result": "refuted",
+      "evidence": [
+        "src/run-runtime.ts:69-76",
+        "tests/collection.test.ts:117-143",
+        "E05"
+      ],
+      "explanation": "Direct collect корректен; Cause сокращается внутри step до него."
+    },
+    {
+      "id": "R02-R02",
+      "claim": "любая ошибка финализатора Effect теряется",
+      "result": "refuted",
+      "evidence": [
+        "E06:journal-release-defect",
+        "node_modules/effect/src/internal/core.ts:410-426"
+      ],
+      "explanation": "Primary и release defect сохраняются в Failure, collection=0; leaf checkpoint откатился до running. catchAll electFailures переводит typed primary в defect, но не стирает его."
+    },
+    {
+      "id": "R02-R03",
+      "claim": "mixed causes обходят explicit retry policy",
+      "result": "not-confirmed",
+      "evidence": [
+        "E02",
+        "E03",
+        "src/run-runtime.ts:196-202",
+        "src/run-store.ts:686-701"
+      ],
+      "explanation": "Все причины анализируются до catchAll; запрещённый член отказывает всей смеси."
+    },
+    {
+      "id": "R02-R04",
+      "claim": "Effect Success в cleanup probe означает persisted succeeded run",
+      "result": "refuted",
+      "evidence": [
+        "E06:cleanup-checkpoint-followed-by-writer",
+        "src/run-store.ts:435",
+        "src/supervisor.ts:55-60"
+      ],
+      "explanation": "Прямой finish отказал из-за pending group; новый probe не запускал supervisor."
+    }
+  ],
+  "experiments": [
+    {
+      "id": "E01",
+      "status": "retained-result-inspected-not-rerun",
+      "command": "node --import tsx --test --test-concurrency=1 tests/run-runtime.test.ts tests/pause-resume-admission.test.ts tests/compiler.test.ts tests/collection.test.ts",
+      "outcome": {
+        "tests": 26,
+        "pass": 26,
+        "fail": 0
+      },
+      "limits": "Исторический узкий offline прогон; не live provider."
+    },
+    {
+      "id": "E02",
+      "status": "retained-result-inspected-not-rerun",
+      "command": "node --import tsx --test --test-concurrency=1 tests/retry-policy-contract.test.ts tests/process-groups.test.ts",
+      "outcome": {
+        "tests": 201,
+        "pass": 201,
+        "fail": 0
+      },
+      "limits": "Политика и группы, не все сбои ОС."
+    },
+    {
+      "id": "E03",
+      "status": "retained-result-inspected-not-rerun",
+      "command": "node --import tsx --test --test-concurrency=1 --test-name-pattern='composite|excluded status|safe retries|every member' tests/provider-retry.test.ts tests/retry-policy.test.ts",
+      "outcome": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0
+      },
+      "limits": "Выбраны offline cause/retry cases, не live transport."
+    },
+    {
+      "id": "E04",
+      "status": "retained-result-inspected-not-rerun",
+      "command": "node --import tsx --test --test-concurrency=1 --test-name-pattern='pause drains an active check|nested parallel and dynamic map drain|a pause injected after the gate' tests/run-controller.test.ts tests/workspaces.test.ts",
+      "outcome": {
+        "tests": 3,
+        "pass": 3,
+        "fail": 0
+      },
+      "limits": "Собственные исторические offline процессы/Git fixtures; continuation не повторяла их."
+    },
+    {
+      "id": "E05",
+      "status": "retained-fixture-and-results-inspected-not-rerun",
+      "command": "node --import tsx /tmp/r02-effect-20260920-CaZdw5/probe.mts",
+      "outcome": {
+        "records": 31,
+        "matrixStructureRechecked": true
+      },
+      "limits": "Команда историческая, не инструкция перезапустить старый путь. Сохранённый список actions не имеет всех exit codes. Итоговые records и stderr согласованы с последним исходником."
+    },
+    {
+      "id": "E06",
+      "status": "executed-in-continuation",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "command": "node --import /Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev/node_modules/tsx/dist/loader.mjs /tmp/r02-cont-effect-20260920-BPVfZM/verify.mts",
+      "outcome": {
+        "exitCode": 0,
+        "cases": 8,
+        "assertions": "passed",
+        "caseNames": [
+          "generated-cleanup",
+          "generated-typed-interrupted",
+          "generated-interrupt",
+          "generated-defect",
+          "journal-release-defect",
+          "ordinary-missing-check",
+          "cleanup-checkpoint-followed-by-writer",
+          "interrupt-and-cleanup-checkpoint"
+        ]
+      },
+      "limits": "Точный git archive e15; реальный SQLite/check; injected Effect errors в matrix/release случаях; без supervisor/provider. Assertions закрепляют текущее дефектное поведение, не желаемую regression."
+    },
+    {
+      "id": "E07",
+      "status": "executed-in-continuation",
+      "command": "git diff e15bc407da8753fd6b683c0aa4a68634e3c458a7 3d8ba65ee84402c0e3b0587f70095b7847824a9f -- src/compiler.ts src/execution-plan.ts src/graph.ts src/workspaces.ts; Python byte comparison study/archive/dev",
+      "outcome": {
+        "archiveIdenticalFiles": 67,
+        "wholeDevEqual": false,
+        "runtimeRelevantFilesEqual": true
+      },
+      "limits": "Не полный regression publication revision."
+    }
+  ],
+  "evidenceArtifacts": [
+    {
+      "id": "retained-probe",
+      "path": "/tmp/r02-effect-20260920-CaZdw5/probe.mts",
+      "sha256": "33106f16d3f2824ad7d700651ef82f4c6b7bbcf4301c08c796873b21d9d13dd2"
+    },
+    {
+      "id": "retained-result",
+      "path": "/tmp/r02-effect-20260920-CaZdw5/result.jsonl",
+      "sha256": "2a76b1058b072451cc7c0b156280a10e8f3a3cf8e283c1b72cda2c307db6d0f3"
+    },
+    {
+      "id": "retained-raw-foreach-source-only",
+      "path": "/tmp/r02-effect-20260920-CaZdw5/raw-foreach.mts",
+      "sha256": "8084c45a1d6f13941691e63efc8144b683334d63e980f86bce42462320aacf79"
+    },
+    {
+      "id": "E01-log",
+      "path": "/tmp/r02-effect-regressions-20260920.log",
+      "sha256": "51f8f4a56bf13090de0c875320ed39137b3869d1a354b53e47ccc41ce206e698"
+    },
+    {
+      "id": "E02-log",
+      "path": "/tmp/r02-effect-boundaries-20260920.log",
+      "sha256": "e85d41a4de26a64d0afa0ba6d28a7ffbb99e3cf31f81e754e667d6df4429e448"
+    },
+    {
+      "id": "E03-log",
+      "path": "/tmp/r02-effect-retry-causes-20260920.log",
+      "sha256": "0a1deb87ac50fb2721e9eca297965701450a1991e11f8609435dbbdcc5e16d5e"
+    },
+    {
+      "id": "E04-log",
+      "path": "/tmp/r02-effect-pause-integration-20260920.log",
+      "sha256": "4fd88225893b52b92daa26fbae2ee9f6e4836b45c7aa382efb770dfefb8e2b25"
+    },
+    {
+      "id": "E06-probe",
+      "path": "/tmp/r02-cont-effect-20260920-BPVfZM/verify.mts",
+      "sha256": "1f7c80f94aec31c0372c0de9af675187786b0f5e885c27e7305d2b41fadbb22b"
+    },
+    {
+      "id": "E06-result",
+      "path": "/tmp/r02-cont-effect-20260920-BPVfZM/result.jsonl",
+      "sha256": "6d50372c8fdfeec79e9b1f886674483aa748699be776861d527b8241ac0b5309"
+    }
+  ],
+  "sources": [
+    {
+      "id": "S01",
+      "kind": "repository-documents-and-history",
+      "paths": [
+        "AGENTS.md",
+        "PROJECT_INFO/architecture.md",
+        "PROJECT_INFO/development.md",
+        "PROJECT_INFO/known-issues.md"
+      ],
+      "history": [
+        "6ee370a648e0e0f26430cbf1d5970297d2911f9e",
+        "86f5e07",
+        "3d8ba65"
+      ],
+      "inspectedAt": "2026-09-20"
+    },
+    {
+      "id": "S02",
+      "kind": "compiler-contract",
+      "paths": [
+        "PROJECT_INFO/graph-contract.md",
+        "src/compiler.ts:63-133",
+        "src/runtime-contract.ts:15-25"
+      ]
+    },
+    {
+      "id": "S03",
+      "kind": "collection-contract",
+      "paths": [
+        "PROJECT_INFO/outcomes-and-waits.md:157-183",
+        "tests/collection.test.ts:117-143"
+      ]
+    },
+    {
+      "id": "S04",
+      "kind": "runtime-implementation",
+      "paths": [
+        "src/run-runtime.ts:26-79",
+        "src/run-runtime.ts:173-214",
+        "src/run-runtime.ts:218-285",
+        "src/run-runtime.ts:299-372"
+      ]
+    },
+    {
+      "id": "S05",
+      "kind": "journal-implementation",
+      "paths": [
+        "PROJECT_INFO/run-journal.md",
+        "src/run-store.ts:28-33",
+        "src/run-store.ts:372-397",
+        "src/run-store.ts:431-474",
+        "src/run-store.ts:673-701",
+        "src/run-store.ts:739-766",
+        "src/run-store.ts:854-872"
+      ]
+    },
+    {
+      "id": "S06",
+      "kind": "process-and-supervisor",
+      "paths": [
+        "src/supervisor.ts:29-64",
+        "src/process-client.ts:145-187",
+        "src/check-worker-process.ts"
+      ]
+    },
+    {
+      "id": "S07",
+      "kind": "workspace-boundary",
+      "paths": [
+        "src/workspaces.ts:287-303",
+        "tests/workspaces.test.ts:275"
+      ]
+    },
+    {
+      "id": "S08",
+      "kind": "retry-contract",
+      "paths": [
+        "PROJECT_INFO/retry-and-failures.md:61-66",
+        "PROJECT_INFO/retry-and-failures.md:131-154",
+        "tests/provider-retry.test.ts:70-88",
+        "tests/retry-policy.test.ts:101",
+        "tests/retry-policy.test.ts:147"
+      ]
+    },
+    {
+      "id": "S09",
+      "kind": "pause-and-drain-tests",
+      "paths": [
+        "tests/run-runtime.test.ts:79-100",
+        "tests/pause-resume-admission.test.ts:29-113",
+        "tests/run-controller.test.ts:269",
+        "tests/run-controller.test.ts:354"
+      ]
+    },
+    {
+      "id": "S10",
+      "kind": "installed-locked-dependency",
+      "version": "effect@3.22.1",
+      "paths": [
+        "node_modules/effect/src/internal/core.ts:410-426",
+        "node_modules/effect/src/internal/core.ts:577-590",
+        "node_modules/effect/src/internal/core.ts:901-913",
+        "package-lock.json"
+      ],
+      "locationBoundary": "Прочитано в node_modules разрешённого dev; веб не использовался."
+    },
+    {
+      "id": "S11",
+      "kind": "own-retained-evidence",
+      "refs": [
+        "continuationProvenance.retainedActions",
+        "evidenceArtifacts"
+      ]
+    },
+    {
+      "id": "S12",
+      "kind": "own-new-offline-probe",
+      "refs": [
+        "E06",
+        "Markdown приложение A"
+      ]
+    }
+  ],
+  "unknowns": [
+    {
+      "id": "R02-U01",
+      "classification": "unknown",
+      "question": "Как часто и по каким конкретным путям mixed Cause возникает у live provider?",
+      "known": "Доказаны Effect/runtime boundary и nested generated forEach с подставными листьями.",
+      "missingEvidence": "Live provider не вызывался; никаких выводов о правах/квотах/качестве модели."
+    },
+    {
+      "id": "R02-U02",
+      "classification": "unknown",
+      "question": "Полный эффект cleanup fault во всех agent/Git сценариях?",
+      "known": "Аналогичный finally/callback виден в коде.",
+      "missingEvidence": "Отдельные agent/Git fault fixtures; результат check нельзя безоговорочно распространить на все пути."
+    },
+    {
+      "id": "R02-U03",
+      "classification": "unknown",
+      "question": "Частота настоящего отказа диска/SQLite и полный recovery после него?",
+      "known": "Trigger воспроизводит отказ одной транзакции и следующий writer до terminal fence.",
+      "missingEvidence": "Не провоцировались реальные дисковые сбои; полный supervisor recovery в новой операции не исследован."
+    },
+    {
+      "id": "R02-U04",
+      "classification": "unknown",
+      "question": "Поведение всех Node/ОС и всего publication regression?",
+      "known": "Новые cases выполнены на Node v26.8.1 с exact study archive.",
+      "missingEvidence": "Нет полного npm test/межплатформенной матрицы; known process-test flakes не объявлены исправленными."
+    }
+  ],
+  "safetyAndLimitations": {
+    "sourceChanges": false,
+    "testChanges": false,
+    "packageChanges": false,
+    "gitMutations": false,
+    "liveRunManagement": false,
+    "providerCalls": false,
+    "credentialsRead": false,
+    "webAccessUsed": false,
+    "rawLogsPublished": false,
+    "neighborReportsRead": false,
+    "writes": "Только назначенные md/json в текущем worktree и новая собственная /tmp fixture.",
+    "proposalsNotImplemented": true
+  }
+}

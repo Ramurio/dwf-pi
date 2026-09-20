@@ -1,0 +1,1103 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "id": "r04",
+    "researchId": "r04",
+    "topic": "Журнал SQLite и восстановление",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "date": "2026-09-20",
+    "continuationDate": "2026-09-20",
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "actualCwd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/2d13b5261cf4b4fedc32c057e7589adb0ff6d8ef6f52a2fb4d8c090ff85c71cc",
+    "language": "ru",
+    "type": "доказательное исследование, не реализация",
+    "status": "complete",
+    "reports": {
+      "markdown": "research/2026-09-20-astra-max/r04-journal-recovery.md",
+      "json": "research/2026-09-20-astra-max/r04-journal-recovery.json"
+    }
+  },
+  "summary": {
+    "text": "Один воспроизведённый диагностический bug: auto-rollback SQLite заменяет SQLITE_FULL вторичной ошибкой ROLLBACK. Потеря данных не обнаружена. WAL backup, fencing/checkpoints и one-use recovery защищены в проверенных границах; миграционная совместимость — идея, power-loss и non-UTF8 имена — unknown. Пакет завершён из собственных retained материалов, без повторного полного исследования.",
+    "findingCount": 7,
+    "counts": {
+      "bug": 1,
+      "idea": 1,
+      "already-fixed": 3,
+      "unknown": 2
+    },
+    "historicalTests": {
+      "pass": 47,
+      "fail": 0,
+      "skipped": 0
+    },
+    "continuationNewBehaviorExperiments": 1,
+    "implementationChanges": false,
+    "blockers": []
+  },
+  "continuationProvenance": {
+    "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+    "currentRunId": "run-9dbb044c-664f-4dd8-96c0-57192dc4ed89",
+    "oldOperationStatus": "failed",
+    "oldFailure": {
+      "code": "provider",
+      "phase": "execution",
+      "effects": "unknown",
+      "message": "Pi assistant turn failed: terminated",
+      "httpStatusObserved": 200
+    },
+    "oldWorkspace": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/2d13b5261cf4b4fedc32c057e7589adb0ff6d8ef6f52a2fb4d8c090ff85c71cc",
+    "oldReports": {
+      "markdown": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/2d13b5261cf4b4fedc32c057e7589adb0ff6d8ef6f52a2fb4d8c090ff85c71cc/research/2026-09-20-astra-max/r04-journal-recovery.md",
+        "exists": true,
+        "bytes": 41419,
+        "sha256": "b83ee138f0e39ac64a6b9939f613bc5650cc1c5348d04748f42b5e8dd2c63e5c",
+        "sha256Verified": true,
+        "textFilled": true,
+        "priorSuccessfulStructuredResult": false
+      },
+      "json": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/2d13b5261cf4b4fedc32c057e7589adb0ff6d8ef6f52a2fb4d8c090ff85c71cc/research/2026-09-20-astra-max/r04-journal-recovery.json",
+        "exists": false,
+        "sha256": null
+      }
+    },
+    "oldPackageComplete": false,
+    "preservedActionEvidence": {
+      "path": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r04-actions.json",
+      "sha256": "e036f3f8477e220b83700c19888562a6ead8f813cbfba8ebca6ab6b1f805650f",
+      "commands": 18,
+      "hasStdoutOrExitCodes": false
+    },
+    "retainedEvidenceFiles": [
+      {
+        "file": "/tmp/r04-journal-UW87KA/baseline-tests.tap",
+        "bytes": 4631,
+        "sha256": "2e9948097632db4c5304f3a92659f99719a1016d63e71781ac794486d0127bb6",
+        "role": "E01: сохранённый вывод Node spec reporter, несмотря на расширение .tap",
+        "continuationAction": "read-only; не исполнялся и не изменялся"
+      },
+      {
+        "file": "/tmp/r04-journal-UW87KA/reconciliation-tests.tap",
+        "bytes": 2369,
+        "sha256": "1b1d1a7a7edd4626aa7480ddf640b22fe945c8e82c25c8eb21e4046a567345d1",
+        "role": "E02: сохранённый вывод Node spec reporter",
+        "continuationAction": "read-only; не исполнялся и не изменялся"
+      },
+      {
+        "file": "/tmp/r04-journal-UW87KA/sqlite-full.mjs",
+        "bytes": 2177,
+        "sha256": "fe60d3f53d41cbc6b56c88971c65f1c984936eb7b4ffaec0524c1bd8c4530846",
+        "role": "E03: прочитанная fixture; отдельный stdout не сохранён",
+        "continuationAction": "read-only; не исполнялся и не изменялся"
+      },
+      {
+        "file": "/tmp/r04-journal-UW87KA/journal-boundaries.mjs",
+        "bytes": 5357,
+        "sha256": "0b75980b3160bd500c29bdf5b2cc80818e3d0c482eed1cb88e751aea53d54e8b",
+        "role": "E04: прочитанная fixture; отдельный stdout не сохранён",
+        "continuationAction": "read-only; не исполнялся и не изменялся"
+      },
+      {
+        "file": "/tmp/r04-journal-UW87KA/wal-reader.mjs",
+        "bytes": 1334,
+        "sha256": "0f85d79b195ace4611a1ee3ddec5db2b3acd80f93896f6a6f91dd3bd416fa62d",
+        "role": "E05: прочитанная fixture; отдельный stdout не сохранён",
+        "continuationAction": "read-only; не исполнялся и не изменялся"
+      },
+      {
+        "file": "/tmp/r04-journal-UW87KA/nonutf8.mjs",
+        "bytes": 944,
+        "sha256": "91262715023f6865bebd0824cbdfd838a8545df3a3d4884ecc3e58f4f35769bf",
+        "role": "E07: прочитанная fixture; ошибка создания имени перенесена из Markdown",
+        "continuationAction": "read-only; не исполнялся и не изменялся"
+      },
+      {
+        "file": "/tmp/r04-journal-UW87KA/report-repro.sh",
+        "bytes": 2294,
+        "sha256": "42342b5c699a939f235d04c7b0632e2897cfda6835dbfcaf4be68a53afca05d5",
+        "role": "Воспроизводитель B01 из старого Markdown",
+        "continuationAction": "read-only; не исполнялся и не изменялся"
+      },
+      {
+        "file": "/tmp/r04-journal-UW87KA/sqlite-transaction.html",
+        "bytes": 27068,
+        "sha256": "b65dc308fd9e0ce471844c97366a4f5ad3a1f42833a3b19486ad7d6555a8e24e",
+        "role": "E08/S12: сохранённая публичная первичная страница SQLite",
+        "continuationAction": "read-only; не исполнялся и не изменялся"
+      },
+      {
+        "file": "/tmp/r04-journal-UW87KA/sqlite-pragma.html",
+        "bytes": 139778,
+        "sha256": "b9bcb335ae818497f3fa05114a10492f64f35503f275da2264f2d5d436db3f5d",
+        "role": "E08/S13: сохранённая публичная первичная страница SQLite",
+        "continuationAction": "read-only; не исполнялся и не изменялся"
+      }
+    ],
+    "carriedFacts": {
+      "findings": [
+        "r04-B01",
+        "r04-I01",
+        "r04-A01",
+        "r04-A02",
+        "r04-A03",
+        "r04-U01",
+        "r04-U02"
+      ],
+      "experiments": [
+        "E01",
+        "E02",
+        "E03",
+        "E04",
+        "E05",
+        "E06",
+        "E07",
+        "E08"
+      ],
+      "qualification": "E04/E05/E07 results carried from hash-verified original Markdown, not newly observed; fixture assertions inspected. No missing stdout invented."
+    },
+    "independentlyRechecked": [
+      "MD SHA256 matched retainedEvidence; JSON absence confirmed.",
+      "E01/E02 logs read: 32+15 pass, 0 fail/skip.",
+      "Required docs, key file:line references and counterexamples inspected on study-source.",
+      "Four primary modules match study/publication Git blobs. Dev tracked src/tests/package diff clean.",
+      "B01 reobserved in new E09; ordinary ABORT preserves original error.",
+      "SQLite PRAGMA configuration measured again; retained public primary HTML sections reread offline."
+    ],
+    "added": [
+      "Paired JSON written for the first time; final Markdown explicitly separates provenance/epochs.",
+      "New E09 in fresh /tmp/r04-cont-journal-UKugTj; no prior fixture reused as writable state.",
+      "Post-study 86f5e07 and 3d8ba65 separated from study-source.",
+      "Minor source-range refinements for run-store attempts, retry-reconciliation and compiler-versions; historical cwd and source epochs made explicit."
+    ],
+    "notRepeated": [
+      "47 tests",
+      "SIGKILL crash windows",
+      "WAL reader interleaving",
+      "migration matrix",
+      "non-UTF8 creation failure",
+      "public HTTP requests",
+      "providers/live run"
+    ],
+    "unchangedCoreGitBlobs": {
+      "src/run-store.ts": "98f3ce3892c303201e86eec737494445a9d55456",
+      "src/sqlite.ts": "796cf0e06c337fe7769438bfc13d878be9c607b4",
+      "src/recovery-inspection.ts": "404db6fd705ce31084fb9096db23d97f54bf79ad",
+      "src/recovery-files.ts": "908cf83fca1aa98db026f4f6b7818be89804862c"
+    },
+    "oldWorkspaceOrFixturesModified": false,
+    "neighborReportsRead": false
+  },
+  "coverage": {
+    "primaryModules": [
+      "src/run-store.ts",
+      "src/sqlite.ts",
+      "src/recovery-inspection.ts",
+      "src/recovery-files.ts"
+    ],
+    "supportingModules": [
+      "src/run-controller.ts",
+      "src/run-runtime.ts",
+      "src/workspaces.ts",
+      "src/store.ts",
+      "src/execution-plan.ts",
+      "src/compiler-versions.ts"
+    ],
+    "dimensions": [
+      "transaction atomicity and rollback failures",
+      "WAL setup and snapshots/backup",
+      "owner-token fencing and OS liveness trust boundary",
+      "durable activation/event/history checkpoints",
+      "process-crash recovery",
+      "one-use reconciliation and FS digest freshness",
+      "additive migrations and forward/downgrade boundary",
+      "physical durability limitations"
+    ],
+    "separateGuarantees": [
+      "SQLite transaction atomicity",
+      "Возобновление по checkpoints без неявного replay uncertain effects",
+      "Согласованный SQLite backup не включает FS/workspaces/sessions/skills/external effects"
+    ],
+    "environment": {
+      "node": "v26.8.1",
+      "sqlite": "3.53.4",
+      "platform": "darwin",
+      "arch": "arm64",
+      "localNodeModules": false,
+      "dependenciesUsed": "существующие node_modules разрешённого dev, без установки"
+    },
+    "notTested": [
+      "Node 22.19/Linux",
+      "power loss/OS crash/physical ENOSPC/COMMIT IOERR",
+      "network filesystems",
+      "полный npm test/typecheck",
+      "полная Git crash matrix",
+      "end-to-end restore с внешними артефактами",
+      "заполненный исторический migration corpus/downgrade",
+      "отказ во второй migration transaction и освобождение connection",
+      "нагрузочный рост WAL",
+      "live provider"
+    ],
+    "safety": [
+      "Только временные БД и собственные fixture процессы/репозитории.",
+      "Continuation не запускает supervisor/workflow и не посылает сигналы.",
+      "Секреты/credentials/чужие отчёты не открывались.",
+      "Записаны только два назначенных отчёта в фактическом cwd и новый собственный /tmp fixture.",
+      "Нет реализации, commit/push/checkout/reset, установки пакетов, новых model/provider retries, budgets или approvals."
+    ]
+  },
+  "findings": [
+    {
+      "id": "r04-B01",
+      "classification": "bug",
+      "title": "Вторичный ROLLBACK скрывает исходный отказ хранения",
+      "priority": "P2",
+      "priorityBasis": "Оценка диагностической корректности; частота в эксплуатации не измерена",
+      "confidence": "high",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "locations": [
+        "src/run-store.ts:240-243",
+        "src/run-store.ts:673-679"
+      ],
+      "trigger": "SQLite сама отменяет транзакцию при SQLITE_FULL: fixture ограничивает max_page_count текущим page_count и пытается сохранить output 256 KiB. Это не quota продукта и не заполнение физического диска.",
+      "expected": "Исключение RunStore сохраняет первичный errcode=13 и причину database or disk is full; незавершённые изменения не фиксируются.",
+      "observed": {
+        "directSql": {
+          "errcode": 13,
+          "message": "database or disk is full"
+        },
+        "runStore": {
+          "errcode": 1,
+          "message": "cannot rollback - no transaction is active"
+        },
+        "abortControl": {
+          "errcode": 1811,
+          "message": "r04 injected ABORT"
+        },
+        "activationAndEventsUnchanged": true,
+        "connectionReusableAfterFixtureLimitRemoved": true,
+        "subsequentSuccessEvents": 1,
+        "integrity": "ok",
+        "foreignKeyViolations": 0
+      },
+      "facts": [
+        "catch выполняет database.exec(\"ROLLBACK\") до throw error; исключение cleanup заменяет первичное.",
+        "Новая E09 сравнила полную исходную activation и события после ABORT и обоих FULL-путей.",
+        "Первичный error из completeActivation непосредственно подтверждён исторической E03 и новой E09."
+      ],
+      "inference": "Общий transaction helper потенциально затрагивает другие методы, когда SQLite автоматически отменяет всю транзакцию; непосредственно проверен completeActivation.",
+      "counterEvidence": [
+        {
+          "refs": [
+            "tests/run-store.test.ts:380-402",
+            "tests/attempt-history.test.ts:24-35",
+            "tests/reconciliation.test.ts:76-91"
+          ],
+          "explanation": "Зелёные RAISE(ABORT) тесты оставляют активную транзакцию для явного rollback; это не ветвь auto-rollback. E09 подтвердила различие."
+        },
+        {
+          "refs": [
+            "E03",
+            "E09"
+          ],
+          "explanation": "Частичная фиксация/потеря данных не обнаружена; соединение сохранило работоспособность. Не заявлены corruption или replay внешнего действия."
+        }
+      ],
+      "reproduction": {
+        "command": "node --import tsx --input-type=module <<'NODE'\nimport assert from 'node:assert/strict';\nimport { mkdtemp, rm } from 'node:fs/promises';\nimport { RunStore, activationKey } from './src/run-store.ts';\nconst dir = await mkdtemp('/tmp/r04-full-repro-');\nconst store = new RunStore(dir + '/state.sqlite');\nconst plan = {\n  version: 1, runtimeVersion: 'dynamicwf-runtime-v1', compilerVersion: 'test',\n  source: '', sourceHash: 'source', hash: 'plan', agents: {},\n  workflow: { version: 1, id: 'workflow', name: 'Fixture', revision: 1,\n    entryGraph: 'main', graphs: {} },\n}; // Минимальная fixture низкоуровневого журнала, не план для запуска.\ntry {\n  store.create({ id: 'run', plan, input: null, cwd: dir });\n  const { token } = store.reserveLaunch('run');\n  const context = { scope: ['root'], graphId: 'main', nodeId: 'work', visit: 0 };\n  const key = activationKey(context);\n  store.beginActivation('run', token, context, { kind: 'transform', sideEffect: false });\n  const db = store.database; // Только fixture: TS private, не публичный API.\n  const pages = db.prepare('PRAGMA page_count').get().page_count;\n  db.exec(`PRAGMA max_page_count=${pages}`);\n  const payload = 'x'.repeat(256 * 1024);\n  let direct, wrapped;\n  try {\n    db.exec('BEGIN IMMEDIATE');\n    db.prepare('UPDATE workflow_activations SET output=? WHERE run_id=?')\n      .run(JSON.stringify(payload), 'run');\n    db.exec('COMMIT');\n  } catch (e) { direct = e; }\n  assert.equal(direct.errcode, 13);\n  const events = store.events('run');\n  try { store.completeActivation('run', token, key, payload); }\n  catch (e) { wrapped = e; }\n  assert.equal(wrapped.errcode, 1);\n  assert.match(wrapped.message, /cannot rollback/);\n  assert.equal(store.getActivation('run', key).status, 'running');\n  assert.equal(store.getActivation('run', key).output, undefined);\n  assert.deepEqual(store.events('run'), events);\n  db.exec('PRAGMA max_page_count=100000');\n  store.completeActivation('run', token, key, 'small result');\n  assert.deepEqual(db.prepare('PRAGMA integrity_check').all()\n    .map(r => r.integrity_check), ['ok']);\n  console.log({ direct: direct.message, wrapped: wrapped.message });\n} finally { store.close(); await rm(dir, { recursive: true, force: true }); }\nNODE",
+        "note": "Самодостаточная offline fixture из корня checkout с установленными зависимостями. mkdtemp создаёт новую /tmp/r04-full-repro-*; current-bug assertions намеренно ожидают 1. После исправления ожидать 13. Минимальный plan не предназначен для запуска графа.",
+        "experiments": [
+          "E03",
+          "E09"
+        ]
+      },
+      "recommendation": {
+        "minimumChange": "Сохранить первичное исключение независимо от результата cleanup ROLLBACK; вторичную ошибку хранить отдельно при необходимости. Не добавлять автоматические повторы записей и не полагаться без проверки на новые API Node.",
+        "risk": "Безусловное подавление cleanup failure может спрятать неизвестное состояние соединения; важна отдельная диагностика.",
+        "acceptanceCriteria": [
+          "FULL-проба возвращает первичную причину и errcode=13.",
+          "Состояние и события до/после отказа совпадают.",
+          "RAISE(ABORT) сохраняет свою причину, после восстановления ресурса возможен новый commit.",
+          "Проверить минимальную Node 22.19; application writes не повторяются автоматически."
+        ],
+        "implemented": false
+      },
+      "evidenceSources": [
+        "S04",
+        "S07",
+        "S08",
+        "S12",
+        "S14",
+        "S15"
+      ],
+      "provenance": {
+        "carried": true,
+        "continuationCodeRechecked": true,
+        "continuationReproduced": true
+      }
+    },
+    {
+      "id": "r04-I01",
+      "classification": "idea",
+      "title": "Явная граница совместимости схемы журнала",
+      "confidence": "medium",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "locations": [
+        "src/sqlite.ts:20-22",
+        "src/run-store.ts:223-237",
+        "src/store.ts:6-16",
+        "src/execution-plan.ts:89-95",
+        "src/compiler-versions.ts:1-38"
+      ],
+      "facts": [
+        "Создание таблиц и добавочные миграции RunStore — две отдельные транзакции.",
+        "Миграции проверяют table_info и сериализованы BEGIN IMMEDIATE; отдельного SQL schema version guard в изученном коде нет.",
+        "E04 удалила шесть столбцов и после двух открытий проверила восстановление колонок, сохранение input, FK/integrity.",
+        "Схема плана compiler/runtime не является версией SQL; файл БД может разделяться с DraftStore."
+      ],
+      "inference": "Нынешняя добавочная миграция подтверждена в синтетическом случае; это не контракт произвольного downgrade/будущей несовместимой схемы.",
+      "counterEvidence": [
+        "Повреждение данных при обновлении/понижении не воспроизведено.",
+        "В E04 таблицы receipts/reuse пусты; заполненный исторический корпус не проверен."
+      ],
+      "recommendation": {
+        "minimumChange": "Описать поддержанные направления миграции и добавить заполненные legacy fixtures. Перед первой несовместимой миграцией ввести именованную проверку версии/возможностей совместно с контрактом DraftStore; нынешние данные не переписывать ради идеи.",
+        "risk": "Чрезмерно строгий version guard может отвергать безопасные добавочные поля/старые журналы; глобальный user_version нельзя менять изолированно.",
+        "acceptanceCriteria": [
+          "Сохранены заполненные starts/receipts/reuse/history на поддержанных переходах.",
+          "Повторное и конкурентное открытие идемпотентно.",
+          "Неподдержанная будущая схема отвергается до модификации данных."
+        ],
+        "implemented": false
+      },
+      "experiments": [
+        "E04",
+        "E09"
+      ],
+      "evidenceSources": [
+        "S03",
+        "S04",
+        "S09",
+        "S14",
+        "S15"
+      ],
+      "provenance": {
+        "carried": true,
+        "continuationCodeRechecked": true,
+        "migrationReexecuted": false
+      }
+    },
+    {
+      "id": "r04-A01",
+      "classification": "already-fixed",
+      "subtype": "refutation",
+      "title": "WAL setup и согласованный backup уже имеют защитные контракты",
+      "confidence": "high",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "locations": [
+        "src/sqlite.ts:9-30",
+        "tests/sqlite.test.ts:11-49",
+        "tests/sqlite-backup.test.ts:9-48",
+        "PROJECT_INFO/development.md:187-275"
+      ],
+      "facts": [
+        "Setup задаёт busy timeout до WAL, проверяет WAL для файловой БД, включает FULL/FK, закрывает неудавшееся соединение перед повтором только setup.",
+        "E01: схема откатывается при неверном SQL и открывается после конкурирующей exclusive-транзакции.",
+        "При открытом writer копия одного .sqlite пропускает committed post-checkpoint, хотя integrity_check=ok; node:sqlite.backup через read-only source сохраняет обе строки.",
+        "E05: удержанный reader видит 1 строку, checkpoint PASSIVE log=24/checkpointed=0 при busy=0; после COMMIT видит 9, TRUNCATE возвращает 0/0.",
+        "Документированная процедура backup не запускает controller над источником и не разрешает замену live-журнала."
+      ],
+      "inference": "Неполный PASSIVE при активном читателе — нормальная SQLite snapshot semantics, не потеря committed данных; autocheckpoint 1000 — порог попытки, не верхний предел WAL.",
+      "counterEvidence": [
+        ":memory: не используется как доказательство дисковой durability.",
+        "Сценарий 24 CLI инициализаций из текста run-journal фактически находится tests/store.test.ts:50-75; он прочитан, но не запускался. E01 включал 8 конкурирующих резервирований."
+      ],
+      "recommendation": {
+        "minimumChange": "Изменения поведения не требуются: сохранить различие naive copy/backup и короткие read transactions; не держать snapshot во время долгого файлового сканирования.",
+        "risk": "Упрощение backup до copyFile либо повтор application writes ослабит контракт.",
+        "acceptanceCriteria": [
+          "Backup проверяет известные committed строки, не только integrity.",
+          "E01 и E05 сохраняют ожидаемую семантику."
+        ],
+        "implemented": false
+      },
+      "experiments": [
+        "E01",
+        "E05",
+        "E06",
+        "E09"
+      ],
+      "evidenceSources": [
+        "S01",
+        "S02",
+        "S03",
+        "S07",
+        "S09",
+        "S13",
+        "S14"
+      ],
+      "provenance": {
+        "carried": true,
+        "continuationLogsAndCodeRechecked": true,
+        "walReaderReexecuted": false
+      }
+    },
+    {
+      "id": "r04-A02",
+      "classification": "already-fixed",
+      "subtype": "refutation",
+      "title": "Fencing и атомарные checkpoints действуют",
+      "confidence": "high",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "locations": [
+        "src/run-store.ts:249-252",
+        "src/run-store.ts:319-331",
+        "src/run-store.ts:410-421",
+        "src/run-store.ts:431-500",
+        "src/run-store.ts:673-679",
+        "src/run-controller.ts:229-263"
+      ],
+      "facts": [
+        "reserveLaunch и owned проверяют владельца/статус в write transaction.",
+        "markInterrupted очищает владельца и переводит только running activations, не завершённые.",
+        "E01: один победитель из восьми процессов; десять классов stale-owner writes отвергнуты; неявный replay uncertain side effect запрещён.",
+        "E04: SIGKILL после UPDATE до COMMIT оставляет running и прежние события; SIGKILL после completeActivation оставляет succeeded/output и одно событие даже после повторного открытия.",
+        "Исторический attempt-history test убил собственный fixture supervisor на await, а восстановление не повторило check: файл once, attempt=1."
+      ],
+      "inference": "Атомарность SQLite и fencing подтверждены в перечисленных окнах; это не exactly-once произвольного внешнего API.",
+      "counterEvidence": [
+        "markInterrupted — низкоуровневый API, не доказывающий сам живость ОС; это явно обязанность controller. Прямой вызов с выдуманным доказательством не является контрпримером публичному recovery.",
+        "37ff399 уже хранит supervisor launch provenance и проверяет другую установку; не открывается как новый bug."
+      ],
+      "recommendation": {
+        "minimumChange": "Сохранить fencing и OS identity checks; добавить регрессию auto-rollback из B01 вместо замены модели владения.",
+        "risk": "Heartbeat/таймаут/PID/token по отдельности нельзя трактовать как доказательство смерти и разрешение повторить эффект.",
+        "acceptanceCriteria": [
+          "Stale tokens не меняют журнал.",
+          "Output/event/history сохраняют атомарность.",
+          "Неизвестные эффекты без явного разрешения не повторяются."
+        ],
+        "implemented": false
+      },
+      "experiments": [
+        "E01",
+        "E04",
+        "E09"
+      ],
+      "evidenceSources": [
+        "S02",
+        "S04",
+        "S06",
+        "S07",
+        "S10",
+        "S14",
+        "S15"
+      ],
+      "provenance": {
+        "carried": true,
+        "continuationLogsAndCodeRechecked": true,
+        "crashWindowsReexecuted": false
+      }
+    },
+    {
+      "id": "r04-A03",
+      "classification": "already-fixed",
+      "subtype": "refutation",
+      "title": "Recovery связывает согласованный журнал, файлы и одноразовое решение",
+      "confidence": "high",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "locations": [
+        "src/run-store.ts:469-500",
+        "src/run-store.ts:773-779",
+        "src/run-store.ts:803-852",
+        "src/recovery-inspection.ts:13-35",
+        "src/recovery-files.ts:19-60",
+        "src/recovery-files.ts:64-89",
+        "src/run-controller.ts:282-297",
+        "src/run-runtime.ts:92-101",
+        "src/workspaces.ts:108-151"
+      ],
+      "facts": [
+        "recoveryState читает run/activations/eventSeq/collections в одном BEGIN.",
+        "E04 interleaving: другой connection завершает activation после первого SELECT; текущий snapshot видит старые activation и eventSeq, следующий — новые.",
+        "recoveryCheckpoint включает eventSeq: ответ await меняет его без смены run.updatedAt. Завершённые родители/collections запечатывают точные child scopes, не соседей.",
+        "Контроллер повторяет процессное наблюдение/checkpoint после файлов; recordReconciliation проверяет весь checkpoint в write transaction.",
+        "Retry application, архив и новая попытка атомарны; использованное разрешение не применимо вновь.",
+        "E01/E02 отвергли stale checkpoint/files, подтвердили selected-only supersession, rollback receipt/archive/admission и точную идемпотентную доставку.",
+        "Файловый hash включает имена/тип/mode/байты/link target; regular files открываются O_NOFOLLOW/O_NONBLOCK и сверяются до/после. Git pointers включают linked/common admin dirs и fail closed при повреждении.",
+        "Allocation recovery архивирует и flush-ит registration до удаления; соседняя регистрация сохранена, потерянное дерево с выполненными детьми не пересоздаётся."
+      ],
+      "inference": "Это обнаружение изменений, а не общая FS/SQLite транзакция; цели вложенных symlink и внешние эффекты не покрыты доказательством.",
+      "counterEvidence": [
+        "Пустые blockers не разрешают accept/retry.",
+        "Позднее изменение уже прочитанного файла возможно; повторный digest не блокирует произвольного редактора. Эта граница описана в PROJECT_INFO/reconciliation.md:94-164.",
+        "Успех Git/check fixtures не переносится на live provider."
+      ],
+      "recommendation": {
+        "minimumChange": "Сохранить повторные проверки и one-use identity; не сводить checkpoint к одному timestamp.",
+        "risk": "Опасны ложная гарантия полного FS snapshot или replay после одной успешной инспекции.",
+        "acceptanceCriteria": [
+          "Отрицательные E01/E02 остаются зелёными.",
+          "Архив неизменен; stale данные не допускают accept/retry.",
+          "Проверка receipt не запускает задачу сама по себе."
+        ],
+        "implemented": false
+      },
+      "experiments": [
+        "E01",
+        "E02",
+        "E04"
+      ],
+      "evidenceSources": [
+        "S02",
+        "S04",
+        "S05",
+        "S06",
+        "S08",
+        "S14"
+      ],
+      "provenance": {
+        "carried": true,
+        "continuationLogsCodeAndFixtureRechecked": true,
+        "interleavingReexecuted": false
+      }
+    },
+    {
+      "id": "r04-U01",
+      "classification": "unknown",
+      "title": "Machine/power-loss durability не измерена",
+      "confidence": "unknown",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "locations": [
+        "src/sqlite.ts:18-22"
+      ],
+      "facts": [
+        "E06 и новая E09: WAL, synchronous=2/FULL, FK=1, busy_timeout=5000, autocheckpoint=1000; Darwin fullfsync=0/checkpoint_fullfsync=0.",
+        "SQLite описывает FULL в WAL как ACID, F_FULLFSYNC — отдельный macOS режим. Код не меняет два fullfsync флага."
+      ],
+      "unresolved": [
+        "Power loss/OS crash/накопитель/файловая система не моделировались.",
+        "ENOSPC физического диска и IOERR во время COMMIT/backup не проверены.",
+        "Node 22.19, другие SQLite/OS/сетевые FS не проверены."
+      ],
+      "counterEvidence": [
+        "SIGKILL приложения не моделирует сбой питания/ядра/дискового контроллера.",
+        "Нулевой fullfsync сам по себе не доказывает потерю committed данных."
+      ],
+      "recommendation": {
+        "minimumChange": "Сначала уточнить в документации разницу process-crash и power-loss доказательства; физический fault-injection только в отдельной согласованной одноразовой среде, не пользовательской машине. До результатов не менять PRAGMA.",
+        "risk": "Изменение sync-политики влияет на latency/платформенную совместимость; неподготовленная fault-injection может разрушить данные.",
+        "acceptanceCriteria": [
+          "Зафиксированы известные transaction IDs и образ диска до/после сбоя.",
+          "Проверяются integrity и полнота committed строк.",
+          "Лишь затем принимается решение о sync-настройках."
+        ],
+        "implemented": false
+      },
+      "experiments": [
+        "E04",
+        "E06",
+        "E09"
+      ],
+      "evidenceSources": [
+        "S03",
+        "S13",
+        "S14",
+        "S15"
+      ],
+      "provenance": {
+        "carried": true,
+        "configurationRechecked": true,
+        "powerLossTested": false
+      }
+    },
+    {
+      "id": "r04-U02",
+      "classification": "unknown",
+      "title": "Некорректный UTF-8 в именах на другой POSIX FS",
+      "confidence": "unknown",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "locations": [
+        "src/recovery-files.ts:39-42"
+      ],
+      "facts": [
+        "readdir возвращает имена строками, перед join/lstat/hash.",
+        "Историческая E07 пыталась создать имя artifact- плюс байт ff; по сохранённому Markdown writeFile получил EILSEQ до вызова observeRecoveryFiles. Fixture и её assertions прочитаны при продолжении, stdout не сохранён."
+      ],
+      "hypothesis": "На FS с произвольными байтовыми именами строковое преобразование может потерять identity; для текущей среды это не воспроизведённый bug сканера.",
+      "counterEvidence": [
+        "Отказ создания fixture имени означает, что поведение scanner на таком имени вообще не достигнуто.",
+        "Потеря байтов/digest collision в реальном recovery не заявлена."
+      ],
+      "recommendation": {
+        "minimumChange": "Код пока не менять. В одноразовой поддерживаемой POSIX FS проверить изменение содержимого не-UTF8 имени и два имени с одинаковым replacement отображением; при подтверждении рассмотреть явный отказ либо byte-safe identity.",
+        "risk": "Byte-safe пути влияют на совместимость отображения; без воспроизведения изменение преждевременно.",
+        "acceptanceCriteria": [
+          "Scanner однозначно замечает изменение либо явно отказывает.",
+          "Он не возвращает прежний успешный digest после изменения недоступного через строковую identity файла."
+        ],
+        "implemented": false
+      },
+      "experiments": [
+        "E07"
+      ],
+      "evidenceSources": [
+        "S05",
+        "S14"
+      ],
+      "provenance": {
+        "carried": true,
+        "continuationCodeAndFixtureRechecked": true,
+        "continuationReexecuted": false
+      }
+    }
+  ],
+  "experiments": [
+    {
+      "id": "E01",
+      "phase": "original-study",
+      "execution": "performed-in-original-operation; retained-output-verified-in-continuation",
+      "command": "TMPDIR=/tmp/r04-journal-UW87KA node --import tsx --test --test-concurrency=1 tests/sqlite.test.ts tests/sqlite-backup.test.ts tests/run-store.test.ts tests/recovery-inspection.test.ts tests/attempt-history.test.ts",
+      "workingDirectory": "разрешённый integration-dev при study-source (по старому отчёту)",
+      "result": {
+        "tests": 32,
+        "pass": 32,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "durationMs": 18370.059291
+      },
+      "evidenceFiles": [
+        "/tmp/r04-journal-UW87KA/baseline-tests.tap"
+      ],
+      "limits": "Только временные БД/репозитории и собственный fixture supervisor. Моделей нет. Не весь npm test. Повторно не запускался."
+    },
+    {
+      "id": "E02",
+      "phase": "original-study",
+      "execution": "performed-in-original-operation; retained-output-verified-in-continuation",
+      "command": "TMPDIR=/tmp/r04-journal-UW87KA node --import tsx --test --test-concurrency=1 tests/reconciliation.test.ts tests/retry-reconciliation.test.ts tests/allocation-recovery.test.ts",
+      "workingDirectory": "разрешённый integration-dev при study-source (по старому отчёту)",
+      "result": {
+        "tests": 15,
+        "pass": 15,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "durationMs": 52381.056791
+      },
+      "evidenceFiles": [
+        "/tmp/r04-journal-UW87KA/reconciliation-tests.tap"
+      ],
+      "limits": "Git/check реальные, данные временные; agent checkpoint восстановлен без модельного вызова. Повторно не запускался."
+    },
+    {
+      "id": "E03",
+      "phase": "original-study",
+      "execution": "carried-result; fixture-inspected; behavior-independently-rechecked-by-E09",
+      "command": "node --import tsx --input-type=module < /tmp/r04-journal-UW87KA/sqlite-full.mjs",
+      "result": "Direct SQLITE_FULL=13; completeActivation заменяет на errcode=1/cannot rollback. Activation/events атомарны; следующий commit возможен.",
+      "evidenceFiles": [
+        "/tmp/r04-journal-UW87KA/sqlite-full.mjs",
+        "retained Markdown"
+      ],
+      "limits": "Искусственный SQLite page limit, не физический ENOSPC. Старый stdout не сохранён; новое прямое наблюдение — E09."
+    },
+    {
+      "id": "E04",
+      "phase": "original-study",
+      "execution": "carried-result; retained-assertions-inspected; not-reexecuted",
+      "command": "node --import tsx --input-type=module < /tmp/r04-journal-UW87KA/journal-boundaries.mjs",
+      "result": {
+        "beforeCommitKill": "running и старые events",
+        "afterCommitKill": "succeeded/output, ровно один success event",
+        "reopen": "те же statuses",
+        "interleavedSnapshot": "первое чтение старая activation+eventSeq; следующее новая пара",
+        "additiveMigrations": "шесть колонок восстановлены после двух открытий, input сохранён, integrity/FK пройдены"
+      },
+      "fixtureDesign": [
+        "Два собственных Node-писателя: TEMP BEFORE INSERT event trigger вызывает SQL функцию SIGKILL после UPDATE до COMMIT; второй SIGKILL сразу после возврата completeActivation.",
+        "Interleaving через fixture override первого get: после SELECT другой connection вызывает completeActivation.",
+        "После закрытия store DROP COLUMN для supervisor_launch, start.operation/canonical_request, receipt.workspace_digest/admitted, reused.producer_schema_digest. Два новых открытия."
+      ],
+      "evidenceFiles": [
+        "/tmp/r04-journal-UW87KA/journal-boundaries.mjs",
+        "retained Markdown"
+      ],
+      "limits": "Отдельного stdout нет; результат перенесён из хеш-проверенного MD. Не power-loss; receipt/reuse таблицы пусты, не полный исторический migration corpus."
+    },
+    {
+      "id": "E05",
+      "phase": "original-study",
+      "execution": "carried-result; retained-assertions-inspected; not-reexecuted",
+      "command": "node --import tsx --input-type=module < /tmp/r04-journal-UW87KA/wal-reader.mjs",
+      "result": {
+        "held": {
+          "busy": 0,
+          "log": 24,
+          "checkpointed": 0
+        },
+        "released": {
+          "busy": 0,
+          "log": 0,
+          "checkpointed": 0
+        },
+        "oldSnapshotRows": 1,
+        "newSnapshotRows": 9
+      },
+      "fixtureDesign": "Writer wal_autocheckpoint=1, baseline+TRUNCATE; read-only reader BEGIN/SELECT; восемь inserts по 4096 байт; PASSIVE до reader COMMIT и TRUNCATE после.",
+      "evidenceFiles": [
+        "/tmp/r04-journal-UW87KA/wal-reader.mjs",
+        "retained Markdown"
+      ],
+      "limits": "Отдельного stdout нет; результат перенесён. Контролируемый snapshot, не нагрузочный benchmark и не верхний лимит WAL."
+    },
+    {
+      "id": "E06",
+      "phase": "original-study",
+      "execution": "carried-result; configuration-rechecked-by-E09",
+      "command": "node --import tsx --input-type=module; временная БД через openWorkflowDatabase, SELECT sqlite_version() и PRAGMA journal_mode/synchronous/foreign_keys/busy_timeout/wal_autocheckpoint/fullfsync/checkpoint_fullfsync/user_version/application_id",
+      "result": {
+        "node": "v26.8.1",
+        "sqlite": "3.53.4",
+        "platform": "darwin",
+        "arch": "arm64",
+        "journal_mode": "wal",
+        "synchronous": 2,
+        "foreign_keys": 1,
+        "busy_timeout": 5000,
+        "wal_autocheckpoint": 1000,
+        "fullfsync": 0,
+        "checkpoint_fullfsync": 0,
+        "user_version": 0,
+        "application_id": 0
+      },
+      "limits": "Настройки данной сборки, не измерение физической durability."
+    },
+    {
+      "id": "E07",
+      "phase": "original-study",
+      "execution": "carried-incomplete-probe; fixture-inspected; not-reexecuted",
+      "command": "node /tmp/r04-journal-UW87KA/nonutf8.mjs",
+      "result": "Exit 1/EILSEQ при writeFile имени с байтом ff до scanner (по retained MD).",
+      "evidenceFiles": [
+        "/tmp/r04-journal-UW87KA/nonutf8.mjs",
+        "retained Markdown"
+      ],
+      "limits": "Гипотеза r04-U02 не воспроизведена; отказ среды, не установленный bug scanner. Старый script импортирует старый worktree; не запускался заново."
+    },
+    {
+      "id": "E08",
+      "phase": "original-study",
+      "execution": "historical-public-curl; retained-HTML-read-offline-in-continuation",
+      "command": "curl -fsSL --max-time 25 https://www.sqlite.org/lang_transaction.html; curl -fsSL --max-time 25 https://www.sqlite.org/pragma.html",
+      "accessDate": "2026-09-20",
+      "result": "Прочитаны первичные документы automatic rollback, FULL/F_FULLFSYNC, autocheckpoint/checkpoint.",
+      "evidenceFiles": [
+        "/tmp/r04-journal-UW87KA/sqlite-transaction.html",
+        "/tmp/r04-journal-UW87KA/sqlite-pragma.html"
+      ],
+      "limits": "В продолжении новой сети не было. max-time — параметр исторического исследовательского curl, не runtime/model policy."
+    },
+    {
+      "id": "C01",
+      "phase": "continuation",
+      "execution": "performed",
+      "command": "shasum -a 256 <старый MD> <preservedActionEvidence>; Python hashlib/read_text собственных retained файлов; regex-проверка file:line ссылок старого Markdown",
+      "result": {
+        "oldMarkdownBytes": 41419,
+        "oldMarkdownSha256Matches": true,
+        "oldJsonExists": false,
+        "preservedCommands": 18,
+        "verifiedRetainedEvidenceFiles": 9,
+        "oldMarkdownFileLineReferences": 52,
+        "invalidReferenceBounds": 0,
+        "historicalTestsPass": 47
+      },
+      "limits": "Список команд без stdout не считается самостоятельным доказательством успеха; только два test logs дают сохранённые итоги. Новые stdout E04/E05 не заявляются."
+    },
+    {
+      "id": "C02",
+      "phase": "continuation",
+      "execution": "performed",
+      "command": "git rev-parse HEAD; git log e15bc407..3d8ba65; git diff e15bc407 3d8ba65 -- <профильные src/tests>; git rev-parse <revision>:<file>; git -C <разрешённый dev> diff --name-only HEAD -- src tests package.json package-lock.json",
+      "result": "Текущий worktree=study-source; dev=publicationRevision; tracked dev diff пуст. Четыре главных journal/recovery модуля одинаковы; callers и восемь профильных tests без изменений. Workspaces isolation вынесена, архивирование прежнее.",
+      "limits": "Publication revision не подменяет study-source. История исправлений authoring/reviewer binding учтена как контекст, не отдельное повторное исследование."
+    },
+    {
+      "id": "E09",
+      "phase": "continuation",
+      "execution": "performed",
+      "command": "TMPDIR=/tmp/r04-cont-journal-UKugTj TSX_DISABLE_CACHE=1 node --import tsx --input-type=module < /tmp/r04-cont-journal-UKugTj/full-with-abort-control.mjs",
+      "workingDirectory": "разрешённый integration-dev",
+      "executionRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "sameStudiedLowLevelModules": true,
+      "fixture": {
+        "file": "/tmp/r04-cont-journal-UKugTj/full-with-abort-control.mjs",
+        "sha256": "bace31745a8625c9324f8a12fc4691081c73e8fac85cea919bcaaf20c80dba4c",
+        "design": "B01 fixture + TEMP trigger RAISE(ABORT) before page limit, полное сравнение activation/events, PRAGMA config, один success event и FK/integrity после снятия page limit."
+      },
+      "result": {
+        "exitCode": 0,
+        "abortErrcode": 1811,
+        "directFullErrcode": 13,
+        "wrappedFullErrcode": 1,
+        "wrappedMessage": "cannot rollback - no transaction is active",
+        "pageCount": 56,
+        "activationAndEventsUnchanged": true,
+        "connectionRecovered": true,
+        "successEvents": 1,
+        "integrity": "ok",
+        "foreignKeyViolations": 0,
+        "node": "v26.8.1",
+        "sqlite": "3.53.4",
+        "platform": "darwin",
+        "arch": "arm64",
+        "journal_mode": "wal",
+        "synchronous": 2,
+        "foreign_keys": 1,
+        "busy_timeout": 5000,
+        "wal_autocheckpoint": 1000,
+        "fullfsync": 0,
+        "checkpoint_fullfsync": 0,
+        "user_version": 0,
+        "application_id": 0
+      },
+      "limits": "Только новая собственная временная БД; не RunController/workflow/supervisor/provider. На publication дерево выполнялся неизменённый journal API без compilation/authoring."
+    }
+  ],
+  "alreadyFixedAndRefutations": {
+    "studySourceFindingIds": [
+      "r04-A01",
+      "r04-A02",
+      "r04-A03"
+    ],
+    "notReopened": [
+      "skill delivery",
+      "async panel/control/await ownership",
+      "wait disclosure/caret/scroll"
+    ],
+    "postStudyAlreadyFixed": [
+      {
+        "id": "r04-PS01",
+        "classification": "already-fixed",
+        "commit": "86f5e07",
+        "topic": "Ранняя authoring parallel-isolation validation",
+        "basis": "workflow input + inspected commit stat and relevant workspaces delta",
+        "countedInStudyFindings": false,
+        "recommendation": "Не внедрять повторно; отдельный контекст публикации."
+      },
+      {
+        "id": "r04-PS02",
+        "classification": "already-fixed",
+        "commit": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+        "topic": "Документация reviewer artifact revision binding",
+        "basis": "inspected git show для SKILL.md и references/authoring.md",
+        "countedInStudyFindings": false,
+        "recommendation": "Не внедрять повторно; нет изменений журналирования."
+      }
+    ]
+  },
+  "sources": [
+    {
+      "id": "S01",
+      "kind": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "refs": [
+        "AGENTS.md",
+        "PROJECT_INFO/architecture.md",
+        "PROJECT_INFO/development.md:1-40,78-91,187-275",
+        "PROJECT_INFO/known-issues.md:5-103"
+      ],
+      "purpose": "Обязательные инварианты, WAL backup, границы ранее исправленного; прочитано при продолжении."
+    },
+    {
+      "id": "S02",
+      "kind": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "refs": [
+        "PROJECT_INFO/run-journal.md:9-119,180-224",
+        "PROJECT_INFO/reconciliation.md:16-258,282-310"
+      ],
+      "purpose": "Владение, checkpoints, recovery/files, explicit one-use решения, crash windows; прочитано при продолжении."
+    },
+    {
+      "id": "S03",
+      "kind": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "refs": [
+        "src/sqlite.ts:1-33",
+        "src/store.ts:1-17"
+      ],
+      "purpose": "WAL/FULL/FK/setup retry scope и общая БД DraftStore."
+    },
+    {
+      "id": "S04",
+      "kind": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "refs": [
+        "src/run-store.ts:95-253,319-500,595-619,673-679,758-852,1084-1131"
+      ],
+      "purpose": "Схема, transaction, fencing, архивы, snapshot, one-use decisions/continuation fence. Целиком прочитан по исходному отчёту, указанные диапазоны перепроверены."
+    },
+    {
+      "id": "S05",
+      "kind": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "refs": [
+        "src/recovery-inspection.ts:1-114",
+        "src/recovery-files.ts:1-89"
+      ],
+      "purpose": "Прочитаны целиком: blockers/checkpoint/roots/files/admin directories."
+    },
+    {
+      "id": "S06",
+      "kind": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "refs": [
+        "src/run-controller.ts:89-164,229-354",
+        "src/run-runtime.ts:82-109,173-214,275-285,348-357",
+        "src/workspaces.ts:108-151"
+      ],
+      "purpose": "Caller trust, повторная проверка, process-group boundary, архив до удаления registration."
+    },
+    {
+      "id": "S07",
+      "kind": "repository-tests",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "refs": [
+        "tests/sqlite.test.ts:11-49",
+        "tests/sqlite-backup.test.ts:9-48",
+        "tests/run-store.test.ts:22-439",
+        "tests/attempt-history.test.ts:24-115"
+      ],
+      "purpose": "Выполнены в E01, retained log прочитан; ключевые assertions перепроверены."
+    },
+    {
+      "id": "S08",
+      "kind": "repository-tests",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "refs": [
+        "tests/recovery-inspection.test.ts:17-120",
+        "tests/reconciliation.test.ts:56-201",
+        "tests/retry-reconciliation.test.ts:12-78",
+        "tests/allocation-recovery.test.ts:29-120"
+      ],
+      "purpose": "Выполнены E01/E02; свежие проверки кода выборочные для reconciliation, целые профильные negative paths прочитаны."
+    },
+    {
+      "id": "S09",
+      "kind": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "refs": [
+        "src/compiler-versions.ts:1-38",
+        "src/execution-plan.ts:88-95",
+        "tests/store.test.ts:50-75"
+      ],
+      "purpose": "Version плана не SQL version. 24-client fixture найдена и прочитана, не запускалась."
+    },
+    {
+      "id": "S10",
+      "kind": "git-history",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "commands": [
+        "git log -15 --oneline",
+        "git log -- src/run-store.ts src/sqlite.ts src/recovery-inspection.ts src/recovery-files.ts tests/sqlite-backup.test.ts",
+        "git show --stat 37ff399",
+        "git log -5 --oneline -- src/sqlite.ts"
+      ],
+      "commits": [
+        "50a80cd",
+        "067f128",
+        "d93d95f",
+        "6f67130",
+        "37ff399"
+      ],
+      "purpose": "История setup/recovery/one-use/allocation/provenance, не замена проверке текущего кода."
+    },
+    {
+      "id": "S11",
+      "kind": "offline-fixtures",
+      "experiments": [
+        "E03",
+        "E04",
+        "E05",
+        "E06",
+        "E07"
+      ],
+      "purpose": "Исторические собственные fixtures и результаты с явным уровнем переноса."
+    },
+    {
+      "id": "S12",
+      "kind": "public-primary",
+      "urls": [
+        "https://www.sqlite.org/lang_transaction.html#response_to_errors_within_a_transaction"
+      ],
+      "accessDate": "2026-09-20",
+      "accessMethod": "historical bash/curl; retained HTML read offline in continuation",
+      "purpose": "Automatic rollback SQLITE_FULL/IOERR/INTERRUPT/NOMEM; повторный ROLLBACK может завершиться ошибкой без дополнительного вреда."
+    },
+    {
+      "id": "S13",
+      "kind": "public-primary",
+      "urls": [
+        "https://www.sqlite.org/pragma.html#pragma_synchronous",
+        "https://www.sqlite.org/pragma.html#pragma_fullfsync",
+        "https://www.sqlite.org/pragma.html#pragma_wal_autocheckpoint",
+        "https://www.sqlite.org/pragma.html#pragma_wal_checkpoint"
+      ],
+      "accessDate": "2026-09-20",
+      "accessMethod": "historical bash/curl; retained HTML read offline in continuation",
+      "purpose": "FULL/WAL versus physical durability, F_FULLFSYNC, PASSIVE checkpoint и autocheckpoint threshold."
+    },
+    {
+      "id": "S14",
+      "kind": "retained-own-evidence",
+      "markdownSha256": "b83ee138f0e39ac64a6b9939f613bc5650cc1c5348d04748f42b5e8dd2c63e5c",
+      "actionsSha256": "e036f3f8477e220b83700c19888562a6ead8f813cbfba8ebca6ab6b1f805650f",
+      "purpose": "Собственный неполный пакет предыдущей failed операции, не ранее успешный tool result. Логи/fixtures хешированы отдельно."
+    },
+    {
+      "id": "S15",
+      "kind": "new-offline-experiment",
+      "experiment": "E09",
+      "fixtureSha256": "bace31745a8625c9324f8a12fc4691081c73e8fac85cea919bcaaf20c80dba4c",
+      "purpose": "Независимое новое прямое наблюдение B01 и контрдоказательство ABORT, конфигурация/целостность."
+    },
+    {
+      "id": "S16",
+      "kind": "post-study-context",
+      "revision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "commands": [
+        "git log e15bc407..3d8ba65",
+        "git diff e15bc407 3d8ba65 -- <профильные src/tests>",
+        "git show --stat 86f5e07",
+        "git show 3d8ba65 -- skills/dynamic-workflows/SKILL.md skills/dynamic-workflows/references/authoring.md"
+      ],
+      "purpose": "Отдельный контекст уже внесённых ранней isolation validation и reviewer binding docs."
+    }
+  ],
+  "unknowns": {
+    "findingIds": [
+      "r04-U01",
+      "r04-U02"
+    ],
+    "additionalCoverageGaps": [
+      "Нет fault injection отказа второй migration transaction с проверкой освобождения connection. Это непроверенный сценарий, не утверждение resource leak.",
+      "E04 не моделирует population всех исторических SQL схем; E01/E02 не доказывают весь процессный crash-matrix.",
+      "Чтение file digest не замораживает FS и не сертифицирует external effects."
+    ],
+    "proposedOnly": [
+      "Одноразовая power-loss среда с известными transaction IDs и проверкой полноты.",
+      "Поддерживаемая POSIX FS с не-UTF8 byte names.",
+      "Минимальная Node 22.19 и заполненные legacy migration fixtures."
+    ]
+  },
+  "evidenceInterpretation": {
+    "facts": "Прямо прочитанный код, сохранённые test logs и новый E09 отделены от результатов переноса.",
+    "inference": "Обобщения transaction helper/миграций ограничены указанными триггерами.",
+    "noLiveProviderClaim": true,
+    "hashProtocol": "Окончательные SHA256 обоих файлов и artifactRevision=sha256:<JSON SHA256> передаются в финальном tool result, не самоссылкой внутри JSON."
+  }
+}

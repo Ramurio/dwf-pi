@@ -1,0 +1,238 @@
+{
+  "metadata": {
+    "id": "c08",
+    "topic": "Независимое evidence-review r15/r16",
+    "date": "2026-09-20",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "artifactRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "acceptanceCriteriaRevision": "dwf-astra-research-evidence-v1",
+    "reviewedMaterialDigest": "sha256:51d34cb96d11e51b2635051b95f421c9626a0bb3fa07b1fae43527dce0f08d7a"
+  },
+  "status": "complete",
+  "decision": "approve",
+  "reviewedMaterialDigest": "sha256:51d34cb96d11e51b2635051b95f421c9626a0bb3fa07b1fae43527dce0f08d7a",
+  "reviewedResearchIds": [
+    "r15",
+    "r16"
+  ],
+  "reviewedArtifactRevisions": [
+    "sha256:881177e63b9229ab15667a45b4f2782025b76b4340aea00faf6e98e632d70661",
+    "sha256:7ed9c5525994fb484d2d0a27a489d66d5720a3f2a81de28cbefa499361bbfe2f"
+  ],
+  "inputVerification": {
+    "r15": {
+      "status": "succeeded",
+      "value": {
+        "result": {
+          "status": "complete",
+          "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+          "reportMd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/a37c374d6b8793a4269c15969e9cebccd609c4f624fe712d7e4ceef4333a43b3/research/2026-09-20-astra-max/r15-testing-fault-injection.md",
+          "reportJson": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/a37c374d6b8793a4269c15969e9cebccd609c4f624fe712d7e4ceef4333a43b3/research/2026-09-20-astra-max/r15-testing-fault-injection.json",
+          "reportSha256": {
+            "markdown": "bfca53758219b10c41b99da7a1b07f45f6c82946cf2c99f1f6f2d4f68c8fbc6c",
+            "json": "881177e63b9229ab15667a45b4f2782025b76b4340aea00faf6e98e632d70661"
+          },
+          "summary": "Пакет перенесён с provenance и проверен: 1 дефект тестового harness, 0 доказанных продуктовых багов. 121 исторический pass подтверждён сохранёнными логами; новых тестовых запусков нет.",
+          "blockers": [],
+          "researchId": "r15",
+          "artifactRevision": "sha256:881177e63b9229ab15667a45b4f2782025b76b4340aea00faf6e98e632d70661",
+          "findingCount": 5
+        },
+        "workspace": {
+          "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/a37c374d6b8793a4269c15969e9cebccd609c4f624fe712d7e4ceef4333a43b3",
+          "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/a37c374d6b8793a4269c15969e9cebccd609c4f624fe712d7e4ceef4333a43b3",
+          "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+          "head": "becb78d0e83fee54d50001771447d2cd091a2912"
+        }
+      }
+    },
+    "r16": {
+      "status": "succeeded",
+      "value": {
+        "result": {
+          "status": "complete",
+          "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+          "reportMd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/945bd8a5705082c2160ee88810e3b2b413c4321de606d2c2540db0a5697b02cb/research/2026-09-20-astra-max/r16-packaging-onboarding.md",
+          "reportJson": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/945bd8a5705082c2160ee88810e3b2b413c4321de606d2c2540db0a5697b02cb/research/2026-09-20-astra-max/r16-packaging-onboarding.json",
+          "reportSha256": {
+            "markdown": "fe6f117918f28f998debddb0f305546554c0a56d38823b7fed9773010fa59b7e",
+            "json": "7ed9c5525994fb484d2d0a27a489d66d5720a3f2a81de28cbefa499361bbfe2f"
+          },
+          "summary": "Полный пакет r16 восстановлен с provenance. Сохранены 5 находок: hardlink bug helper, идея диагностики SDK patch, unknown clean install и 2 already-fixed. Перепроверены хеши, ссылки, сохранённые результаты 106 тестов и fixtures без повторного исполнения. Post-study исправления отмечены отдельно.",
+          "blockers": [],
+          "researchId": "r16",
+          "artifactRevision": "sha256:7ed9c5525994fb484d2d0a27a489d66d5720a3f2a81de28cbefa499361bbfe2f",
+          "findingCount": 5
+        },
+        "workspace": {
+          "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/945bd8a5705082c2160ee88810e3b2b413c4321de606d2c2540db0a5697b02cb",
+          "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/945bd8a5705082c2160ee88810e3b2b413c4321de606d2c2540db0a5697b02cb",
+          "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+          "head": "5e5e1833a4ae2cecd335ab73ab20edc259f012ec"
+        }
+      }
+    }
+  },
+  "coverage": [
+    "Два завершённых producer пакета и обе пары SHA",
+    "10 авторских находок; оба bug воспроизведены с контрконтролями",
+    "Код/test oracle, SDK delivery/patch, UI mock boundary, lock/setup/doctor"
+  ],
+  "findings": [
+    {
+      "id": "C08-01",
+      "authorFindingId": "R15-001",
+      "classification": "bug",
+      "assessment": "confirmed",
+      "evidence": "tests/pi-worker.test.ts:362-382; src/process-client.ts:54-65",
+      "conclusion": "Независимый повтор трёх инъекций дал exit 1/1/0. Drain-контроль: code=130, stdout ready → ready,error; stderr marker false → true. Дефект только oracle теста, не production settlement и не объяснение исторического timeout."
+    },
+    {
+      "id": "C08-02",
+      "authorFindingId": "R15-002",
+      "classification": "idea",
+      "assessment": "confirmed",
+      "evidence": "tests/graph-view-observation.test.ts:31-93,120-131; tests/graph-transition-scope.test.ts:114-135",
+      "conclusion": "Fake DOM не ограничивает scroll, focus задаётся вручную. Настоящий browser harness существует для другого сценария; отсутствие native await проверки не является доказанным UI bug."
+    },
+    {
+      "id": "C08-03",
+      "authorFindingId": "R15-003",
+      "classification": "unknown",
+      "assessment": "unknown",
+      "evidence": "tests/run-controller.test.ts:445-452; PROJECT_INFO/known-issues.md:69-97",
+      "conclusion": "Watchdog SIGKILL существует, close сохраняет только code. Причина исторического null/timeout не установлена и в этом ревью."
+    },
+    {
+      "id": "C08-04",
+      "authorFindingId": "R15-004",
+      "classification": "already-fixed",
+      "assessment": "confirmed",
+      "evidence": "src/catalog.ts:31-35; src/pi-worker.ts:112-115,165-173,206-209; tests/pi-worker.test.ts:385-415",
+      "conclusion": "Guard reader и точность frozen loader подтверждены кодом; четыре SDK read/bash round trip повторно прошли."
+    },
+    {
+      "id": "C08-05",
+      "authorFindingId": "R15-005",
+      "classification": "already-fixed",
+      "assessment": "confirmed",
+      "evidence": "src/graph-view/app.js:484-507,1162-1173,1450-1482,1515-1579",
+      "conclusion": "Visit/request guards и восстановление disclosure/selection/scroll имеются. Целевые VM editor regressions прошли; native layout не проверялся."
+    },
+    {
+      "id": "C08-06",
+      "authorFindingId": "R16-B01",
+      "classification": "bug",
+      "assessment": "confirmed",
+      "evidence": "skills/dynamic-workflows/recipes/implementation-review/instantiate.mjs:24-27,50-57",
+      "conclusion": "Повтор в новой /tmp/c08 fixture: exit 0, sourceChanged=true, sourceId=r16_changed. Контроли: fresh exit 0/source unchanged; symlink exit 1/source unchanged. Directory realpath и symlink guard не исключают общий inode hardlink; writeFileSync изменяет source."
+    },
+    {
+      "id": "C08-07",
+      "authorFindingId": "R16-I01",
+      "classification": "idea",
+      "assessment": "confirmed",
+      "evidence": "scripts/setup.ts:30-34; src/doctor.ts:59-90; scripts/apply-sdk-bash-signal.mjs:23-71",
+      "conclusion": "В setup/doctor нет patch hash check, но postinstall уже fail-closed. Предложение read-only диагностики обосновано как идея, не как неисправная стандартная установка."
+    },
+    {
+      "id": "C08-08",
+      "authorFindingId": "R16-U01",
+      "classification": "unknown",
+      "assessment": "unknown",
+      "evidence": "package-lock.json:1480-1550; scripts/sdk-clean-import.mjs:17-25",
+      "conclusion": "Независимо подсчитаны 361 package entries и 356 integrity. SDK probe использует отдельный npm install, не project lock. Fresh install не запускался; отсутствие integrity не доказывает компрометацию или ошибку npm."
+    },
+    {
+      "id": "C08-09",
+      "authorFindingId": "R16-F01",
+      "classification": "already-fixed",
+      "assessment": "confirmed",
+      "evidence": "scripts/apply-sdk-bash-signal.mjs:23-71; tests/bash-signal.test.ts:14-87",
+      "conclusion": "Installer проверяет версию/realpath, все input/staged hashes до installed writes. Null exit regression повторно прошёл. Сохранённые r16 test logs/probe совпали по SHA; power-loss atomicity не доказана."
+    },
+    {
+      "id": "C08-10",
+      "authorFindingId": "R16-F02",
+      "classification": "already-fixed",
+      "assessment": "confirmed",
+      "evidence": "src/catalog.ts:31-35; src/pi-worker.ts:112-115,165-173; tests/pi-worker.test.ts:385-415",
+      "conclusion": "Та же доказанная доставка, что R15-004. Это дубль между тематическими отчётами, не дополнительный независимый продуктовый дефект; live качество применения skill не установлено."
+    }
+  ],
+  "experiments": [
+    {
+      "id": "C08-E01",
+      "command": "python3: SHA256 четырёх producer files до чтения; git log -5; чтение обязательных документов и профильного кода",
+      "outcome": "Обе оболочки succeeded/result complete; четыре SHA совпали. HEAD соответствует study-source.",
+      "limits": "Snapshot heads взяты из supplied metadata, не заменяют sourceRevision."
+    },
+    {
+      "id": "C08-E02",
+      "command": "node /tmp/c08-probes-j4e5b93x/hardlink.mjs \"$PWD/skills/dynamic-workflows/recipes/implementation-review\" /tmp/c08-probes-j4e5b93x; отдельные fresh/symlink controls",
+      "outcome": "Hardlink 0/changed; fresh 0/unchanged; symlink 1/unchanged",
+      "limits": "Только новые копии рецепта; fixture script взят из проверенного R16-B01 и прочитан до запуска."
+    },
+    {
+      "id": "C08-E03",
+      "command": "В разрешённом dev: R15_FAULT=$mode NODE_OPTIONS=--require=/tmp/c08-probes-j4e5b93x/r15-pipe-order.cjs node --import tsx --test --test-name-pattern=\"$pat\" tests/pi-worker.test.ts; modes stdout-late/stderr-immediate/stderr-late; затем оба r15-pipe-control.mjs",
+      "outcome": "Runner exit 1,1,0; оба drain-controls exit 0/code130 и полный поздний pipe",
+      "limits": "Fixture извлечена из reproductionFixtures JSON после чтения. Synthetic marker и искусственное удержание reader; не естественная частота и не provider call."
+    },
+    {
+      "id": "C08-E04",
+      "command": "node --import tsx --test --test-concurrency=1 --test-name-pattern='frozen skill from|inaccessible frozen skills|snapshot updates keep|wait.*disclosure|unknown null exit' tests/pi-worker.test.ts tests/graph-view-observation.test.ts tests/bash-signal.test.ts",
+      "outcome": "9 pass, 0 fail, 0 skip",
+      "limits": "Существующие зависимости dev; installer tests не запускались. Семь ключевых code/test файлов побайтно сравнены с worktree: равны. Не полный suite и не native browser/live provider."
+    },
+    {
+      "id": "C08-E05",
+      "command": "Python lock count; SHA256 retained r16 results.tap/signal.tap/skill.tap/pack.json/probe.mjs",
+      "outcome": "361/356; все пять сохранённых SHA совпали",
+      "limits": "Исторические 121/106 не объявляются новыми test runs; весь исторический пакет повторно не исполнялся."
+    }
+  ],
+  "alreadyFixedAndRefutations": [
+    "Skill delivery и await UI не переоткрываются.",
+    "R15-001 не доказывает production cancellation bug или причину исторических timeout.",
+    "R15-004 и R16-F02 — один already-fixed механизм.",
+    "Post-study 86f5e07 authoring isolation и 3d8ba65 reviewer binding относятся к публикации отдельно; повторная реализация не предлагается."
+  ],
+  "unknowns": [
+    "Fresh install/minimum Node/Linux, естественная частота flakes, native DOM await и live provider остаются непроверенными.",
+    "Исторические результаты рассматриваются как provenance evidence, не как новые исполнения c08."
+  ],
+  "recommendations": [
+    {
+      "finding": "R15-001",
+      "minimalChange": "Только test settlement helper: exit/error и drain обоих pipes, listeners до действия.",
+      "risk": "Ожидание лишь close или лишь end может зависнуть.",
+      "acceptance": "stdout-late проходит; оба stderr marker случая проваливаются; без marker проходит; exit без close завершается."
+    },
+    {
+      "finding": "R16-B01",
+      "minimalChange": "Preflight всех output файлов: отказ при nlink > 1 до записи.",
+      "risk": "Отказ легальным hardlinked output вне source.",
+      "acceptance": "Hardlink отвергнут без изменения source; fresh/обычный output работают, symlink отказ сохранён."
+    }
+  ],
+  "sources": [
+    "AGENTS.md",
+    "PROJECT_INFO/architecture.md",
+    "PROJECT_INFO/development.md",
+    "PROJECT_INFO/known-issues.md",
+    "PROJECT_INFO/models-and-setup.md",
+    "tests/pi-worker.test.ts:362-382; src/process-client.ts:54-65",
+    "tests/graph-view-observation.test.ts:31-93,120-131; tests/graph-transition-scope.test.ts:114-135",
+    "tests/run-controller.test.ts:445-452; PROJECT_INFO/known-issues.md:69-97",
+    "src/catalog.ts:31-35; src/pi-worker.ts:112-115,165-173,206-209; tests/pi-worker.test.ts:385-415",
+    "src/graph-view/app.js:484-507,1162-1173,1450-1482,1515-1579",
+    "skills/dynamic-workflows/recipes/implementation-review/instantiate.mjs:24-27,50-57",
+    "scripts/setup.ts:30-34; src/doctor.ts:59-90; scripts/apply-sdk-bash-signal.mjs:23-71",
+    "package-lock.json:1480-1550; scripts/sdk-clean-import.mjs:17-25",
+    "scripts/apply-sdk-bash-signal.mjs:23-71; tests/bash-signal.test.ts:14-87",
+    "src/catalog.ts:31-35; src/pi-worker.ts:112-115,165-173; tests/pi-worker.test.ts:385-415"
+  ],
+  "blockers": [],
+  "limits": "Approve означает достоверность классификации/evidence, не обязательность внедрения идей. Историческое имя astra-max сохранено; режим исторических исследований не переименован, модельных вызовов c08 нет."
+}

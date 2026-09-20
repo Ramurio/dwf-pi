@@ -1,0 +1,300 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "researchId": "r05",
+    "topic": "Однократность, идемпотентность и continuation",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "date": "2026-09-20",
+    "timezone": "UTC",
+    "language": "ru",
+    "sourceWorkingDirectory": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/481943797181ce2546f5ae674f7e93e931b5ae2bc839512d37af8dbb2a996a3c",
+    "testWorkingDirectory": "/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+    "testCheckoutRevisionVerified": true,
+    "nodeVersion": "v26.8.1",
+    "dependencyReason": "В worktree нет node_modules; использованы существующие зависимости разрешённого dev с той же ревизией.",
+    "independentResearch": true,
+    "otherResearcherReportsRead": false,
+    "webAccessUsed": false,
+    "liveProvidersUsed": false,
+    "sourceChanges": false,
+    "packagesInstalled": false
+  },
+  "status": "complete",
+  "summary": {
+    "text": "Воспроизведены две ошибки на стыке идемпотентной доставки и continuation: повтор исходного start после fence ошибочно отклоняется; повтор continuation после commit до reserve не завершает первоначальный запуск. Повторных внешних записей не обнаружено. Подтверждены исправления retry/reconciliation и stale waits. Смешанные effects в continuation остаются unknown по достижимости штатным графом.",
+    "findingCount": 5,
+    "byClassification": { "bug": 2, "idea": 0, "unknown": 1, "already-fixed": 2 },
+    "repositoryTests": { "passed": 75, "failed": 0, "skippedInSelectedRuns": 0, "fullSuite": false },
+    "customProbe": { "scenariosPerRun": 3, "runs": 2, "allAssertionsPassed": true, "additionalHelperRuns": 1 }
+  },
+  "coverage": [
+    {
+      "area": "Prepared identity и дедупликация доставки",
+      "observed": "Prepared identity связывает planHash и канонический cwd. Start key уникален в журнале; создание run, key и run.created транзакционно. Конкурентные доставки создали один run и один файловый эффект.",
+      "boundaries": "Содержимое cwd не заморожено; другой ключ или запуск без ключа — новое намерение. R05-B01 нарушает только возврат существующего источника после continuation.",
+      "sources": ["src/prepared-plans.ts:23-52", "src/run-store.ts:145-148", "src/run-store.ts:240-290", "tests/prepared-start.test.ts:99-180"]
+    },
+    {
+      "area": "Начальный запуск и create/reserve/spawn",
+      "observed": "Owner reservation атомарна; повтор prepared-start закрывает create-gap, не выполняя resume interrupted/paused/terminal. У continuation этот путь отсутствует.",
+      "boundaries": "Дедупликация run не обеспечивает продвижение очереди после исчезновения первого отправителя.",
+      "sources": ["src/run-controller.ts:114-127", "src/run-controller.ts:193-231", "src/service.ts:274-282", "src/run-store.ts:319-332"]
+    },
+    {
+      "area": "Operation records и unknown outcome",
+      "observed": "Intent сохраняется до IPC, reservation до spawn, PID до stdin. В R05-E03 реальная запись пережила отказ SQLite success-checkpoint; failed/unknown заблокировал неявный повтор.",
+      "boundaries": "Intent/settled/PID не являются квитанцией внешнего сервиса. Локальный check не доказывает exactly-once удалённого действия.",
+      "sources": ["src/operation-record.ts:1-31", "src/process-client.ts:68-98", "src/process-client.ts:144-185", "src/run-runtime.ts:173-202", "tests/operation-record.test.ts:35-78"]
+    },
+    {
+      "area": "Автоматические retry и ручное reconciliation",
+      "observed": "Retry выбирается явной политикой по всем причинам и safe effects; решения привязаны к попытке. Ручное решение атомарно замещает автоматическое, retry расходуется при admission, accept не вызывает worker.",
+      "boundaries": "FS и SQLite не образуют общую транзакцию; evidence остаётся свидетельством участника, не автоматическим доказательством внешних эффектов.",
+      "sources": ["src/retry-policy.ts:17-27", "src/run-store.ts:459-498", "src/run-store.ts:681-719", "src/run-store.ts:804-847", "src/run-runtime.ts:92-101"]
+    },
+    {
+      "area": "Lineage, reuse, stale waits и запечатанные предки",
+      "observed": "Continuation ограждает источник. Reuse ограничен source/предками, key/attempt и схемами, сохраняет original producer. Новый ответ await источнику запрещён, уже записанный одинаковый ответ не запускает его. Completed parent/collection item запечатывает свою область, не соседа.",
+      "boundaries": "Reuse — снимок JSON без нового ревью или модельного вызова. Проверка workspace не блокирует внешних редакторов на всё исполнение.",
+      "sources": ["src/run-controller.ts:166-190", "src/run-controller.ts:305-310", "src/run-controller.ts:441-451", "src/run-store.ts:562-576", "src/lineage.ts:279-287", "src/lineage.ts:316-357", "src/recovery-inspection.ts:13-34"]
+    }
+  ],
+  "findings": [
+    {
+      "id": "R05-B01",
+      "classification": "bug",
+      "title": "Fence continuation ошибочно отклоняет точный повтор исходного run.start",
+      "severity": "medium",
+      "confidence": "high",
+      "trigger": "Завершить prepared run.start с ключом, создать для него run.continue и повторить тот же исходный запрос start.",
+      "expected": "Вернуть исходный run ID, текущее состояние и lineage без резервирования, spawn и новой работы.",
+      "observed": "Ошибка Run was replaced by a continuation and cannot be relaunched. До continuation тот же запрос возвращал исходный ID. Источник остался succeeded, события не изменились, всего два run, один check-эффект преемника.",
+      "rootCause": "Service на найденной доставке вызывает completeStart, который безусловно вызывает launch. continuationLaunchable=false пропускает только workspace-check, не reserve. reserveLaunch бросает fence-ошибку раньше проверки статуса; catch launch распознаёт только Run is not launchable.",
+      "codeLocations": ["src/service.ts:128-130", "src/run-controller.ts:124-127", "src/run-controller.ts:193-201", "src/run-store.ts:323-324"],
+      "contractSources": ["PROJECT_INFO/execution-plan.md:171-176", "skills/dynamic-workflows/SKILL.md"],
+      "reproduction": {
+        "experimentId": "R05-E02",
+        "fixtureSection": "Приложение A, первый сценарий",
+        "command": "TMPDIR=/tmp/r05-idempotency-probe-bKHuz5 node --import tsx /tmp/r05-idempotency-probe-bKHuz5/probe.mjs",
+        "runs": 2,
+        "faultInjection": false,
+        "scope": "Настоящие WorkflowService, SQLite, supervisor и локальный check; agent-узлов нет. Полный fixture сохранён в Markdown."
+      },
+      "counterEvidence": [
+        "Дедупликация записи run работает: третьего run и повторной записи не было.",
+        "Запрет resume источника правилен и тоже подтверждён probe.",
+        "Для уже сохранённого ответа await аналогичная повторная доставка уже реализована правильно; это не повторное открытие исправленной ошибки stale waits."
+      ],
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "При финализации первоначальной доставки возвращать fenced run как наблюдение; не ослаблять общий reserveLaunch/resume fence. Обработать также fence, появившийся между чтением и reserve.",
+        "risk": "Слишком широкий catch может скрыть реальный отказ запуска либо разрешить исполнение заменённого источника.",
+        "acceptanceCriteria": [
+          "Повтор исходного start после continuation из succeeded/paused/interrupted возвращает тот же ID и lineage без новых событий или резерваций.",
+          "Конфликт input/operation остаётся ошибкой.",
+          "Resume источника и новый ответ его открытому await запрещены.",
+          "Конкурентный fence/start-repeat не запускает источник."
+        ]
+      }
+    },
+    {
+      "id": "R05-B02",
+      "classification": "bug",
+      "title": "Повтор continuation не завершает первоначальный запуск после create-before-reserve",
+      "severity": "medium",
+      "confidence": "high for persisted behavior; crash frequency not measured",
+      "trigger": "Неприостановленный continuation зафиксирован вместе с queued target и source fence, но отправитель исчез до completeStart/reserve; новый клиент повторяет точный run.continue.",
+      "expected": "Завершить первоначальный запуск unfenced ownerless queued/running после проверки workspace, не создавая нового run и не возобновляя interrupted/paused/terminal.",
+      "observed": "Три повторные доставки через новый WorkflowService вернули тот же queued, owner=null, ноль активаций и run.reserved, без файла эффекта. Источник уже fenced. Explicit resume запустил цель и записал одну строку.",
+      "rootCause": "createContinuation фиксирует target, receipt и fence раньше completeStart. Service duplicate-path и controller duplicate/race-return paths возвращают сохранённую запись без финализации первоначального запуска.",
+      "codeLocations": ["src/run-store.ts:1106-1129", "src/run-controller.ts:416-417", "src/run-controller.ts:429-436", "src/run-controller.ts:453-464", "src/service.ts:278-279"],
+      "contractSources": ["PROJECT_INFO/execution-plan.md, launch-gaps", "skills/dynamic-workflows/references/continuation.md:20-22", "tests/prepared-start.test.ts:147-159"],
+      "reproduction": {
+        "experimentId": "R05-E02",
+        "fixtureSection": "Приложение A, второй сценарий",
+        "command": "TMPDIR=/tmp/r05-idempotency-probe-bKHuz5 node --import tsx /tmp/r05-idempotency-probe-bKHuz5/probe.mjs",
+        "runs": 2,
+        "faultInjection": "Только в процессе fixture метод completeStart временно бросает исключение при наличии receipt, после commit до reserve; затем восстановлен.",
+        "scope": "Сохранённое состояние прочитано и повтор доставлен через новый сервис. Настоящий SIGKILL отправляющего клиента в этом окне не выполнялся."
+      },
+      "counterEvidence": [
+        "Same-run обещание continuation формально соблюдено; отдельное обещание восстановления create-gap в документе continuation не сформулировано.",
+        "Bug относится к потере продвижения первоначального запуска, не к дублированию. Для эквивалентного окна prepared-start финализация уже реализована.",
+        "Обычные concurrent continuation и повтор после успеха проходят существующие тесты.",
+        "Явный resume — рабочий обход без нового ключа; вероятность окна не измерялась."
+      ],
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Использовать безопасный финализатор первоначального старта для найденной continuation, включая race-return paths: только unfenced queued, desired=running, owner=null; проверять workspace/Git. Остальные состояния только возвращать.",
+        "risk": "Ошибка объединения путей может снять паузу, повторить неопределённую попытку или потребовать удалённый cwd у завершённого run. Учитывать R05-B01 для цепочки continuations.",
+        "acceptanceCriteria": [
+          "Fault после commit до reserve и повтор из нового клиента дают одну резервацию, одного преемника и один check-эффект.",
+          "Конкурентные повторы не размножают supervisor.",
+          "Paused/interrupted/terminal/fenced цели не исполняются от повторной доставки.",
+          "Удалённый cwd завершённой цели не мешает чтению; изменённый workspace до первой резервации остаётся отказом."
+        ]
+      }
+    },
+    {
+      "id": "R05-AF01",
+      "classification": "already-fixed",
+      "title": "Ручное reconciliation замещает автоматический retry и расходует разрешение один раз",
+      "confidence": "high within offline scope",
+      "observed": "Оба retry-reconciliation сценария прошли. Точный повтор решения не добавляет событий, соседний retry сохраняется, accept архивирует abandoned-состояние, consumed retry не разрешает следующую uncertain-попытку. Собственный checkpoint-failure probe не повторил выполненную запись.",
+      "codeLocations": ["src/run-store.ts:469-485", "src/run-store.ts:712-719", "src/run-store.ts:804-825"],
+      "experiments": ["R05-E01", "R05-E03", "R05-E05"],
+      "sources": ["tests/retry-reconciliation.test.ts", "tests/reconciliation.test.ts:94-125", "tests/retry-policy.test.ts:80-110"],
+      "refutedHypothesis": "После ручного accept/retry старое automatic retry продолжает допускать новую попытку.",
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Семантику не менять; сохранить регрессии при работе над launch-paths.",
+        "risk": "Потеря atomic abandonment или sourceAttempt-check вернёт повторное разрешение.",
+        "acceptanceCriteria": ["Текущие selected tests проходят; consumed decision не применяется повторно; лимиты и скрытые retries не добавляются."]
+      }
+    },
+    {
+      "id": "R05-AF02",
+      "classification": "already-fixed",
+      "title": "Stale await не возобновляет источник continuation; использованные предки и элементы коллекций запечатаны",
+      "confidence": "high within offline scope",
+      "observed": "Четыре сочетания paused/running intent и open/answered прошли: одинаковый сохранённый response идемпотентен, новый отвергнут до UPDATE/event, fenced run не запускается. Recovery scopes запечатывают использованный parent/item, не sibling. Reuse сохраняет original producer и проверяет ancestry/attempt/schema.",
+      "codeLocations": ["src/run-store.ts:567-576", "src/run-controller.ts:305-310", "src/recovery-inspection.ts:13-34", "src/run-controller.ts:441-451", "src/lineage.ts:279-287", "src/lineage.ts:316-357"],
+      "experiments": ["R05-E01", "R05-E04"],
+      "sources": ["tests/continuation.test.ts:226-271", "tests/continuation.test.ts:322-449", "tests/recovery-inspection.test.ts:60-101", "git commit 3b8ad7e"],
+      "refutedHypothesis": "Ответ старому ожиданию после continuation создаёт новую работу источника; recovery старой внутренней ошибки меняет уже использованный результат.",
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Сохранить различие между доставкой уже записанного и допуском новой работы; распространить это различие на R05-B01.",
+        "risk": "Fence перед поиском сохранённого ответа сломает безопасную дедупликацию.",
+        "acceptanceCriteria": ["Четыре wait-сценария, parent/collect exact scopes и graft/reuse-regressions остаются зелёными."]
+      }
+    },
+    {
+      "id": "R05-U01",
+      "classification": "unknown",
+      "title": "Вторичная unknown-причина может не участвовать в continuation retain-effects gate",
+      "confidence": "helper behavior observed; builtin graph reachability unresolved",
+      "facts": [
+        "unknownWriterActivations у failed записи читает только metadata.failure.effects, не metadata.failureCauses.",
+        "Runtime/store поддерживают несколько причин; автоматический retry проверяет безопасность всех.",
+        "Сконструированный helper input read-only затем unknown не потребовал disposition; перестановка unknown на первое место потребовала."
+      ],
+      "unresolved": "Не воспроизведён обычный сгенерированный граф, создающий mixed-effects Cause у одного agent/check без инъекции. Composite parents принудительно unknown, листья обычно содержат один processEffect. Публичный обход run.continue не доказан.",
+      "codeLocations": ["src/lineage.ts:396-403", "src/run-runtime.ts:195-202", "src/run-store.ts:685-690", "src/run-store.ts:694", "src/run-store.ts:718-719"],
+      "reproduction": {
+        "experimentId": "R05-E06",
+        "command": "node --import tsx /tmp/r05-idempotency-probe-bKHuz5/mixed-causes.mjs",
+        "fixtureSection": "Приложение B",
+        "scope": "Только сконструированный helper input; нет запуска графа, модели или внешнего действия."
+      },
+      "counterEvidence": ["У составных родителей effects принудительно unknown; synthetic composite tests не доказывают reachable mixed-effects leaf."],
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Сначала установить достижимость через штатный leaf и весь continuation-путь. Если подтвердится, учитывать все валидные причины консервативным any(unknown), сохранив legacy-поведение без списка.",
+        "risk": "Лишние retain-effects требования для ошибки вне эффекта задания.",
+        "acceptanceCriteria": ["All-safe не блокируется; любая unknown требует точный disposition; порядок причин не меняет решение; скрытых retries/approvals нет."]
+      }
+    }
+  ],
+  "experiments": [
+    {
+      "id": "R05-E01",
+      "executed": true,
+      "command": "TMPDIR=\"$R05_TMP\" node --import tsx --test --test-concurrency=1 tests/prepared-start.test.ts tests/continuation.test.ts tests/lineage.test.ts tests/operation-record.test.ts tests/retry-reconciliation.test.ts tests/reconciliation.test.ts tests/retry-policy.test.ts",
+      "temporaryRoot": "/tmp/r05-idempotency-tests-6PErHs",
+      "result": { "exitCode": 0, "passed": 65, "failed": 0, "skipped": 0, "durationMs": 179396.400333 },
+      "limits": "Избранные наборы, не полный npm test. Настоящие временные SQLite/process/check/Git, подставные agent/provider данные, без inference."
+    },
+    {
+      "id": "R05-E02",
+      "executed": true,
+      "command": "TMPDIR=/tmp/r05-idempotency-probe-bKHuz5 node --import tsx /tmp/r05-idempotency-probe-bKHuz5/probe.mjs",
+      "fixtureSource": "r05-idempotency-continuation.md, приложение A",
+      "result": { "runs": 2, "exitCodes": [0, 0], "reproduced": ["R05-B01", "R05-B02"] },
+      "limits": "B01 без fault injection. B02 — локальное временное исключение после commit до reserve, не настоящий SIGKILL клиента."
+    },
+    {
+      "id": "R05-E03",
+      "executed": true,
+      "command": "Третий сценарий команды R05-E02",
+      "fixtureSource": "r05-idempotency-continuation.md, приложение A",
+      "result": { "runs": 2, "actualWritesBeforeCheckpointFailure": 1, "failureEffects": "unknown", "implicitReplay": "blocked", "acceptedAttempt": 2, "actualWritesAfterResume": 1 },
+      "limits": "SQL trigger только в своей БД. Реальный return check перехвачен до отклонённого checkpoint; accept не выдуман из существования файла. Нет доказательства live-provider exactly-once."
+    },
+    {
+      "id": "R05-E04",
+      "executed": true,
+      "command": "TMPDIR=\"$R05_TMP\" node --import tsx --test --test-concurrency=1 tests/recovery-inspection.test.ts",
+      "result": { "exitCode": 0, "passed": 8, "failed": 0, "skipped": 0, "durationMs": 6660.910291 },
+      "limits": "Хеши/символические ссылки/Git-admin, checkpoint race с pause/await и exact parent/collect scopes. Не вся Git crash-matrix."
+    },
+    {
+      "id": "R05-E05",
+      "executed": true,
+      "command": "TMPDIR=\"$R05_TMP\" node --import tsx --test --test-concurrency=1 --test-name-pattern='composite' tests/provider-retry.test.ts",
+      "result": { "exitCode": 0, "matchedTestsPassed": 2, "failed": 0, "durationMs": 3459.431042 },
+      "limits": "Синтетические Effect Cause 429/503 и 429/401; без HTTP. Остальные тесты файла не запускались."
+    },
+    {
+      "id": "R05-E06",
+      "executed": true,
+      "command": "node --import tsx /tmp/r05-idempotency-probe-bKHuz5/mixed-causes.mjs",
+      "fixtureSource": "r05-idempotency-continuation.md, приложение B",
+      "result": { "exitCode": 0, "readOnlyThenUnknown": "no disposition required", "unknownThenReadOnly": "writer-disposition-required" },
+      "limits": "Только вручную сконструированный input helper; end-to-end reachability не установлена."
+    }
+  ],
+  "alreadyFixedAndRefutations": [
+    { "findingId": "R05-AF01", "classification": "already-fixed", "claim": "Ручное reconciliation не оставляет выбранный automatic retry допустимым; one-use authorization защищено." },
+    { "findingId": "R05-AF02", "classification": "already-fixed", "claim": "Stale await не запускает источник; used parent/collect output и ancestry защищены." },
+    { "classification": "already-fixed", "kind": "refutation-not-separate-finding", "claim": "Незавершённый checkpoint после внешнего эффекта не означает not-started и не даёт implicit retry; R05-E03 подтвердил границу." },
+    { "classification": "already-fixed", "kind": "refutation-not-separate-finding", "claim": "Source fence при создании paused continuation — намеренный контракт; B01/B02 не требуют снятия fence." },
+    { "kind": "out-of-scope-not-reopened", "claim": "Skill delivery, browser async ownership/control/await и wait disclosure/caret/scroll не объявлены новыми ошибками по старому main." }
+  ],
+  "unknowns": [
+    { "id": "R05-U01", "classification": "unknown", "question": "Достижим ли mixed-effects leaf через обычный граф без инъекции Cause?", "proposedCheckExecuted": false },
+    { "classification": "unknown", "question": "Частота create-before-reserve R05-B02 и настоящий SIGKILL отправителя точно в этом окне не измерены; deterministic state fixture выполнен." },
+    { "classification": "unknown", "question": "Live-provider/external API idempotency, escaped process groups и power-loss не проверены. Локальные тесты не обещают exactly-once внешним системам." },
+    { "classification": "unknown", "question": "После последнего workspace observation внешние редакторы не заблокированы. Проверка controller перед launch/resume не доказывает атомарность FS+SQLite." },
+    { "classification": "unknown", "question": "Полный npm test, typecheck и вся Git crash-matrix не запускались; известную нестабильность полного набора этот узкий успех не опровергает." }
+  ],
+  "sources": [
+    { "type": "repository-instructions", "path": "AGENTS.md" },
+    { "type": "repository-contract", "path": "PROJECT_INFO/architecture.md" },
+    { "type": "repository-contract", "path": "PROJECT_INFO/development.md" },
+    { "type": "repository-contract", "path": "PROJECT_INFO/known-issues.md" },
+    { "type": "repository-contract", "path": "PROJECT_INFO/execution-plan.md" },
+    { "type": "repository-contract", "path": "PROJECT_INFO/run-journal.md" },
+    { "type": "repository-contract", "path": "PROJECT_INFO/reconciliation.md" },
+    { "type": "repository-contract", "path": "PROJECT_INFO/retry-and-failures.md" },
+    { "type": "repository-contract", "path": "PROJECT_INFO/outcomes-and-waits.md" },
+    { "type": "repository-contract", "path": "skills/dynamic-workflows/SKILL.md" },
+    { "type": "repository-contract", "path": "skills/dynamic-workflows/references/continuation.md" },
+    { "type": "implementation", "path": "src/prepared-plans.ts" },
+    { "type": "implementation", "path": "src/service.ts", "ranges": ["121-135", "270-282"] },
+    { "type": "implementation", "path": "src/run-controller.ts" },
+    { "type": "implementation", "path": "src/run-store.ts" },
+    { "type": "implementation", "path": "src/run-runtime.ts" },
+    { "type": "implementation", "path": "src/process-client.ts" },
+    { "type": "implementation", "path": "src/operation-record.ts" },
+    { "type": "implementation", "path": "src/reconciliation.ts" },
+    { "type": "implementation", "path": "src/retry-policy.ts" },
+    { "type": "implementation", "path": "src/lineage.ts" },
+    { "type": "implementation", "path": "src/recovery-inspection.ts" },
+    { "type": "test", "path": "tests/prepared-start.test.ts" },
+    { "type": "test", "path": "tests/continuation.test.ts" },
+    { "type": "test", "path": "tests/lineage.test.ts" },
+    { "type": "test", "path": "tests/operation-record.test.ts" },
+    { "type": "test", "path": "tests/retry-policy.test.ts" },
+    { "type": "test", "path": "tests/retry-reconciliation.test.ts" },
+    { "type": "test", "path": "tests/reconciliation.test.ts" },
+    { "type": "test", "path": "tests/recovery-inspection.test.ts" },
+    { "type": "test", "path": "tests/provider-retry.test.ts", "ranges": ["70-87"] },
+    { "type": "git-history", "command": "git log -15 --oneline; git log -- src/prepared-plans.ts src/run-controller.ts src/reconciliation.ts src/lineage.ts src/operation-record.ts src/retry-policy.ts; git show --stat 3b8ad7e", "commitsInspectedAsHistory": ["41332fc", "8d7f696", "2fce387", "d93d95f", "f3a57f5", "3b8ad7e", "37ff399", "d72df5d", "fea2136", "e15bc40"], "limits": "История использована для поиска; доказательства поведения привязаны к текущим строкам и выполненным проверкам." }
+  ],
+  "artifacts": {
+    "markdown": "research/2026-09-20-astra-max/r05-idempotency-continuation.md",
+    "json": "research/2026-09-20-astra-max/r05-idempotency-continuation.json"
+  },
+  "blockers": []
+}

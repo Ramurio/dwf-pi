@@ -1,0 +1,1387 @@
+{
+  "metadata": {
+    "researchId": "r15",
+    "topic": "Тестирование и fault injection",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "date": "2026-09-20",
+    "language": "ru",
+    "mode": "research-only",
+    "reportFiles": {
+      "markdown": "research/2026-09-20-astra-max/r15-testing-fault-injection.md",
+      "json": "research/2026-09-20-astra-max/r15-testing-fault-injection.json"
+    },
+    "sourceInspectionRoot": "Исходные E01–E10 — старый worktree; продолжение C01–C04 — фактический новый cwd на той же study-source базе",
+    "offlineTestRoot": "Исторические E02–E10: переданный integration-dev с зависимостями; в продолжении тесты не запускались",
+    "fallbackHeadVerified": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "fallbackRelevantDiffEmptyBeforeAndAfterTests": true,
+    "platform": {
+      "os": "Darwin",
+      "release": "25.5.0",
+      "architecture": "arm64",
+      "node": "26.8.1"
+    },
+    "webUsed": false,
+    "liveProvidersUsed": false,
+    "neighborReportsRead": false,
+    "repositorySourceOrTestFilesModified": false,
+    "packagesInstalled": false,
+    "gitCommitOrPushPerformed": false,
+    "probeLocationPrefix": "/tmp/r15-testing-",
+    "limits": [
+      "Node 22.19 и Linux не проверялись",
+      "Полный npm test и typecheck не запускались",
+      "Native browser не запускался",
+      "Рекомендации не внедрены"
+    ],
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "historicalEnvironmentScope": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+    "fallbackVerificationScope": "Поля fallbackHeadVerified и fallbackRelevantDiffEmptyBeforeAndAfterTests относятся к исходным E01–E10, не к текущему HEAD integration-dev",
+    "currentOperationNewTestExecutions": 0,
+    "continuationCheckedAtUtc": "2026-09-20T13:12:52+00:00"
+  },
+  "summary": {
+    "conclusion": "Доказан один дефект барьера тестового harness: assertions stdout/stderr по exit до drain допускают ложный отказ и ложный успех. Новых продуктовых багов не доказано.",
+    "findingCount": 5,
+    "classificationCounts": {
+      "bug": 1,
+      "idea": 1,
+      "unknown": 1,
+      "already-fixed": 2
+    },
+    "provenProductBugs": 0,
+    "provenTestBugs": 1,
+    "ordinaryTestExecutions": {
+      "tests": 121,
+      "pass": 121,
+      "fail": 0,
+      "skipped": 0,
+      "note": "Исторические E02–E07: 121 исполнения, подтверждены повторным чтением шести сохранённых logs; не новые запуски и не процент покрытия. E08 отдельно."
+    },
+    "blockers": [],
+    "findingCountScope": "Пять находок study-source R15-001…R15-005. Post-study already-fixed notes ниже не добавлены в этот счёт.",
+    "continuationConclusion": "Оба старых файла полны и их hashes совпали с retainedEvidence; создан новый пакет с provenance. Старая операция failed не объявляется успешной. Новых тестовых запусков и новых находок нет."
+  },
+  "coverage": [
+    {
+      "invariant": "Намерение и резервация до spawn, PID checkpoint до stdin",
+      "evidence": [
+        {
+          "path": "tests/operation-record.test.ts",
+          "startLine": 35,
+          "endLine": 68
+        },
+        {
+          "path": "src/run-runtime.ts",
+          "startLine": 235,
+          "endLine": 242
+        },
+        {
+          "path": "src/run-runtime.ts",
+          "startLine": 278,
+          "endLine": 284
+        }
+      ],
+      "experiments": [
+        "E02",
+        "E03"
+      ],
+      "assessment": "Независимые SQLite read и marker-файл; rejected trigger не допускает эффекта. Содержательный негативный oracle.",
+      "limits": "Не power-cut storage; процессы только fixture."
+    },
+    {
+      "invariant": "CAS владельца и атомарность output/event",
+      "evidence": [
+        {
+          "path": "tests/run-store.test.ts",
+          "startLine": 278,
+          "endLine": 303
+        },
+        {
+          "path": "tests/run-store.test.ts",
+          "startLine": 380,
+          "endLine": 402
+        },
+        {
+          "path": "tests/run-store.test.ts",
+          "startLine": 414,
+          "endLine": 438
+        }
+      ],
+      "experiments": [
+        "E02"
+      ],
+      "assessment": "Старые токены отвергаются, trigger failure откатывает output/event, восемь процессов получают одну резервацию.",
+      "limits": "Store CAS не доказывает живость ОС."
+    },
+    {
+      "invariant": "Пауза/resume не повторяют допущенную работу",
+      "evidence": [
+        {
+          "path": "tests/pause-resume-admission.test.ts",
+          "startLine": 27,
+          "endLine": 105
+        },
+        {
+          "path": "src/run-runtime.ts",
+          "startLine": 174,
+          "endLine": 214
+        }
+      ],
+      "experiments": [
+        "E02"
+      ],
+      "assessment": "Детерминированное окно gate/admission, resume/cancel/owner-loss; считаются work и попытки.",
+      "limits": "Не все возможные межпроцессные расписания."
+    },
+    {
+      "invariant": "Один terminal result и сохранение первой причины IPC",
+      "evidence": [
+        {
+          "path": "tests/execution-failure.test.ts",
+          "startLine": 39,
+          "endLine": 92
+        },
+        {
+          "path": "src/process-client.ts",
+          "startLine": 106,
+          "endLine": 137
+        }
+      ],
+      "experiments": [
+        "E02"
+      ],
+      "assessment": "19 сценариев настоящего IPC, разные chunk boundaries, post-result frames, nonzero exit, callback count.",
+      "limits": "Preload завершает child до SDK/auth; не live provider."
+    },
+    {
+      "invariant": "Неопределённый внешний эффект требует явного recovery",
+      "evidence": [
+        {
+          "path": "tests/wave5-crash-supervisor.test.ts",
+          "startLine": 70,
+          "endLine": 175
+        }
+      ],
+      "experiments": [
+        "E03"
+      ],
+      "assessment": "Реальный fsync marker перед SIGKILL, обычный resume не повторяет; явное разрешение даёт ровно второй marker.",
+      "limits": "Не exactly-once для внешнего сервиса."
+    },
+    {
+      "invariant": "collect и worktree сохраняют завершённых детей",
+      "evidence": [
+        {
+          "path": "tests/wave5-crash-collect.test.ts",
+          "startLine": 100,
+          "endLine": 216
+        }
+      ],
+      "experiments": [
+        "E03"
+      ],
+      "assessment": "Независимые file bytes, Git head/count, collection record и commit admission; отмена не коммитит parked sibling.",
+      "limits": "Одна форма fan-out fixture, не все возможные графы."
+    },
+    {
+      "invariant": "Git crash frontier и однократность child checkpoints",
+      "evidence": [
+        {
+          "path": "tests/git-recovery-crash.test.ts",
+          "startLine": 36,
+          "endLine": 68
+        },
+        {
+          "path": "tests/git-recovery-crash.test.ts",
+          "startLine": 105,
+          "endLine": 175
+        },
+        {
+          "path": "tests/fixtures/git-recovery-crash.ts",
+          "startLine": 14,
+          "endLine": 38
+        }
+      ],
+      "experiments": [
+        "E04"
+      ],
+      "assessment": "Исполнены staged worktree, first merge и retry recorded worktree completion с реальным SIGKILL.",
+      "limits": "3 из 10 сценариев набора, остальные не запущены r15."
+    },
+    {
+      "invariant": "Семантика routing и short circuit",
+      "evidence": [
+        {
+          "path": "tests/routing-equivalence.test.ts",
+          "startLine": 8,
+          "endLine": 82
+        },
+        {
+          "path": "tests/routing-equivalence.test.ts",
+          "startLine": 85,
+          "endLine": 152
+        }
+      ],
+      "experiments": [
+        "E05"
+      ],
+      "assessment": "Отдельный frozen routing oracle, 781 ограниченная последовательность, literal traces, getter counters.",
+      "limits": "Общий production evaluate; не независимая проверка всего evaluator."
+    },
+    {
+      "invariant": "Доставка frozen skills до SDK tool read",
+      "evidence": [
+        {
+          "path": "tests/skill-delivery.test.ts",
+          "startLine": 48,
+          "endLine": 129
+        },
+        {
+          "path": "tests/pi-worker.test.ts",
+          "startLine": 385,
+          "endLine": 415
+        }
+      ],
+      "experiments": [
+        "E05",
+        "E06"
+      ],
+      "assessment": "Reject без reader до admission плюс чтение bytes SDK read/bash после удаления source.",
+      "limits": "Не измерено качество применения skill живой моделью."
+    },
+    {
+      "invariant": "UI visit ownership, wait disclosure и editor state",
+      "evidence": [
+        {
+          "path": "tests/graph-view-observation.test.ts",
+          "startLine": 31,
+          "endLine": 131
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 484,
+          "endLine": 507
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1515,
+          "endLine": 1579
+        }
+      ],
+      "experiments": [
+        "E05"
+      ],
+      "assessment": "21 VM replay текущего app.js с reordered responses, current/stale controls, POST/reload counts и wait IDs.",
+      "limits": "Самодельный DOM; native layout/focus/scroll не проверены."
+    }
+  ],
+  "findings": [
+    {
+      "id": "R15-001",
+      "classification": "bug",
+      "defectDomain": "test-harness",
+      "severity": "medium",
+      "title": "Assertions stdout/stderr по exit до drain создают ложный fail и ложный pass",
+      "evidence": [
+        {
+          "path": "tests/pi-worker.test.ts",
+          "startLine": 362,
+          "endLine": 370
+        },
+        {
+          "path": "tests/pi-worker.test.ts",
+          "startLine": 373,
+          "endLine": 382
+        },
+        {
+          "path": "src/process-client.ts",
+          "startLine": 54,
+          "endLine": 65
+        },
+        {
+          "path": "src/pi-worker-process.ts",
+          "startLine": 9,
+          "endLine": 19
+        },
+        {
+          "path": "src/pi-worker-process.ts",
+          "startLine": 32,
+          "endLine": 42
+        }
+      ],
+      "facts": [
+        "Incomplete-stdin test ждёт child.exit и сразу требует ready/error из накопленного stdout.",
+        "Closed-output-pipe test ждёт child.exit и сразу проверяет отсутствие forbidden diagnostic в stderr.",
+        "Production settled уже ждёт exit и оба drained pipe; child.close отдельно недостаточен.",
+        "Финальные временные fixtures воспроизвели failure на строке 369 и скрытие diagnostic на строке 382."
+      ],
+      "trigger": "Reader fixture удерживает stdout после ready либо stderr до 50 мс после exit. В stderr-вариантах child fixture дополнительно пишет синтетический forbidden marker перед выходом.",
+      "expected": "Корректная отмена с code 130 и двумя NDJSON кадрами проходит; запрещённая строка stderr проваливает oracle при любом порядке чтения.",
+      "observed": [
+        {
+          "mode": "stdout-late",
+          "testExit": 1,
+          "testPass": 0,
+          "testFail": 1,
+          "detail": "На exit виден только ready; после drain контроль видит ready,error и code 130."
+        },
+        {
+          "mode": "stderr-immediate",
+          "testExit": 1,
+          "testPass": 0,
+          "testFail": 1,
+          "detail": "Forbidden synthetic marker корректно обнаружен."
+        },
+        {
+          "mode": "stderr-late",
+          "testExit": 0,
+          "testPass": 1,
+          "testFail": 0,
+          "detail": "Та же запрещённая строка пропущена. Контроль markerAtExit=false, markerAfterDrain=true, code 130."
+        }
+      ],
+      "causeInference": "Тест смешивает барьер смерти процесса и барьер полноты наблюдения pipes. Внесённая перестановка выявляет ошибку оракула без изменения исходников.",
+      "confidence": "Высокая для тестового дефекта; естественная частота и связь с историческими timeouts неизвестны.",
+      "reproduction": {
+        "experimentIds": [
+          "E07",
+          "E08",
+          "E09"
+        ],
+        "fixtureNames": [
+          "r15-pipe-order.cjs",
+          "r15-pipe-control.mjs"
+        ],
+        "commandsLocation": "experiments E08/E09; точный код — reproductionFixtures; shell extraction — приложение Markdown",
+        "safety": "Новый offline child без request в stdin; модель не допускается; NODE_OPTIONS задаётся только в командах fixture."
+      },
+      "counterEvidence": [
+        "Baseline disconnect прошёл 1/1.",
+        "Штатные IPC/process-client tests E02 прошли.",
+        "Drain-aware контроль получает полный terminal error; новый продуктовый дефект отмены/потери вывода не доказан.",
+        "Forbidden stderr — намеренно синтетическая строка, не наблюдённый реальный uncaught EPIPE.",
+        "Исторический 10-секундный timeout не воспроизведён: эта инъекция даёт assertion failure, другой симптом.",
+        "Первичный pause-only probe прошёл: без удержания resume он не обеспечивал требуемое окно."
+      ],
+      "recommendation": {
+        "minimumChange": "Небольшой test-only settlement helper: exit/error плюс end/close каждого наблюдаемого pipe, listeners до действия, assertions после drain. Cleanup/reap только собственного child. Не ждать только child.close.",
+        "risks": [
+          "Ожидание только end зависает на destroy",
+          "Ожидание только child.close возвращает документированную IPC-границу",
+          "Нельзя потерять spawn error или последний chunk"
+        ],
+        "acceptance": [
+          "stdout-late проходит с code 130 и ready,error",
+          "stderr-immediate и stderr-late с marker проваливаются",
+          "Без marker EPIPE regression проходит",
+          "Exit без child.close не зависает",
+          "Нет оставшихся fixture children"
+        ],
+        "implemented": false
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "continuationAssessment": "Классификация и вывод сохранены; ссылки и ключевой код перепроверены на study-source. Новое исполнение тестов не заявляется."
+    },
+    {
+      "id": "R15-002",
+      "classification": "idea",
+      "defectDomain": "coverage",
+      "priority": "medium",
+      "title": "Добавить native-browser oracle к исправленному await editor",
+      "evidence": [
+        {
+          "path": "tests/graph-view-observation.test.ts",
+          "startLine": 31,
+          "endLine": 93
+        },
+        {
+          "path": "tests/graph-view-observation.test.ts",
+          "startLine": 120,
+          "endLine": 131
+        },
+        {
+          "path": "tests/graph-transition-scope.test.ts",
+          "startLine": 114,
+          "endLine": 189
+        }
+      ],
+      "facts": [
+        "Fake Element хранит scroll/selection/open как поля; focus вручную устанавливает activeElement; getElementById создаёт отсутствующие элементы.",
+        "Тест editor присваивает scroll 70/25 трём строкам текста без layout/clamping.",
+        "Отдельный настоящий Chrome replay уже существует для transition scope, но это другой сценарий."
+      ],
+      "inference": "VM replay подтверждает перенос состояния и логические guards, но не native DOM caret/focus/layout.",
+      "counterEvidence": [
+        "21 VM replay исполнен успешно и не является пустым smoke test",
+        "Есть local Chrome harness, поэтому неверно утверждать отсутствие всех browser tests",
+        "Новый продуктовый UI-дефект не воспроизведён"
+      ],
+      "recommendation": {
+        "minimumChange": "Добавить к существующему local-browser подходу один await scenario: реально scrollable длинный текст, backward selection, details, update/reorder и run navigation. VM tests оставить.",
+        "risks": [
+          "Browser startup добавляет flakes",
+          "Селекторы по переводимому тексту нестабильны"
+        ],
+        "acceptance": [
+          "Native activeElement, selection direction/range, измеренный scroll и details сохраняются по wait ID",
+          "Поздний resolve не вызывает новый POST/reload",
+          "Нет Chrome — явный skip, не скрытый pass"
+        ],
+        "implemented": false
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "continuationAssessment": "Классификация и вывод сохранены; ссылки и ключевой код перепроверены на study-source. Новое исполнение тестов не заявляется."
+    },
+    {
+      "id": "R15-003",
+      "classification": "unknown",
+      "defectDomain": "flakiness",
+      "title": "Причина исторических process timeouts и null exit остаётся неизвестной",
+      "evidence": [
+        {
+          "path": "PROJECT_INFO/known-issues.md",
+          "startLine": 69,
+          "endLine": 97
+        },
+        {
+          "path": "tests/run-controller.test.ts",
+          "startLine": 445,
+          "endLine": 452
+        },
+        {
+          "path": "package.json",
+          "startLine": 8,
+          "endLine": 16
+        }
+      ],
+      "facts": [
+        "Документированы несколько разных failures полного suite и последующий успешный serial run.",
+        "Concurrent resume fixture имеет watchdog SIGKILL через 15 с; close handler печатает code без signal.",
+        "r15 исполнил только узкую выборку на Node 26.8.1; Node 22.19 и контролируемая нагрузка не проверены."
+      ],
+      "inference": "code=null не даёт причины завершения; watchdog — возможное объяснение, но его срабатывание в историческом отказе не доказано.",
+      "unresolved": [
+        "Последнее достигнутое состояние при историческом timeout",
+        "Источник сигнала/срабатывание watchdog",
+        "Роль нагрузки и Node version"
+      ],
+      "counterEvidence": [
+        "Узкие E02–E07 прошли",
+        "R15-001 не воспроизводит исторический timeout и не объясняет все разные failures"
+      ],
+      "recommendation": {
+        "minimumChange": "Test-only monotonic timing trace spawn/ready/checkpoint/disconnect/exit/pipe-end/close, code+signal и watchdog flag; только fixture IDs/PIDs. Сравнить конкретный failing case на минимальной Node и 26.8.1.",
+        "risks": [
+          "Диагностика всей среды/argv может раскрыть лишние данные",
+          "Подробный синхронный trace меняет schedule"
+        ],
+        "acceptance": [
+          "Отказ воспроизведён с известным последним событием и источником завершения",
+          "Причинное исправление отличается от простого увеличения timeout/retry",
+          "Оригинальный failing case и negative control различаются"
+        ],
+        "implemented": false
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "continuationAssessment": "Классификация и вывод сохранены; ссылки и ключевой код перепроверены на study-source. Новое исполнение тестов не заявляется."
+    },
+    {
+      "id": "R15-004",
+      "classification": "already-fixed",
+      "defectDomain": "skill-delivery",
+      "title": "Frozen skill доставляется не только на диск; reader проверяется до допуска",
+      "evidence": [
+        {
+          "path": "src/catalog.ts",
+          "startLine": 31,
+          "endLine": 35
+        },
+        {
+          "path": "src/catalog.ts",
+          "startLine": 85,
+          "endLine": 95
+        },
+        {
+          "path": "src/execution-plan.ts",
+          "startLine": 121,
+          "endLine": 126
+        },
+        {
+          "path": "src/pi-worker.ts",
+          "startLine": 107,
+          "endLine": 115
+        },
+        {
+          "path": "tests/pi-worker.test.ts",
+          "startLine": 283,
+          "endLine": 304
+        },
+        {
+          "path": "tests/pi-worker.test.ts",
+          "startLine": 385,
+          "endLine": 415
+        }
+      ],
+      "history": [
+        "2d9f9d2"
+      ],
+      "facts": [
+        "Authoring/verify/worker запрещают непустые skills без read/bash.",
+        "Исполнены негативные admission checks и настоящий SDK read/bash frozen bytes после удаления source; оба варианта имени skill."
+      ],
+      "experiments": [
+        "E05",
+        "E06"
+      ],
+      "counterEvidence": [
+        "Реальный SDK и scripted transport не доказывают качество применения skill live-моделью"
+      ],
+      "recommendation": {
+        "minimumChange": "Delivery менять не требуется; сохранить reject-before-admission и positive tool round trip.",
+        "risks": [
+          "Замена round trip проверкой только диска/списка tools ослабит доказательство"
+        ],
+        "acceptance": [
+          "Обе стороны regression остаются исполняемыми на frozen plan"
+        ],
+        "implemented": false
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "continuationAssessment": "Классификация и вывод сохранены; ссылки и ключевой код перепроверены на study-source. Новое исполнение тестов не заявляется."
+    },
+    {
+      "id": "R15-005",
+      "classification": "already-fixed",
+      "defectDomain": "dashboard-ownership-and-waits",
+      "title": "UI visit guards и сохранение await disclosure/caret/scroll уже в текущем коде",
+      "evidence": [
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 165,
+          "endLine": 178
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 484,
+          "endLine": 507
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1162,
+          "endLine": 1173
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1450,
+          "endLine": 1482
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1515,
+          "endLine": 1579
+        },
+        {
+          "path": "PROJECT_INFO/known-issues.md",
+          "startLine": 64,
+          "endLine": 67
+        }
+      ],
+      "history": [
+        "d72df5d",
+        "b04ef8d",
+        "1ee48ff",
+        "fea2136",
+        "e15bc40"
+      ],
+      "facts": [
+        "Current request/visit guards отделяют поздние snapshot/control/resolve/reconcile/401.",
+        "Details хранится по wait ID, восстанавливаются focus, selectionDirection и scroll.",
+        "21 VM replay выполнен: current/stale контрасты, POST count, receipt по исходному ключу и независимые drafts."
+      ],
+      "experiments": [
+        "E05"
+      ],
+      "counterEvidence": [
+        "Native DOM предел остаётся R15-002",
+        "Другие inspector disclosures явно не входят в обещание исправления await"
+      ],
+      "recommendation": {
+        "minimumChange": "Не переоткрывать старые bugs; сохранить current/stale контрасты и границы обещания.",
+        "risks": [
+          "Тест только stale может скрыть случайную блокировку текущих действий"
+        ],
+        "acceptance": [
+          "Current reply/401 действует; stale reply/401 не действует; wait draft остаётся своим"
+        ],
+        "implemented": false
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "continuationAssessment": "Классификация и вывод сохранены; ссылки и ключевой код перепроверены на study-source. Новое исполнение тестов не заявляется."
+    }
+  ],
+  "experiments": [
+    {
+      "id": "E01",
+      "performed": true,
+      "commands": [
+        "pwd; git rev-parse HEAD; git status --short",
+        "git log -18 --oneline; git log -50 --oneline -- tests",
+        "git -C \"$DEV\" rev-parse HEAD; git -C \"$DEV\" diff --exit-code -- src tests package.json package-lock.json PROJECT_INFO AGENTS.md"
+      ],
+      "outcome": "Worktree и fallback HEAD совпадают с sourceRevision, релевантный diff пуст до и после тестов; документы/код прочитаны.",
+      "limits": "Проверены профильные пути; не глобальный аудит всей установки.",
+      "operationScope": "source-operation",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "rerunInContinuation": false,
+      "continuationVerification": "Перенесено из hash-verified старого отчёта; C01–C04 отдельно описывают новые проверки, не повтор исходного эксперимента."
+    },
+    {
+      "id": "E02",
+      "performed": true,
+      "cwd": "$DEV",
+      "command": "TMPDIR=\"$P\" node --import tsx --test --test-concurrency=1 tests/process-client.test.ts tests/execution-failure.test.ts tests/run-store.test.ts tests/pause-resume-admission.test.ts",
+      "exitCode": 0,
+      "tests": 61,
+      "pass": 61,
+      "fail": 0,
+      "skipped": 0,
+      "durationMs": 26169.444041,
+      "limits": "Настоящие offline subprocess/SQLite; без live provider.",
+      "operationScope": "source-operation",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "rerunInContinuation": false,
+      "continuationVerification": "Итоги runner и duration повторно прочитаны в сохранённых logs; shell exit codes перенесены из старого отчёта, команды сверены с actions."
+    },
+    {
+      "id": "E03",
+      "performed": true,
+      "cwd": "$DEV",
+      "command": "TMPDIR=\"$P\" node --import tsx --test --test-concurrency=1 tests/operation-record.test.ts tests/wave5-crash-supervisor.test.ts tests/wave5-crash-collect.test.ts",
+      "exitCode": 0,
+      "tests": 8,
+      "pass": 8,
+      "fail": 0,
+      "skipped": 0,
+      "durationMs": 26200.363041,
+      "limits": "SIGKILL/markers/Git в собственных временных fixtures, без power loss.",
+      "operationScope": "source-operation",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "rerunInContinuation": false,
+      "continuationVerification": "Итоги runner и duration повторно прочитаны в сохранённых logs; shell exit codes перенесены из старого отчёта, команды сверены с actions."
+    },
+    {
+      "id": "E04",
+      "performed": true,
+      "cwd": "$DEV",
+      "command": "TMPDIR=\"$P\" node --import tsx --test --test-name-pattern='real worktree-staged|real merge-first|explicit retry of a recorded worktree' tests/git-recovery-crash.test.ts",
+      "exitCode": 0,
+      "tests": 3,
+      "pass": 3,
+      "fail": 0,
+      "skipped": 0,
+      "durationMs": 31528.26525,
+      "limits": "Выбраны 3 из 10 сценариев, остальные не запускались r15.",
+      "operationScope": "source-operation",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "rerunInContinuation": false,
+      "continuationVerification": "Итоги runner и duration повторно прочитаны в сохранённых logs; shell exit codes перенесены из старого отчёта, команды сверены с actions."
+    },
+    {
+      "id": "E05",
+      "performed": true,
+      "cwd": "$DEV",
+      "command": "TMPDIR=\"$P\" node --import tsx --test --test-concurrency=1 tests/skill-delivery.test.ts tests/graph-view-observation.test.ts tests/routing-equivalence.test.ts",
+      "exitCode": 0,
+      "tests": 42,
+      "pass": 42,
+      "fail": 0,
+      "skipped": 0,
+      "durationMs": 1423.847541,
+      "breakdown": {
+        "skillDelivery": 17,
+        "uiVmReplay": 21,
+        "routing": 4
+      },
+      "limits": "VM DOM и общий expression evaluator не native browser и не полностью независимый semantic oracle.",
+      "operationScope": "source-operation",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "rerunInContinuation": false,
+      "continuationVerification": "Итоги runner и duration повторно прочитаны в сохранённых logs; shell exit codes перенесены из старого отчёта, команды сверены с actions."
+    },
+    {
+      "id": "E06",
+      "performed": true,
+      "cwd": "$DEV",
+      "command": "TMPDIR=\"$P\" node --import tsx --test --test-name-pattern='frozen skill from|inaccessible frozen skills' tests/pi-worker.test.ts",
+      "exitCode": 0,
+      "tests": 6,
+      "pass": 6,
+      "fail": 0,
+      "skipped": 0,
+      "durationMs": 896.557291,
+      "limits": "Настоящий SDK со scripted transport/in-memory stores; не применение skill живой моделью.",
+      "operationScope": "source-operation",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "rerunInContinuation": false,
+      "continuationVerification": "Итоги runner и duration повторно прочитаны в сохранённых logs; shell exit codes перенесены из старого отчёта, команды сверены с actions."
+    },
+    {
+      "id": "E07",
+      "performed": true,
+      "cwd": "$DEV",
+      "command": "TMPDIR=\"$P\" node --import tsx --test --test-name-pattern='worker child cancels incomplete stdin on disconnect' tests/pi-worker.test.ts",
+      "exitCode": 0,
+      "tests": 1,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 0,
+      "durationMs": 4235.967417,
+      "limits": "Один baseline, не статистическая оценка flakes.",
+      "operationScope": "source-operation",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "rerunInContinuation": false,
+      "continuationVerification": "Итоги runner и duration повторно прочитаны в сохранённых logs; shell exit codes перенесены из старого отчёта, команды сверены с actions."
+    },
+    {
+      "id": "E08",
+      "performed": true,
+      "cwd": "$DEV",
+      "fixture": "r15-pipe-order.cjs",
+      "command": "TMPDIR=\"$P\" R15_FAULT=\"$mode\" NODE_OPTIONS=\"--require=$P/r15-pipe-order.cjs\" node --import tsx --test --test-name-pattern=\"$pat\" tests/pi-worker.test.ts",
+      "cases": [
+        {
+          "mode": "stdout-late",
+          "pat": "worker child cancels incomplete stdin on disconnect",
+          "exitCode": 1,
+          "tests": 1,
+          "pass": 0,
+          "fail": 1,
+          "durationMs": 4689.228292,
+          "assertion": "tests/pi-worker.test.ts:369"
+        },
+        {
+          "mode": "stderr-immediate",
+          "pat": "a closed supervisor output pipe",
+          "exitCode": 1,
+          "tests": 1,
+          "pass": 0,
+          "fail": 1,
+          "durationMs": 4335.212333,
+          "assertion": "tests/pi-worker.test.ts:382"
+        },
+        {
+          "mode": "stderr-late",
+          "pat": "a closed supervisor output pipe",
+          "exitCode": 0,
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "durationMs": 5681.861708,
+          "assertion": "Ложный успех при том же synthetic marker"
+        }
+      ],
+      "limits": "Порядок reader управляется fixture; это не оценка естественной частоты. Диагностический marker синтетический.",
+      "operationScope": "source-operation",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "rerunInContinuation": false,
+      "continuationVerification": "Итоги runner и duration повторно прочитаны в сохранённых logs; shell exit codes перенесены из старого отчёта, команды сверены с actions."
+    },
+    {
+      "id": "E09",
+      "performed": true,
+      "cwd": "$DEV",
+      "fixture": "r15-pipe-control.mjs",
+      "commands": [
+        "R15_FAULT=stdout-late NODE_OPTIONS=\"--require=$P/r15-pipe-order.cjs\" node \"$P/r15-pipe-control.mjs\" \"$DEV\"",
+        "R15_FAULT=stderr-late NODE_OPTIONS=\"--require=$P/r15-pipe-order.cjs\" node \"$P/r15-pipe-control.mjs\" \"$DEV\" closed-output"
+      ],
+      "results": [
+        {
+          "mode": "stdout-late",
+          "exitCode": 0,
+          "workerCode": 130,
+          "atExit": {
+            "types": [
+              "ready"
+            ],
+            "marker": false
+          },
+          "afterDrain": {
+            "types": [
+              "ready",
+              "error"
+            ],
+            "marker": false
+          }
+        },
+        {
+          "mode": "stderr-late",
+          "exitCode": 0,
+          "workerCode": 130,
+          "atExit": {
+            "types": [],
+            "marker": false
+          },
+          "afterDrain": {
+            "types": [],
+            "marker": true
+          }
+        }
+      ],
+      "limits": "Контроль подтверждает полноту pipe после drain; модель не допущена.",
+      "operationScope": "source-operation",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "rerunInContinuation": false,
+      "continuationVerification": "Код fixtures и команды подтверждены; console-only результат перенесён из hash-verified старого отчёта. В command-only actions нет tool stdout; control не повторялся."
+    },
+    {
+      "id": "E10",
+      "performed": true,
+      "command": "TMPDIR=\"$P\" NODE_OPTIONS=\"--require=$P/delay-stdout.cjs\" node --import tsx --test --test-name-pattern='worker child cancels incomplete stdin on disconnect' tests/pi-worker.test.ts; аналогично delay-stderr.cjs/emit-stderr.cjs с --test-name-pattern='a closed supervisor output pipe'",
+      "outcome": "Простой pause-only дал pass, не воспроизвёл ordering. Усиленные раздельные preloads дали failure stdout, failure immediate stderr и pass delayed stderr, как затем финальные self-contained E08/E09.",
+      "limits": "Настройка эксперимента, не отдельная находка; финальный воспроизводитель повторно проверен.",
+      "operationScope": "source-operation",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "rerunInContinuation": false,
+      "continuationVerification": "Перенесено из hash-verified старого отчёта; C01–C04 отдельно описывают новые проверки, не повтор исходного эксперимента."
+    },
+    {
+      "id": "C01",
+      "performed": true,
+      "operationScope": "continuation",
+      "commands": [
+        "pwd && git rev-parse HEAD && git status --short",
+        "shasum -a 256 \"$OLD/research/2026-09-20-astra-max/r15-testing-fault-injection.md\" \"$OLD/research/2026-09-20-astra-max/r15-testing-fault-injection.json\"",
+        "python3: json.loads/read_bytes/hashlib.sha256 для переданного r15-actions.json (только чтение)"
+      ],
+      "outcome": "Новый cwd на study-source; оба старых hashes/размера совпали с retainedEvidence; JSON полон по структуре. Actions: 19 записей id/command, без сохранённых stdout/exit.",
+      "limits": "OLD означает oldWorkspace в continuationProvenance. Наличие полных файлов не превращает failed старую операцию в успешную; новые тесты не запускались."
+    },
+    {
+      "id": "C02",
+      "performed": true,
+      "operationScope": "continuation",
+      "commandNote": "Воспроизводимое ядро реально выполненной read-only Python-проверки; исходный вызов дополнительно проверял counts/Markdown и сохранённые logs.",
+      "outcome": "45 диапазонов строк валидны; 39 файлов побайтно равны старому worktree и Git blobs study-source; пять IDs/classification counts согласованы, 121 = сумма E02–E07. Ключевые места всех пяти находок прочитаны с nl -ba. Финальная проверка явных MD-ссылок нашла и исправила одну границу 474→470; после исправления все 42 MD и 49 текущих JSON диапазонов валидны.",
+      "limits": "Это проверка статических ссылок и целостности, не повтор всех исторических чтений и не новый suite.",
+      "commands": [
+        "python3 - <<'PY'\nfrom pathlib import Path\nimport json, subprocess\nold=Path('/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/a37c374d6b8793a4269c15969e9cebccd609c4f624fe712d7e4ceef4333a43b3')\nd=json.loads((old/'research/2026-09-20-astra-max/r15-testing-fault-injection.json').read_text())\nrefs=[]\ndef visit(v):\n if isinstance(v,dict):\n  if 'path' in v and 'startLine' in v: refs.append(v)\n  for x in v.values():visit(x)\n elif isinstance(v,list):\n  for x in v:visit(x)\nvisit(d)\npaths={p for s in d['sources'] for p in s.get('paths',[])}|{r['path'] for r in refs}\nfor p in paths:\n assert Path(p).read_bytes()==(old/p).read_bytes()==subprocess.check_output(['git','show',d['metadata']['sourceRevision']+':'+p])\nfor r in refs: assert 1<=r['startLine']<=r['endLine']<=len(Path(r['path']).read_text().splitlines())\nprint(len(refs),len(paths))\nPY"
+      ]
+    },
+    {
+      "id": "C03",
+      "performed": true,
+      "operationScope": "continuation",
+      "commandDescription": "Read-only Python: прочитан /tmp/r15-testing-active-root; проверен префикс /tmp/r15-testing-; read_bytes + SHA256 и regex (tests/pass/fail/cancelled/skipped/duration_ms) по девяти конкретным logs; fixtures сравнены с JSON и heredoc из actions[14].",
+      "outcome": "Все девять сводок совпали; подтверждены ERR_ASSERTION на строках 369/382 для двух инъекций и 1 pass для delayed stderr. Оба fixture contents совпали побайтно.",
+      "limits": "Старые файлы только читались. E09 console stdout не сохранён в command-only actions; результат carry-forward, не новое наблюдение. Сырые logs в отчёт не скопированы.",
+      "commands": [
+        "python3 - <<'PY'\nfrom pathlib import Path\nimport hashlib,json,re\nd=json.loads(Path('research/2026-09-20-astra-max/r15-testing-fault-injection.json').read_text())\nev=d['continuationProvenance']['retainedOfflineEvidence']; root=Path(ev['root'])\nassert root.parent==Path('/tmp') and root.name.startswith('r15-testing-') and not root.is_symlink()\nfor log in ev['logs']:\n p=root/log['name']; assert p.is_file() and not p.is_symlink()\n b=p.read_bytes(); assert hashlib.sha256(b).hexdigest()==log['sha256']\n vals=dict(re.findall(r'(?:ℹ |# )(tests|pass|fail|cancelled|skipped|duration_ms)\\s+([\\d.]+)',b.decode()))\n summary={k:(float(v) if k=='duration_ms' else int(v)) for k,v in vals.items()}\n assert summary==log['summary']\nfor f in d['reproductionFixtures']:\n assert (root/f['name']).read_text()==f['content']\nprint('9 retained summaries/hashes and 2 fixture contents verified read-only')\nPY"
+      ],
+      "commandNote": "Команда повторной проверки опубликованного evidence manifest, выполнена в финальной проверке продолжения; исходная read-only сверка дополнительно сравнила heredoc actions[14]. Это не запуск fixtures."
+    },
+    {
+      "id": "C04",
+      "performed": true,
+      "operationScope": "continuation",
+      "commands": [
+        "git log --oneline e15bc407da8753fd6b683c0aa4a68634e3c458a7..3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+        "git show 86f5e07 -- src/graph.ts src/execution-plan.ts src/parallel-isolation.ts tests/parallel-authoring.test.ts",
+        "git show 3d8ba65 -- skills/dynamic-workflows/SKILL.md skills/dynamic-workflows/references/authoring.md",
+        "GIT_OPTIONAL_LOCKS=0 git -C /Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev rev-parse HEAD",
+        "GIT_OPTIONAL_LOCKS=0 git -C /Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev diff --exit-code -- src tests package.json package-lock.json PROJECT_INFO AGENTS.md",
+        "git diff --exit-code e15bc407da8753fd6b683c0aa4a68634e3c458a7 3d8ba65ee84402c0e3b0587f70095b7847824a9f -- tests/pi-worker.test.ts src/process-client.ts src/pi-worker-process.ts src/graph-view/app.js tests/graph-view-observation.test.ts tests/graph-transition-scope.test.ts tests/run-controller.test.ts"
+      ],
+      "outcome": "Publication dev HEAD=3d8ba65…, профильный diff пуст; после study-source ровно два указанных коммита. Семь перечисленных harness/process/UI файлов не менялись. Post-study изменения прочитаны отдельно.",
+      "limits": "Никаких тестов publicationRevision; это не перенос результата 121 pass на изменённый dev. Первая ручная попытка git show с опечаткой b86f5e07 дала unknown revision; hash 86f5e07 затем установлен через git log, без изменения Git."
+    }
+  ],
+  "reproductionFixtures": [
+    {
+      "name": "r15-pipe-order.cjs",
+      "purpose": "Инъекция late-pipe порядка и synthetic diagnostic только в новых fixture процессах",
+      "content": "// Offline fault injection; changes only fixture processes and observer streams.\nconst cp = require('node:child_process');\nconst original = cp.spawn;\nconst mode = process.env.R15_FAULT;\nif (!['stdout-late', 'stderr-immediate', 'stderr-late'].includes(mode)) {\n  throw new Error('Set R15_FAULT to a documented fixture mode');\n}\nif (mode.startsWith('stderr-') && process.argv[1]?.endsWith('/pi-worker-process.ts')) {\n  process.once('beforeExit', () => require('node:fs').writeSync(2,\n    \"Unhandled 'error' event: R15_SYNTHETIC_EPIPE\\n\"));\n}\ncp.spawn = function(...args) {\n  const child = original.apply(this, args);\n  if (!args[1]?.some(arg => String(arg).endsWith('/pi-worker-process.ts'))) return child;\n  const park = stream => {\n    const resume = stream.resume;\n    stream.pause();\n    // Prevent automatic flushStdio from undoing the injected reader ordering.\n    stream.resume = function() { return this; };\n    child.once('exit', () => setTimeout(() => {\n      stream.resume = resume;\n      resume.call(stream);\n    }, 50));\n  };\n  if (mode === 'stderr-late') park(child.stderr);\n  if (mode === 'stdout-late') {\n    let held = false;\n    child.stdout.prependListener('data', data => {\n      if (!held && String(data).includes('\"ready\"')) { held = true; park(child.stdout); }\n    });\n  }\n  return child;\n};\nrequire('node:module').syncBuiltinESMExports();\n",
+      "sha256": "93469a9378d89653f0647574f699a8c2fd0ca76c4c59feaaa173384df1c35d57",
+      "executionScope": "source-operation E08/E09; continuation: read-only byte comparison, not rerun"
+    },
+    {
+      "name": "r15-pipe-control.mjs",
+      "purpose": "Независимый контроль worker exit плюс полнота pipes, без модельного запроса",
+      "content": "import assert from 'node:assert/strict';\nimport { spawn } from 'node:child_process';\nimport { createRequire } from 'node:module';\nimport { join } from 'node:path';\nconst root = process.argv[2], closedOutput = process.argv[3] === 'closed-output';\nconst require = createRequire(join(root, 'package.json'));\nconst child = spawn(process.execPath, ['--import', require.resolve('tsx'),\n  join(root, 'src/pi-worker-process.ts')], {stdio: ['pipe','pipe','pipe','ipc']});\nlet out = '', err = '', asked = false, atExit;\nconst facts = () => ({ types: out.trim().split('\\n').filter(Boolean).map(line => JSON.parse(line).type),\n  marker: err.includes('R15_SYNTHETIC_EPIPE') });\nchild.stdin.on('error', () => {});\nchild.stdout.on('data', chunk => {\n  out += chunk.toString();\n  if (!closedOutput && !asked && out.includes('\"ready\"')) { asked = true; child.disconnect(); }\n});\nchild.stderr.setEncoding('utf8').on('data', chunk => { err += chunk; });\nconst drain = stream => new Promise(resolve => {\n  stream.once('end', resolve); stream.once('close', resolve);\n});\nconst drained = Promise.all([drain(child.stdout), drain(child.stderr)]);\nconst exited = new Promise((resolve, reject) => {\n  child.once('error', reject);\n  child.once('exit', code => { atExit = facts(); resolve(code); });\n});\n// Explicit fixture cleanup deadline, not a workflow/runtime policy.\nconst timer = setTimeout(() => child.kill('SIGKILL'), 10000);\nif (closedOutput) child.stdout.destroy();\ntry {\n  const [code] = await Promise.all([exited, drained]);\n  assert.equal(code, 130);\n  if (closedOutput) assert.equal(facts().marker, true);\n  else assert.deepEqual(facts().types, ['ready','error']);\n  console.log(JSON.stringify({code, atExit, afterDrain: facts()}));\n} finally {\n  clearTimeout(timer);\n  if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');\n}\n",
+      "sha256": "738152ca3ab0c6446a0016da51d8923aad0673b6908f3775d137916af2cab56f",
+      "executionScope": "source-operation E08/E09; continuation: read-only byte comparison, not rerun"
+    }
+  ],
+  "alreadyFixedAndRefutations": [
+    {
+      "relatedFindingIds": [
+        "R15-004"
+      ],
+      "claim": "Skill только на диске, отсутствует реальная передача",
+      "assessment": "Опровергнуто текущими guard callsites и SDK tool round trip; live качество не измерялось."
+    },
+    {
+      "relatedFindingIds": [
+        "R15-005",
+        "R15-002"
+      ],
+      "claim": "Старые UI ownership/await/caret bugs всё ещё открыты",
+      "assessment": "Исправления присутствуют и VM regressions прошли. Native DOM coverage — отдельная идея, не опровержение фикса."
+    },
+    {
+      "relatedFindingIds": [],
+      "claim": "Crash coverage только синтетические failed records",
+      "assessment": "Для E03/E04 опровергнуто реальными SIGKILL, fsync marker, Git commits и явным replay refusal."
+    },
+    {
+      "relatedFindingIds": [],
+      "claim": "Большое число tests доказывает полноту",
+      "assessment": "Нет: общее evaluate, VM DOM и выбранные 3/10 Git cases явно ограничивают вывод."
+    },
+    {
+      "relatedFindingIds": [
+        "R15-001"
+      ],
+      "claim": "Доказан новый продуктовый EPIPE/потеря terminal error",
+      "assessment": "Нет: marker синтетический, после drain error frame получен. Дефект в барьере assertions."
+    },
+    {
+      "relatedFindingIds": [
+        "R15-003"
+      ],
+      "claim": "Успешный isolated run устранил flaky full suite",
+      "assessment": "Нет: историческая причина остаётся unknown."
+    }
+  ],
+  "unknowns": [
+    {
+      "question": "Какова естественная частота R15-001 без инъекции?",
+      "status": "unknown",
+      "reason": "Выполнен baseline и детерминированная перестановка, не статистический стресс."
+    },
+    {
+      "question": "Чем вызваны исторические full-suite timeouts/null exit?",
+      "status": "unknown",
+      "relatedFindingId": "R15-003"
+    },
+    {
+      "question": "Как ведёт себя native wait editor с реальным layout?",
+      "status": "not-tested",
+      "relatedFindingId": "R15-002"
+    },
+    {
+      "question": "Переносимость результата на Node 22.19/Linux и будущий SDK?",
+      "status": "not-tested"
+    },
+    {
+      "question": "Качество применения skill и реальные права/поведение provider?",
+      "status": "out-of-scope",
+      "reason": "Только offline fixtures/scripted transports; модельные вызовы не выполнялись."
+    },
+    {
+      "question": "Есть ли независимо доступный сохранённый console result E09 в command-only r15-actions.json?",
+      "status": "not-retained-in-command-index",
+      "reason": "Там только команды. Конкретные atExit/afterDrain перенесены из полного hash-verified собственного отчёта; fixtures/команды перепроверены, контролю не приписывается новое исполнение."
+    }
+  ],
+  "proposedNotPerformed": [
+    "Внедрение test-only pipe settlement helper и regression для exit без child.close",
+    "Native-browser await editor replay",
+    "Flake timing trace и контролируемое сравнение Node versions/load",
+    "Полный suite, остальная Git crash matrix, typecheck, live provider и power-cut"
+  ],
+  "sources": [
+    {
+      "id": "S01",
+      "kind": "repository-policy-and-docs",
+      "paths": [
+        "AGENTS.md",
+        "PROJECT_INFO/architecture.md",
+        "PROJECT_INFO/development.md",
+        "PROJECT_INFO/known-issues.md",
+        "PROJECT_INFO/run-journal.md",
+        "PROJECT_INFO/reconciliation.md",
+        "PROJECT_INFO/retry-and-failures.md",
+        "package.json"
+      ],
+      "inspection": "Прочитаны; claims сверены с кодом, не приняты как доказательство pass."
+    },
+    {
+      "id": "S02",
+      "kind": "production-source",
+      "paths": [
+        "src/process-client.ts",
+        "src/pi-worker-process.ts",
+        "src/check-worker-process.ts",
+        "src/run-runtime.ts",
+        "src/run-store.ts"
+      ],
+      "inspection": "Process lifecycle и выбранные методы runtime/store."
+    },
+    {
+      "id": "S03",
+      "kind": "production-source",
+      "paths": [
+        "src/catalog.ts",
+        "src/execution-plan.ts",
+        "src/pi-worker.ts",
+        "src/graph-view/app.js"
+      ],
+      "inspection": "Профильные skill guards и UI ownership/editor функции."
+    },
+    {
+      "id": "S04",
+      "kind": "tests-executed-and-inspected",
+      "paths": [
+        "tests/process-client.test.ts",
+        "tests/execution-failure.test.ts",
+        "tests/run-store.test.ts",
+        "tests/pause-resume-admission.test.ts",
+        "tests/operation-record.test.ts",
+        "tests/wave5-crash-supervisor.test.ts",
+        "tests/wave5-crash-collect.test.ts",
+        "tests/git-recovery-crash.test.ts",
+        "tests/fixtures/git-recovery-crash.ts",
+        "tests/skill-delivery.test.ts",
+        "tests/graph-view-observation.test.ts",
+        "tests/routing-equivalence.test.ts",
+        "tests/pi-worker.test.ts"
+      ],
+      "inspection": "Полные или выбранные исполнения строго E02–E07; не все tests каждого файла запущены."
+    },
+    {
+      "id": "S05",
+      "kind": "static-boundary-and-counterevidence",
+      "paths": [
+        "tests/graph-transition-scope.test.ts",
+        "tests/dashboard.test.ts",
+        "tests/sqlite.test.ts",
+        "tests/allocation-recovery.test.ts",
+        "tests/process-groups.test.ts",
+        "tests/retry-worker.test.ts",
+        "tests/provider-retry.test.ts",
+        "tests/run-controller.test.ts",
+        "tests/retry-reconciliation.test.ts"
+      ],
+      "inspection": "Статическое чтение профильных участков; отдельные наборы не запускались."
+    },
+    {
+      "id": "S06",
+      "kind": "git-history",
+      "revisions": [
+        "e15bc40",
+        "fea2136",
+        "24f957f",
+        "d72df5d",
+        "b04ef8d",
+        "2d9f9d2",
+        "1ee48ff",
+        "10d5cc6"
+      ],
+      "inspection": "git log и выбранные commit metadata; история не заменяет текущий код."
+    },
+    {
+      "id": "S07",
+      "kind": "offline-observation",
+      "experimentIds": [
+        "E01",
+        "E02",
+        "E03",
+        "E04",
+        "E05",
+        "E06",
+        "E07",
+        "E08",
+        "E09",
+        "E10"
+      ],
+      "inspection": "В отчёте только безопасные summaries и воспроизводитель, без сырых логов."
+    },
+    {
+      "id": "S08",
+      "kind": "retained-own-evidence",
+      "inspection": "Собственные MD/JSON и command-only r15-actions.json из sourceRun; hashes и происхождение в continuationProvenance. Соседние отчёты не читались."
+    },
+    {
+      "id": "S09",
+      "kind": "continuation-read-only-audit",
+      "experimentIds": [
+        "C01",
+        "C02",
+        "C03",
+        "C04"
+      ],
+      "inspection": "Проверены сохранившиеся logs/fixtures и source blobs; это новые чтения, не повтор E02–E10."
+    },
+    {
+      "id": "S10",
+      "kind": "post-study-git-history",
+      "revisions": [
+        "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+        "3d8ba65ee84402c0e3b0587f70095b7847824a9f"
+      ],
+      "inspection": "Изолировано в postStudyAlreadyFixed; не замена study-source и не тестовый прогон publicationRevision."
+    }
+  ],
+  "continuationProvenance": {
+    "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+    "currentRunId": "run-9dbb044c-664f-4dd8-96c0-57192dc4ed89",
+    "oldOperationStatus": "failed",
+    "oldOperationOutcomeSource": "retainedEvidence из входа; живой run не открывался и не управлялся",
+    "retainedFailure": {
+      "code": "provider",
+      "phase": "execution",
+      "effects": "unknown",
+      "providerResponse": {
+        "status": 429
+      },
+      "diagnostic": {
+        "dispatch": "http-observed"
+      }
+    },
+    "oldWorkspace": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/a37c374d6b8793a4269c15969e9cebccd609c4f624fe712d7e4ceef4333a43b3",
+    "newWorkspace": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/a37c374d6b8793a4269c15969e9cebccd609c4f624fe712d7e4ceef4333a43b3",
+    "strategy": "reuse-complete-own-reports-with-read-only-independent-verification",
+    "oldReports": [
+      {
+        "kind": "markdown",
+        "path": "research/2026-09-20-astra-max/r15-testing-fault-injection.md",
+        "bytes": 33380,
+        "sha256": "98af74e9d8251f61d03517392b45b2b4a1409976724ea919179fd71e70442768",
+        "hashMatchedRetainedEvidence": true
+      },
+      {
+        "kind": "json",
+        "path": "research/2026-09-20-astra-max/r15-testing-fault-injection.json",
+        "bytes": 42732,
+        "sha256": "3ffcb8b70539889d19a8af82b4602b65af857fe452747905cc89d78d452401f4",
+        "hashMatchedRetainedEvidence": true
+      }
+    ],
+    "oldReportsCompleteByInspection": true,
+    "oldSuccessfulSubmissionClaimed": false,
+    "preservedActionEvidence": {
+      "path": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r15-actions.json",
+      "sha256": "de4803b264088be1637d939847b9bdc4e50ad67b820744870ae3c186c874f996",
+      "bytes": 55753,
+      "entries": 19,
+      "format": "command-only array: id/command; no tool outputs/exit statuses",
+      "creationActionIndexForFinalFixtures": 14,
+      "indexBase": 0,
+      "commandsReexecuted": false
+    },
+    "recheckedSourceIntegrity": {
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "referenceRangeCount": 45,
+      "sourceFileCount": 39,
+      "comparison": "current worktree == old worktree == git show sourceRevision:path",
+      "manifestSha256": "21393f2a0bede820b60da68a982011ef0ad8394d32201174759acc40dc16c0ba",
+      "manifestDefinition": "Сортированный список {path,sha256} для объединения original sources.paths и reference paths; canonical JSON ensure_ascii=False, sort_keys=True, separators=(comma,colon)"
+    },
+    "retainedOfflineEvidence": {
+      "root": "/tmp/r15-testing-cle9KF",
+      "readOnly": true,
+      "logs": [
+        {
+          "experiment": "E02",
+          "name": "core.tap",
+          "sha256": "62ff5a6aa3ef8c8f2961d958bc4df1f9ccdb39a079b6ec14ea1763dfa393e249",
+          "summary": {
+            "tests": 61,
+            "pass": 61,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 0,
+            "duration_ms": 26169.444041
+          }
+        },
+        {
+          "experiment": "E03",
+          "name": "ordering-crash.tap",
+          "sha256": "953f7662b9c0ff79b00c34a368c4efd365458926c02ea866ca874d241bf58910",
+          "summary": {
+            "tests": 8,
+            "pass": 8,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 0,
+            "duration_ms": 26200.363041
+          }
+        },
+        {
+          "experiment": "E04",
+          "name": "git-selected.tap",
+          "sha256": "4b16557da2da91835c8b998b57a9044edcd9a7ed2ed755a08cedf9d636c59e1b",
+          "summary": {
+            "tests": 3,
+            "pass": 3,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 0,
+            "duration_ms": 31528.26525
+          }
+        },
+        {
+          "experiment": "E05",
+          "name": "fixed-routing.tap",
+          "sha256": "abc0b0296b56da105a2c28fb5eaee78af09629f3b251f9455888cdf831a3c4c7",
+          "summary": {
+            "tests": 42,
+            "pass": 42,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 0,
+            "duration_ms": 1423.847541
+          }
+        },
+        {
+          "experiment": "E06",
+          "name": "skill-sdk.tap",
+          "sha256": "34c163f917c4bf28a11e0486fa332f3ac21d5c2da2ba1cee10f111ef2fb15df3",
+          "summary": {
+            "tests": 6,
+            "pass": 6,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 0,
+            "duration_ms": 896.557291
+          }
+        },
+        {
+          "experiment": "E07",
+          "name": "disconnect-baseline.tap",
+          "sha256": "1dd4d9f237fb541aed82374961ebdf0c3ae0b3e26bca8938dcdd42c0b5a0da28",
+          "summary": {
+            "tests": 1,
+            "pass": 1,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 0,
+            "duration_ms": 4235.967417
+          }
+        },
+        {
+          "experiment": "E08/stdout-late",
+          "name": "final-stdout-late.tap",
+          "sha256": "41d12a24ce9bf39dde83859dfa08adc251a01517328c73cc41f56585373dc68d",
+          "summary": {
+            "tests": 1,
+            "pass": 0,
+            "fail": 1,
+            "cancelled": 0,
+            "skipped": 0,
+            "duration_ms": 4689.228292
+          },
+          "assertionLineVerified": "tests/pi-worker.test.ts:369"
+        },
+        {
+          "experiment": "E08/stderr-immediate",
+          "name": "final-stderr-immediate.tap",
+          "sha256": "5d2c03ac11d5607542d1a29034f9764488523a4f76bf09562055ead5cef716ef",
+          "summary": {
+            "tests": 1,
+            "pass": 0,
+            "fail": 1,
+            "cancelled": 0,
+            "skipped": 0,
+            "duration_ms": 4335.212333
+          },
+          "assertionLineVerified": "tests/pi-worker.test.ts:382"
+        },
+        {
+          "experiment": "E08/stderr-late",
+          "name": "final-stderr-late.tap",
+          "sha256": "984ad063e97f9cd1e66a22c7cc58c5547482baf1c20258ecc4a24c2c00a11e19",
+          "summary": {
+            "tests": 1,
+            "pass": 1,
+            "fail": 0,
+            "cancelled": 0,
+            "skipped": 0,
+            "duration_ms": 5681.861708
+          }
+        }
+      ],
+      "rawLogsPublished": false
+    },
+    "carriedFacts": [
+      "R15-001…R15-005, исходный coverage и recommendations перенесены без изменения классификации.",
+      "Исторические команды E01–E10, shell exit codes, исходные platform/Node и состояние fallback относятся к старой операции.",
+      "E09 drain-control результаты и ранний pause-only pass E10 перенесены из хеш-проверенного отчёта; отдельный console output в command-only actions не доступен."
+    ],
+    "recheckedFacts": [
+      "Оба старых файла целиком прочитаны; hashes/bytes/JSON структура совпали.",
+      "45 ссылок, 39 исходных файлов и classification/counts проверены; ключевые места пяти находок перечитаны на study-source.",
+      "E02–E07 runner summaries: 121 pass/0 fail/0 skipped; E08 summaries: fail/fail/pass; сохранённые logs и fixture code прочитаны без исполнения.",
+      "Финальные fixtures совпадают с embedded content, файлами старой временной проверки и actions[14].",
+      "Publication dev HEAD и два post-study commits проверены read-only; R15-001 target/client файлы неизменны."
+    ],
+    "addedFacts": [
+      "Явная граница source-operation/continuation и отдельные postStudyAlreadyFixed notes.",
+      "Безопасное воспроизведение теперь требует явно выбрать checkout study-source и проверить HEAD/diff до запуска; текущий integration-dev не подставляется автоматически.",
+      "Новых продуктовых/тестовых находок и новых тестовых запусков нет.",
+      "Финальная сверка 42 Markdown-диапазонов исправила унаследованную границу run-controller 421-474 на 421-470; 49 JSON-диапазонов (45 study + 4 post-study) валидны."
+    ],
+    "writesToOldWorkspaceOrFixtures": false,
+    "writesToIntegrationDev": false,
+    "newOfflineOrLiveProcessTests": 0,
+    "liveRunsOrProviderCallsPerformedInContinuation": false,
+    "neighborReportsRead": false,
+    "artifactRevisionPolicy": "Финальный tool result: sha256:<SHA256 окончательного JSON>; не Git HEAD и не self-referential поле JSON.",
+    "citationCorrections": [
+      {
+        "path": "tests/run-controller.test.ts",
+        "oldRange": "421-474",
+        "correctedRange": "421-470",
+        "reason": "Study-source файл содержит 470 строк; ключевой cited watchdog/close block 445-452 не изменён. Исправлена только MD-ссылка в списке источников."
+      }
+    ]
+  },
+  "postStudyAlreadyFixed": {
+    "includedInStudyFindingCount": false,
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "testsExecutedByContinuation": false,
+    "changes": [
+      {
+        "classification": "already-fixed",
+        "revision": "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+        "title": "Ранняя authoring validation parallel writer isolation",
+        "evidence": [
+          {
+            "path": "src/graph.ts",
+            "startLine": 198,
+            "endLine": 200,
+            "revision": "86f5e0756e67fa7a18e925d77b7d2728db2f0627"
+          },
+          {
+            "path": "src/parallel-isolation.ts",
+            "startLine": 5,
+            "endLine": 30,
+            "revision": "86f5e0756e67fa7a18e925d77b7d2728db2f0627"
+          }
+        ],
+        "assessment": "Вызов общей проверки добавлен к validation после ссылок/циклов/config; профильные tests прочитаны в diff. Это post-study факт, не новая рекомендация r15 и не заявление об их прохождении."
+      },
+      {
+        "classification": "already-fixed",
+        "revision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+        "title": "Документация reviewer artifactRevision binding",
+        "evidence": [
+          {
+            "path": "skills/dynamic-workflows/SKILL.md",
+            "startLine": 110,
+            "endLine": 114,
+            "revision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f"
+          },
+          {
+            "path": "skills/dynamic-workflows/references/authoring.md",
+            "startLine": 128,
+            "endLine": 156,
+            "revision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f"
+          }
+        ],
+        "assessment": "Документация явно отличает верхнеуровневую версию рецензируемого артефакта от нового отчёта критика. Повторное внедрение не предлагается."
+      }
+    ]
+  }
+}

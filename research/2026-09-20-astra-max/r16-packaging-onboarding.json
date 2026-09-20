@@ -1,0 +1,1165 @@
+{
+  "metadata": {
+    "researchId": "r16",
+    "topic": "Установка, packaging и onboarding",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "date": "2026-09-20",
+    "language": "ru",
+    "status": "complete",
+    "reportMd": "research/2026-09-20-astra-max/r16-packaging-onboarding.md",
+    "reportJson": "research/2026-09-20-astra-max/r16-packaging-onboarding.json",
+    "sourceContext": "E00–E08 перенесены из собственной исходной операции: тогда HEAD worktree и разрешённого integration-dev были sourceRevision. В продолжении текущий cwd заново проверен на sourceRevision; 37 исходных файлов совпали со старым cwd и Git. Публикационная ревизия передана отдельно и не подменяет исследуемую базу.",
+    "environment": {
+      "os": "Darwin",
+      "architecture": "arm64",
+      "node": "26.8.1",
+      "npm": "11.19.0",
+      "git": "2.50.1"
+    },
+    "webUsed": false,
+    "peerReportsRead": false,
+    "packagesInstalled": false,
+    "liveProvidersCalled": false,
+    "implementationChanges": false,
+    "environmentScope": "Среда исходной операции, не повторное измерение продолжения.",
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "artifactWorkspace": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/945bd8a5705082c2160ee88810e3b2b413c4321de606d2c2540db0a5697b02cb",
+    "continuationDate": "2026-09-20",
+    "continuationCheckpointUtc": "2026-09-20T13:08:28Z"
+  },
+  "summary": {
+    "text": "Восстановлен полный собственный пакет после failed исходной операции; хеши старых файлов, ссылки, 106 pass в сохранённых логах и состояние fixtures перепроверены без повторного исполнения. Сохранены 1 hardlink bug instantiate helper, 1 idea диагностики, 1 unknown clean install и 2 study-source already-fixed. Два post-study исправления отмечены отдельно.",
+    "findingCount": 5,
+    "countsByClassification": {
+      "bug": 1,
+      "idea": 1,
+      "unknown": 1,
+      "already-fixed": 2
+    },
+    "executedNodeTests": {
+      "total": 106,
+      "passed": 106,
+      "failed": 0,
+      "skipped": 0,
+      "scope": "source-run; сводки перечитаны в продолжении"
+    },
+    "additionalSdkGuardCases": 9,
+    "blockers": [],
+    "additionalSdkGuardCasesScope": "source-run; код probe и послесостояния fixtures перечитаны, exit codes заново не измерялись",
+    "currentOperationExecutedNodeTests": 0,
+    "currentOperationNewFindings": 0,
+    "findingCountScope": "Только пять study-source findings; две post-study пометки не являются новыми findings."
+  },
+  "coverage": [
+    {
+      "area": "Установка из checkout и packaging",
+      "inspected": [
+        "README.md:10-24",
+        "package.json:2-9",
+        "scripts/setup.ts:12-56",
+        "bin/dynamicwf.mjs:1-24"
+      ],
+      "observed": "Сохраняемый checkout и его node_modules являются приложением; setup создаёт две ссылки. Private package 0.0.0 не обещает публичную npm-публикацию. Pack dry-run содержит runtime, patch и skill assets.",
+      "boundaries": [
+        "Не выполнялись npm ci/install, установка tarball и изменение пользовательских ссылок.",
+        "Pack manifest не включает package-lock.json; pack не эквивалентен checkout + npm ci."
+      ]
+    },
+    {
+      "area": "Pinned dependencies и developer setup",
+      "inspected": [
+        "package.json:26-40",
+        "package-lock.json:1-32",
+        "package-lock.json:1480-1550",
+        "tsconfig.json",
+        "src/generated-module.ts:5-30"
+      ],
+      "observed": "Root maps совпадают, 361 package entry имеют конкретные version и registry URL. У 356 есть integrity. Все заявленные Node engines допускают 22.19.0. TypeScript и tsx нужны production runtime и находятся в dependencies.",
+      "boundaries": [
+        "Engines проверены по метаданным, а не исполнением на Node 22.19.0.",
+        "Пять integrity отсутствуют; фактические последствия fresh install не установлены."
+      ]
+    },
+    {
+      "area": "Setup, CLI и MCP handoff",
+      "inspected": [
+        "tests/setup.test.ts",
+        "tests/cli.test.ts",
+        "tests/skill-handoff.test.ts",
+        "src/cli.ts:7-33"
+      ],
+      "observed": "Проверены выбранные пути с пробелами, конфликтующие обычные файлы, повтор и replace, запуск из другого cwd, большой UTF-8 stdin до EOF, MCP без transport wrapper, detached handoff и start deduplication.",
+      "boundaries": [
+        "Только временные БД и offline графы.",
+        "Не проверено подключение реального пользовательского приложения MCP.",
+        "Успешный профильный запуск не закрывает intermittent failures полного npm test."
+      ]
+    },
+    {
+      "area": "Skill distribution и reproducible recipes",
+      "inspected": [
+        "skills/dynamic-workflows/SKILL.md",
+        "skills/dynamic-workflows/recipes/research-trio/README.md",
+        "skills/dynamic-workflows/recipes/implementation-review/README.md",
+        "tests/research-trio.test.ts",
+        "tests/implementation-recipes.test.ts",
+        "tests/skill-delivery.test.ts"
+      ],
+      "observed": "Самодостаточная физическая копия skill, локальные ссылки и recipe JSON проверены. Frozen skill прочитан реальным SDK после удаления source. Research-trio guards и S/P/C embedded helpers проходят offline tests. Найден hardlink дефект instantiate helper.",
+      "boundaries": [
+        "Не измерялись качество реальных моделей и универсальное обнаружение skill внешними приложениями.",
+        "Установочная symlink для внешнего приложения не равна допустимому root для config.skills."
+      ]
+    },
+    {
+      "area": "SDK patch verification",
+      "inspected": [
+        "scripts/apply-sdk-bash-signal.mjs:1-77",
+        "patches/pi-coding-agent-0.85.1-bash-signal.patch",
+        "tests/bash-signal.test.ts",
+        "tests/bash-signal-worker.test.ts",
+        "scripts/sdk-clean-import.mjs"
+      ],
+      "observed": "Четыре хеша существующего SDK соответствуют patched-состоянию. Пройдены signal regressions и девять дополнительных guard fixtures; живой dev SDK не изменён.",
+      "boundaries": [
+        "Pristine восстановлен reverse patch на копии, не скачан из registry.",
+        "Не проверено падение ОС в середине записи четырёх файлов.",
+        "Clean SDK import probe не запускался: он выполняет npm install."
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "R16-B01",
+      "classification": "bug",
+      "title": "Hardlink в выходном каталоге instantiate.mjs изменяет исходный рецепт",
+      "priority": "low",
+      "confidence": "high",
+      "evidenceType": "reproduced-in-source-run; retained-fixture-and-source-rechecked",
+      "locations": [
+        "skills/dynamic-workflows/recipes/implementation-review/instantiate.mjs:24-27",
+        "skills/dynamic-workflows/recipes/implementation-review/instantiate.mjs:50-57",
+        "skills/dynamic-workflows/recipes/implementation-review/README.md:37-48"
+      ],
+      "trigger": "Source и output — разные реальные каталоги на одной файловой системе. Существующий create/patch/input/validate.json в output является hardlink на соответствующий файл source; файлы доступны на запись.",
+      "expected": "До записи отвергнуть alias либо создать независимые выходные файлы; source recipe должен остаться побайтно неизменным.",
+      "observed": "Helper завершился с exit 0; source/patch.json изменил SHA256 и ID стал r16_changed. Hardlinked JSON перезаписываются через тот же inode. В comparative fixture nlink=2.",
+      "cause": "realpath проверяет имена каталогов, а lstat preflight отвергает только isSymbolicLink. writeFileSync на существующем файле сохраняет inode и изменяет все его hardlinks. Это противоречит собственной цели guard в комментарии строки 50.",
+      "impact": "Можно незаметно привязать общий исходный рецепт к пользовательской задаче. Последующие потребители source получают изменённые параметры; записанный sourceRecipePatchSha256 относится к байтам до изменения самим helper.",
+      "reproduction": {
+        "experimentIds": [
+          "E05",
+          "E06"
+        ],
+        "shellSetup": "RECIPE=\"$PWD/skills/dynamic-workflows/recipes/implementation-review\"; T=$(mktemp -d /tmp/r16-repro.XXXXXX)",
+        "command": "node --input-type=module - \"$RECIPE\" \"$T\" <<'JS'\n<содержимое script ниже>\nJS\nrm -rf \"$T\"",
+        "script": "import fs from 'node:fs';\nimport path from 'node:path';\nimport assert from 'node:assert/strict';\nimport { spawnSync } from 'node:child_process';\nimport { createHash } from 'node:crypto';\nconst [recipe, tmp] = process.argv.slice(2);\nconst source = path.join(tmp, 'source'), out = path.join(tmp, 'output');\nfs.cpSync(path.join(recipe, 'S'), source, { recursive: true });\nfs.mkdirSync(out);\nfor (const name of ['create', 'patch', 'input', 'validate'])\n  fs.linkSync(path.join(source, name + '.json'), path.join(out, name + '.json'));\nconst parameters = JSON.parse(fs.readFileSync(path.join(recipe, 'parameters.example.json')));\nparameters.id = 'r16_changed';\nconst params = path.join(tmp, 'parameters.json');\nfs.writeFileSync(params, JSON.stringify(parameters));\nconst hash = () => createHash('sha256').update(fs.readFileSync(path.join(source, 'patch.json'))).digest('hex');\nconst before = hash();\nconst child = spawnSync(process.execPath, [path.join(recipe, 'instantiate.mjs'), '--recipe', source, '--parameters', params, '--out', out], { encoding: 'utf8' });\nconst observed = { exit: child.status, sourceChanged: hash() !== before, sourceId: JSON.parse(fs.readFileSync(path.join(source, 'patch.json'))).id };\nconsole.log(JSON.stringify(observed));\nassert.deepEqual(observed, { exit: 0, sourceChanged: true, sourceId: 'r16_changed' });",
+        "requires": [
+          "Node",
+          "hardlinks на одной файловой системе",
+          "checkout sourceRevision"
+        ],
+        "writes": "Только копия рецепта в новом /tmp/r16-repro.*; не установленный skill и не исходники checkout."
+      },
+      "counterEvidence": [
+        "Новый output: exit 0, source не изменён.",
+        "Output JSON как symlinks: exit 1, source не изменён.",
+        "tests/implementation-recipes.test.ts:164-187 уже защищает canonical directory aliases и нормальную отдельную привязку.",
+        "Не установлено повреждение при обычном cp, новом output или reflink с отдельными inode. Конкурентная подмена не нужна для воспроизведения и не исследовалась."
+      ],
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "В существующем preflight всех пяти имён отклонять обычные output-файлы с nlink > 1 до любой записи. Поддержку hardlinked output через temp+rename рассматривать отдельно как более широкое изменение.",
+        "risk": "Отказ существующим hardlinked output, даже если второй link находится не в source.",
+        "acceptance": [
+          "Hardlink fixture получает явную ошибку до записи любого output; все source JSON побайтно сохранены.",
+          "Новый и обычный output продолжают работать; symlink отказы и существующие S/P/C tests проходят."
+        ]
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "continuationDisposition": "carried-and-rechecked",
+      "continuationVerification": {
+        "experimentIds": [
+          "C01",
+          "C02",
+          "C03"
+        ],
+        "facts": [
+          "Helper и README повторно прочитаны на sourceRevision; их diff к publicationRevision пуст.",
+          "Сохранённая E05 hardlink-fixture: общий inode source/output, nlink=2, source ID r16_rebound, source хеш отличается от исходного; receipt хранит исходный хеш.",
+          "В E05 fresh output и symlink source побайтно равны исходному S/patch.json."
+        ],
+        "boundary": "Helper заново не вызывался. Exit 0 и sourceId r16_changed в E06 перенесены из исходного отчёта/команды; временная E06 копия тогда удалена."
+      }
+    },
+    {
+      "id": "R16-I01",
+      "classification": "idea",
+      "title": "Показывать состояние SDK patch отдельной read-only проверкой doctor",
+      "confidence": "high",
+      "evidenceType": "source-inspection",
+      "locations": [
+        "scripts/setup.ts:30-34",
+        "src/doctor.ts:59-90",
+        "bin/dynamicwf.mjs:13-18",
+        "package.json:24",
+        "PROJECT_INFO/development.md:44-58"
+      ],
+      "facts": [
+        "Setup проверяет executable, SKILL.md и manifest tsx, но не patch hashes.",
+        "Doctor проверяет Node/POSIX/cwd/store/Git/models, но не целостность SDK patch.",
+        "Обычный npm ci запускает postinstall; ручное применение при ignore-scripts документировано.",
+        "Исследованный SDK уже patched; signal tests прошли."
+      ],
+      "inference": "Успех setup/doctor не является отдельным подтверждением patch-состояния. Дополнительная диагностика упростит обнаружение пропущенного postinstall.",
+      "counterEvidence": [
+        "Стандартная установка уже содержит fail-closed installer; это не доказанный bug clean install.",
+        "Непропатченный live runtime не запускался."
+      ],
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Общий side-effect-free version/hash checker и отдельный doctor check sdk-bash-signal со состояниями patched/pristine/mixed/unknown. Только сообщать способ ручного исправления, не применять patch автоматически.",
+        "risk": "Рассинхронизация дублированных хешей и ложное ограничение чистых графов; не менять доступность pureRuns из-за SDK bash.",
+        "acceptance": [
+          "Все patch-state fixtures диагностируются без изменения файлов, credentials или сетевых запросов.",
+          "Postinstall сохраняет нынешние fail-closed guards."
+        ]
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "continuationDisposition": "carried-and-rechecked",
+      "continuationVerification": {
+        "experimentIds": [
+          "C01",
+          "C03"
+        ],
+        "boundary": "Заново прочитаны setup/bin/doctor/postinstall; приложение и doctor не вызывались."
+      }
+    },
+    {
+      "id": "R16-U01",
+      "classification": "unknown",
+      "title": "Полнота воспроизводимого clean install не установлена",
+      "confidence": "high-for-observed-metadata-only",
+      "evidenceType": "static-observation-with-unexecuted-install",
+      "locations": [
+        "package-lock.json:1-32",
+        "package-lock.json:1480-1550",
+        "scripts/sdk-clean-import.mjs:17-25",
+        "PROJECT_INFO/development.md:74-76"
+      ],
+      "facts": [
+        "Root dependency maps совпадают; все 361 записи имеют конкретные versions и registry URL.",
+        "У пяти вложенных пакетов SDK отсутствуют integrity и отметки inBundle/link.",
+        "Прочитанный установленный manifest coding-agent не объявляет bundledDependencies.",
+        "SDK clean-import script создаёт manifest только с тремя SDK packages и использует npm install без project lock и Dynamicwf postinstall.",
+        "Ни один заявленный Node engine в lock не отверг 22.19.0 при semver-проверке."
+      ],
+      "missingIntegrity": [
+        "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/chord",
+        "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-agent-core",
+        "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai",
+        "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-telemetry",
+        "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-tui"
+      ],
+      "unresolved": [
+        "Прохождение fresh npm ci и npm ci --omit=dev на минимальной Node и Linux с пустым cache.",
+        "Происхождение отсутствующих integrity и фактическая проверка этих пакетов npm в чистом окружении."
+      ],
+      "counterEvidence": [
+        "Версии закреплены; отсутствие integrity не доказывает подмену, компрометацию или неисправный npm ci.",
+        "Документация корректно называет clean-import проверкой SDK, а не всей установки Dynamicwf.",
+        "Все выполненные тесты используют уже существующие зависимости Node 26.8.1 и не решают вопрос свежей установки."
+      ],
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Отдельно проверить source checkout + project lock на минимальной Node с обычным postinstall, затем production-only install и offline CLI/check smoke. Установить происхождение неполных integrity по достоверным пакетным метаданным без обновления версий ради заполнения полей.",
+        "risk": "Широкая регенерация lock меняет транзитивный граф; install scripts требуют изолированной среды.",
+        "acceptance": [
+          "Те же выбранные versions; подтверждённая полнота integrity либо обоснованное исключение.",
+          "Четыре ожидаемых patch-хеша; bin из другого cwd и чистый граф работают без devDependencies.",
+          "Результат отдельно подтверждён на Node 22.19.0 и поддерживаемых ОС."
+        ],
+        "checksExecutedHere": false
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "continuationDisposition": "carried-and-rechecked",
+      "continuationVerification": {
+        "experimentIds": [
+          "C01",
+          "C03"
+        ],
+        "facts": [
+          "Заново подтверждены root maps, 361 concrete version/registry URL, 356 integrity, пять пропусков."
+        ],
+        "boundary": "Совместимость engines и installed manifest observation перенесены из E00; fresh install и semver повторно не запускались."
+      }
+    },
+    {
+      "id": "R16-F01",
+      "classification": "already-fixed",
+      "title": "SDK bash signal обработан как ошибка; patch installer проверяет байты до записи",
+      "confidence": "high",
+      "locations": [
+        "patches/pi-coding-agent-0.85.1-bash-signal.patch",
+        "scripts/apply-sdk-bash-signal.mjs:23-71",
+        "tests/bash-signal.test.ts:14-87",
+        "tests/bash-signal-worker.test.ts:44-63"
+      ],
+      "facts": [
+        "Signal передаётся отдельно, unknown null exit отвергается, output до сигнала сохраняется.",
+        "Установщик требует версию 0.85.1, проверяет все четыре входных и staged output hashes, удаляет inherited Git routing и запрещает внешние symlinks.",
+        "Четыре исследованных SDK файла соответствуют разрешённым patched-хешам и остались неизменными после fixtures."
+      ],
+      "experiments": [
+        "E02",
+        "E04"
+      ],
+      "counterEvidenceAndLimits": [
+        "Не проверялось падение ОС/ENOSPC посреди четырёх installed writes.",
+        "Pristine fixture восстановлена reverse patch, а не fresh registry install.",
+        "Не следует переоткрывать старую потерю сигнала как bug этой ревизии."
+      ],
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Сохранить текущие guards; будущий отказ от patch обосновывать теми же сигнал-регрессиями на чистом upstream.",
+        "risk": "Обход version/hash checks возвращает ложное подтверждение успешного bash.",
+        "acceptance": [
+          "Реальные SIGTERM/null-exit/worker tests и installer guards проходят до удаления patch-цепочки при обновлении SDK."
+        ]
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "continuationDisposition": "carried-and-rechecked",
+      "continuationVerification": {
+        "experimentIds": [
+          "C01",
+          "C02",
+          "C03"
+        ],
+        "facts": [
+          "Сводка E02 подтверждает 11 pass без skip.",
+          "Код сохранённого E04 probe побайтно совпал с preservedActionEvidence; SDK-копии имеют описанные конечные hash-state."
+        ],
+        "boundary": "Старые E04 exit statuses и сравнение неизменности dev SDK до/после — исходные результаты, не новый запуск; исходный dev SDK в продолжении не менялся и не исполнялся."
+      }
+    },
+    {
+      "id": "R16-F02",
+      "classification": "already-fixed",
+      "title": "Выбранный frozen skill доставляется и реально читается SDK",
+      "confidence": "high",
+      "locations": [
+        "src/catalog.ts:31-35",
+        "src/pi-worker.ts:112-115",
+        "src/pi-worker.ts:165-173",
+        "src/pi-worker.ts:206-209",
+        "tests/pi-worker.test.ts:265-300",
+        "tests/pi-worker.test.ts:385-415",
+        "PROJECT_INFO/models-and-setup.md:26-30"
+      ],
+      "facts": [
+        "Непустые skills требуют read или bash; отказ предшествует SDK admission.",
+        "Resource loader получает frozen paths и проверяет точность их загрузки.",
+        "Реальный SDK прочитал SKILL.md после удаления source, через read и bash, с declared name и directory fallback.",
+        "Физическая копия поставляемого skill самодостаточна; root symlink в config.skills намеренно не поддерживается и это документировано."
+      ],
+      "experiments": [
+        "E01",
+        "E03"
+      ],
+      "counterEvidenceAndLimits": [
+        "Доставка не доказывает качество применения skill реальной моделью.",
+        "Установочная ссылка для внешнего приложения и frozen config.skills — разные контракты."
+      ],
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Сохранить регрессии доставки и различие между внешней install link и snapshot source в документации.",
+        "risk": "Смешение этих контрактов приведёт к ложному сообщению о неработающей distribution или неявному расширению инструментов.",
+        "acceptance": [
+          "Оба разрешённых читателя продолжают работать без скрытого добавления инструментов; inaccessible skill отвергается до SDK admission."
+        ]
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "continuationDisposition": "carried-and-rechecked",
+      "continuationVerification": {
+        "experimentIds": [
+          "C01",
+          "C02",
+          "C03"
+        ],
+        "facts": [
+          "Заново прочитаны guards и tests настоящего SDK read/bash, сводки E01/E03 совпали с отчётом."
+        ],
+        "boundary": "Тесты и live provider не запускались заново."
+      }
+    }
+  ],
+  "experiments": [
+    {
+      "id": "E00",
+      "executed": true,
+      "command": "git rev-parse HEAD; git log -18; git log -- package.json package-lock.json scripts bin README.md skills; Node inline scripts reading package/lock and semver.satisfies('22.19.0', engines.node)",
+      "outcome": "HEAD совпал; dependency maps равны; 361 version/URL, 356 integrity; 0 несовместимых заявленных engines.",
+      "boundaries": [
+        "Первый resolve semver от root dev не удался; анализ исправлен на SDK-local semver. Это ошибка probe, не приложения.",
+        "Не установка пакетов и не исполнение на минимальной Node."
+      ],
+      "executionPhase": "source-run",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "executedInCurrentOperation": false
+    },
+    {
+      "id": "E01",
+      "executed": true,
+      "cwd": "Разрешённый integration-dev того же HEAD",
+      "environment": "env -i PATH=$PATH HOME=$T/home TMPDIR=$T/tmp; T=/tmp/r16-offline-tests.AqcHhf",
+      "command": "node --import tsx --test --test-concurrency=1 tests/setup.test.ts tests/cli.test.ts tests/skill-handoff.test.ts tests/doctor.test.ts tests/skill-delivery.test.ts tests/implementation-recipes.test.ts tests/research-trio.test.ts",
+      "outcome": {
+        "tests": 85,
+        "passed": 85,
+        "failed": 0,
+        "skipped": 0,
+        "durationMs": 84786.324208
+      },
+      "boundaries": [
+        "Временные БД, процессы и Git repositories; модели подставные.",
+        "Не полный npm test и не проверка устойчивости под конкурирующей нагрузкой."
+      ],
+      "executionPhase": "source-run",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "executedInCurrentOperation": false
+    },
+    {
+      "id": "E02",
+      "executed": true,
+      "cwd": "Разрешённый integration-dev того же HEAD",
+      "environment": "env -i PATH=$PATH HOME=$T/home TMPDIR=$T/tmp; T=/tmp/r16-sdk-tests.KN0IFE",
+      "command": "node --import tsx --test --test-concurrency=1 --test-name-pattern='^(?!installer reproducibility)' tests/bash-signal.test.ts tests/bash-signal-worker.test.ts",
+      "outcome": {
+        "tests": 11,
+        "passed": 11,
+        "failed": 0,
+        "skipped": 0,
+        "durationMs": 3658.645792
+      },
+      "boundaries": [
+        "Фильтр фактически не исключил два installer tests; они также прошли.",
+        "Их временные .o07-install-* были созданы в cwd dev, а не в /tmp/r16; удалены finally. См. processNotes."
+      ],
+      "executionPhase": "source-run",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "executedInCurrentOperation": false
+    },
+    {
+      "id": "E03",
+      "executed": true,
+      "cwd": "Разрешённый integration-dev того же HEAD",
+      "environment": "env -i PATH=$PATH HOME=$T/home TMPDIR=$T/tmp; T=/tmp/r16-sdk-tests.KN0IFE",
+      "command": "node --import tsx --test --test-concurrency=1 --test-name-pattern='(frozen resources|inaccessible frozen skills|frozen skill from|skills snapshot|physical copy of the shipped skill|skills reject symlink)' tests/pi-worker.test.ts tests/execution-plan.test.ts",
+      "outcome": {
+        "tests": 10,
+        "passed": 10,
+        "failed": 0,
+        "skipped": 0,
+        "durationMs": 3523.863167
+      },
+      "boundaries": [
+        "Только указанная выборка pi-worker/execution-plan; не весь набор.",
+        "SDK модельные ответы подставные; read/bash настоящие."
+      ],
+      "executionPhase": "source-run",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "executedInCurrentOperation": false
+    },
+    {
+      "id": "E04",
+      "executed": true,
+      "command": "node /tmp/r16-sdk-guard.VUyo5U/probe.mjs \"$CWD\" \"$DEV\" /tmp/r16-sdk-guard.VUyo5U",
+      "fixture": "Четыре patched SDK файла скопированы из dev. Reverse git apply получает pristine. Реальный установщик вызывается только над отдельными копиями, затем сравниваются все байты.",
+      "outcome": {
+        "cases": [
+          {
+            "name": "pristine-with-inherited-git-routing",
+            "exit": 0,
+            "exactPatchedBytes": true
+          },
+          {
+            "name": "idempotent",
+            "exit": 0
+          },
+          {
+            "name": "mixed",
+            "exit": 1,
+            "bytesUnchanged": true
+          },
+          {
+            "name": "unknown",
+            "exit": 1,
+            "bytesUnchanged": true
+          },
+          {
+            "name": "wrong-version",
+            "exit": 1,
+            "bytesUnchanged": true
+          },
+          {
+            "name": "external-manifest",
+            "exit": 1,
+            "bytesUnchanged": true
+          },
+          {
+            "name": "external-file",
+            "exit": 1,
+            "bytesUnchanged": true
+          },
+          {
+            "name": "external-sdk-root",
+            "exit": 1,
+            "bytesUnchanged": true
+          },
+          {
+            "name": "lying-git",
+            "exit": 1,
+            "bytesUnchanged": true
+          }
+        ],
+        "sourceSdkUnchanged": true
+      },
+      "boundaries": [
+        "Probe временный и не поставляется как новый тест.",
+        "Не свежая установка из registry, не power-loss atomicity test."
+      ],
+      "executionPhase": "source-run",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "executedInCurrentOperation": false
+    },
+    {
+      "id": "E05",
+      "executed": true,
+      "command": "node --input-type=module - \"$PWD\" \"$T\"; T создан mktemp -d /tmp/r16-hardlink-fixture.XXXXXX; inline fixture копирует S и запускает instantiate для трёх видов output",
+      "outcome": [
+        {
+          "mode": "new-directory",
+          "exit": 0,
+          "sourcePatchChanged": false
+        },
+        {
+          "mode": "symlink",
+          "exit": 1,
+          "sourcePatchChanged": false
+        },
+        {
+          "mode": "hardlink",
+          "exit": 0,
+          "sourcePatchChanged": true,
+          "linkCount": 2
+        }
+      ],
+      "boundaries": [
+        "Только копии S в /tmp, не установленный skill.",
+        "Не требуются npm dependencies, модель или конкурентная подмена файлов."
+      ],
+      "executionPhase": "source-run",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "executedInCurrentOperation": false
+    },
+    {
+      "id": "E06",
+      "executed": true,
+      "command": "Полный self-contained shell/Node reproducer из R16-B01 и Markdown отчёта",
+      "outcome": {
+        "exit": 0,
+        "sourceChanged": true,
+        "sourceId": "r16_changed"
+      },
+      "boundaries": [
+        "Повторное минимальное воспроизведение в /tmp/r16-repro.*; копия удалена после проверки."
+      ],
+      "executionPhase": "source-run",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "executedInCurrentOperation": false
+    },
+    {
+      "id": "E07",
+      "executed": true,
+      "cwd": "Фактический worktree узла, до записи отчётов",
+      "command": "env -i PATH=\"$PATH\" HOME=\"$T/home\" npm_config_cache=\"$T/cache\" npm pack --dry-run --ignore-scripts --json",
+      "outcome": {
+        "entries": 258,
+        "unpackedBytes": 2734061,
+        "selectedRequiredAssets": 13,
+        "missingSelectedAssets": 0,
+        "executableMode": "0755",
+        "nodeModulesIncluded": false,
+        "packageLockIncluded": false
+      },
+      "boundaries": [
+        "Только локальный dry-run, без tarball и install; временный npm cache находится под /tmp/r16-pack-manifest.*.",
+        "Проверка наличия assets не подтверждает чистую установку."
+      ],
+      "executionPhase": "source-run",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "executedInCurrentOperation": false
+    },
+    {
+      "id": "E08",
+      "executed": true,
+      "command": "git diff --check; git status --short; git -C \"$DEV\" diff --exit-code -- scripts bin src tests package.json package-lock.json PROJECT_INFO README.md skills; find \"$DEV\" -maxdepth 1 -type d -name '.o07-*'",
+      "outcome": "До записи отчётов worktree чист; отслеживаемые профильные файлы dev не изменены; временных .o07-* не осталось.",
+      "boundaries": [
+        "Не сравнение всего пользовательского состояния; не управление реальными run или установленными процессами."
+      ],
+      "executionPhase": "source-run",
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "executedInCurrentOperation": false
+    },
+    {
+      "id": "C00",
+      "executed": true,
+      "executionPhase": "continuation-read-only",
+      "command": "pwd; git rev-parse HEAD; git status --short; shasum -a 256 двух старых report paths из continuationProvenance; чтение обоих отчётов и r16-actions.json",
+      "outcome": "HEAD=e15bc407; оба SHA256/размеры совпали; файлы полны; 21 action record с id/command.",
+      "boundaries": [
+        "Старый metadata.status=complete не свидетельствует об успешном submit_result.",
+        "Список actions не содержит stdout/exit status."
+      ]
+    },
+    {
+      "id": "C01",
+      "executed": true,
+      "executionPhase": "continuation-read-only",
+      "command": "Python3: json.loads; Counter по classifications; sum test counts; regex file:line ranges; сравнение read_bytes 37 source paths со старым cwd и git show e15bc407:<path>; nl -ba ключевых code/test источников",
+      "outcome": {
+        "findingCount": 5,
+        "sourceTestSum": 106,
+        "validUniqueLineRanges": 57,
+        "sourceFilesEqualToOldAndGit": 37,
+        "invalidRanges": 0
+      },
+      "boundaries": [
+        "Ключевые механизмы/контрпримеры перечитаны вручную; одна проверка длины файла не считается семантическим доказательством.",
+        "Исходники и тесты не запускались/не менялись."
+      ]
+    },
+    {
+      "id": "C02",
+      "executed": true,
+      "executionPhase": "continuation-read-only",
+      "command": "Python3: чтение/regex summary retainedLocalEvidence test files; json.loads pack; stat/hash E05; сравнение E04 probe с записанным heredoc; hash-state восьми сохранённых SDK fixture directories",
+      "outcome": {
+        "retainedTestsPassed": 106,
+        "packEntries": 258,
+        "packSelectedAssets": 13,
+        "packMissingSelectedAssets": 0,
+        "packBinMode": "0755",
+        "packLockIncluded": false,
+        "hardlinkPoststateConfirmed": true,
+        "hardlinkCounterexamplesConfirmed": true,
+        "guardProbeMatchesAction": true,
+        "guardFixtureStatesMatch": true
+      },
+      "boundaries": [
+        "Чтение сохранённого состояния, не повторное измерение exit statuses девяти E04 cases.",
+        "E06 отдельный удалённый минимальный reproducer перенесён; ID r16_changed не спутан с r16_rebound E05.",
+        "Ни одной записи в старые fixtures, исходный dev SDK или старый worktree."
+      ]
+    },
+    {
+      "id": "C03",
+      "executed": true,
+      "executionPhase": "continuation-read-only",
+      "command": "git log --oneline e15bc407..3d8ba65; git show 86f5e07; git show 3d8ba65; git diff --exit-code e15bc407 3d8ba65 -- package.json package-lock.json scripts bin src/doctor.ts src/catalog.ts src/pi-worker.ts skills/dynamic-workflows/recipes/implementation-review/instantiate.mjs skills/dynamic-workflows/recipes/implementation-review/README.md; Python3 package/lock metadata read",
+      "outcome": {
+        "postStudyCommits": 2,
+        "scopedDiffExitCode": 0,
+        "lockEntries": 361,
+        "integrityEntries": 356,
+        "rootMapsMatch": true,
+        "concreteVersions": true,
+        "registryURLs": true
+      },
+      "boundaries": [
+        "Git objects, без checkout; tests publicationRevision не запускались.",
+        "Semver engines result перенесён из E00; npm ci/install не выполнялись."
+      ]
+    }
+  ],
+  "alreadyFixedAndRefutations": {
+    "findingIds": [
+      "R16-F01",
+      "R16-F02"
+    ],
+    "observations": [
+      {
+        "hypothesis": "Bin зависит от cwd или оставляет transport wrapper",
+        "result": "Опровергнуто текущим bin и setup tests с другим cwd и MCP process identity/detach.",
+        "sources": [
+          "bin/dynamicwf.mjs:8-18",
+          "tests/setup.test.ts:109-133",
+          "tests/setup.test.ts:171-211"
+        ]
+      },
+      {
+        "hypothesis": "CLI теряет большой UTF-8 JSON или не ждёт EOF",
+        "result": "Профильный regression прошёл; текущий CLI читает stream до EOF.",
+        "sources": [
+          "src/cli.ts:18-22",
+          "tests/cli.test.ts:40-73"
+        ]
+      },
+      {
+        "hypothesis": "Копии skill требуются PROJECT_INFO/src",
+        "result": "Физическая копия, локальные ссылки и JSON self-contained; embedded helpers S/P/C побайтно проверены.",
+        "sources": [
+          "tests/setup.test.ts:213-240",
+          "tests/implementation-recipes.test.ts:47-61"
+        ]
+      },
+      {
+        "hypothesis": "Skill handoff создаёт новый run при повторной доставке start",
+        "result": "Offline CLI/MCP tests вернули один ID для одного prepared request/idempotency key.",
+        "sources": [
+          "tests/skill-handoff.test.ts:12-98"
+        ]
+      },
+      {
+        "hypothesis": "TypeScript и tsx можно убрать из production dependencies",
+        "result": "Опровергнуто прямым runtime использованием generated-module и bin.",
+        "sources": [
+          "package.json:26-40",
+          "bin/dynamicwf.mjs:14-18",
+          "src/generated-module.ts:5-30"
+        ]
+      }
+    ],
+    "outOfScopeFixedAreas": "Текущие dashboard ownership/control/await/disclosure исправления прочитаны в документах и истории, но не исследованы повторно и не переоткрываются."
+  },
+  "processNotes": [
+    {
+      "experimentId": "E02",
+      "type": "temporary-fixture-location-deviation",
+      "description": "Отрицательный test-name-pattern не исключил два штатных installer tests. Они создали временные .o07-install-* в cwd dev, хотя временные воспроизводители этого исследования следовало размещать под /tmp/r16-*.",
+      "observedAfterward": "Finally тестов удалил каталоги; последующий find не обнаружил остатков. Отслеживаемые профильные файлы dev не изменены. Дополнительный E04 работал только под /tmp/r16-*; четыре реальных SDK файла до/после совпали.",
+      "claimBoundary": "Не заявляется соблюдение требования о размещении временных файлов для этих двух fixtures; installed runtime/global settings не менялись."
+    },
+    {
+      "type": "continuation-only-assigned-report-writes",
+      "description": "В новой операции старые отчёты/fixtures только читались; запись исключительно двух назначенных отчётов в новом cwd. Исходные E00–E08 не повторялись.",
+      "claimBoundary": "Историческое отклонение E02 остаётся в отчёте и не исправляется задним числом; post-study исправления не выдаются за реализованные исследователем."
+    }
+  ],
+  "unknowns": [
+    {
+      "id": "R16-U01",
+      "question": "Fresh clean install на минимальной Node и поддерживаемых ОС; происхождение пяти отсутствующих integrity",
+      "performed": "Только чтение lock/manifests и исполнение с готовыми зависимостями Node 26.8.1.",
+      "proposedOnly": "Изолированный checkout + npm ci с lock/postinstall; затем --omit=dev, hash verification и offline pure graph smoke."
+    },
+    {
+      "id": "R16-U02",
+      "question": "Обнаружение skill конкретным внешним агентным приложением",
+      "performed": "Проверены ссылки, копия, локальные ресурсы и SDK snapshot delivery.",
+      "proposedOnly": "Отдельная проверка интеграции выбранного пользователем приложения; универсальная autodiscovery не обещана."
+    },
+    {
+      "id": "R16-U03",
+      "question": "Качество применения skill/рецептов и реальные права provider",
+      "performed": "Только offline mocks и настоящие локальные SDK tools.",
+      "proposedOnly": "Если нужно пользователю, отдельная явно разрешённая графом live проверка; этот отчёт её не заменяет."
+    },
+    {
+      "id": "R16-U04",
+      "question": "Полная файловая атомарность setup/patch при power loss или ENOSPC",
+      "performed": "Preflight/hash отказные случаи и идемпотентность; падение посреди записи не моделировалось.",
+      "proposedOnly": "Изолированная fault-injection fixture при отдельном исследовании, без воздействия на установленный SDK."
+    },
+    {
+      "id": "R16-U05",
+      "question": "Причина известной нестабильности процессных тестов в полном npm test",
+      "performed": "Профильный последовательный handoff прошёл.",
+      "proposedOnly": "Диагностика полного набора с временными метками и контролируемой нагрузкой; не увеличение таймаутов без причины."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S01",
+      "kind": "repository",
+      "paths": [
+        "AGENTS.md",
+        "PROJECT_INFO/architecture.md",
+        "PROJECT_INFO/development.md:8-76",
+        "PROJECT_INFO/known-issues.md"
+      ],
+      "purpose": "Обязательные инструкции, архитектура, инварианты и реальные ограничения проверок"
+    },
+    {
+      "id": "S02",
+      "kind": "repository",
+      "paths": [
+        "README.md:8-51",
+        "PROJECT_INFO/README.md",
+        "PROJECT_INFO/models-and-setup.md:7-54",
+        "PROJECT_INFO/models-and-setup.md:100-145",
+        "PROJECT_INFO/service.md"
+      ],
+      "purpose": "Публичный install/onboarding/CLI/MCP contract"
+    },
+    {
+      "id": "S03",
+      "kind": "repository",
+      "paths": [
+        "package.json:1-46",
+        "package-lock.json:1-32",
+        "package-lock.json:1480-1550",
+        "tsconfig.json",
+        ".gitignore"
+      ],
+      "purpose": "Dependency и packaging metadata; lock целиком проанализирован программно"
+    },
+    {
+      "id": "S04",
+      "kind": "repository",
+      "paths": [
+        "scripts/setup.ts:12-56",
+        "bin/dynamicwf.mjs:1-24",
+        "src/cli.ts:7-33",
+        "src/doctor.ts:59-90",
+        "src/generated-module.ts:1-39"
+      ],
+      "purpose": "Фактическое исполнение из source checkout и диагностика"
+    },
+    {
+      "id": "S05",
+      "kind": "repository",
+      "paths": [
+        "scripts/apply-sdk-bash-signal.mjs:1-77",
+        "patches/pi-coding-agent-0.85.1-bash-signal.patch",
+        "scripts/sdk-clean-import.mjs"
+      ],
+      "purpose": "SDK patch, fail-closed install chain и граница отдельного SDK probe"
+    },
+    {
+      "id": "S06",
+      "kind": "repository",
+      "paths": [
+        "skills/dynamic-workflows/SKILL.md",
+        "skills/dynamic-workflows/recipes/research-trio/README.md",
+        "skills/dynamic-workflows/recipes/implementation-review/README.md",
+        "skills/dynamic-workflows/recipes/implementation-review/instantiate.mjs:13-58"
+      ],
+      "purpose": "Переносимые инструкции, воспроизводимые рецепты, bug hardlink output"
+    },
+    {
+      "id": "S07",
+      "kind": "repository-tests",
+      "paths": [
+        "tests/setup.test.ts:109-240",
+        "tests/cli.test.ts:9-73",
+        "tests/skill-handoff.test.ts",
+        "tests/doctor.test.ts"
+      ],
+      "purpose": "Профильные выполненные installation/handoff regressions"
+    },
+    {
+      "id": "S08",
+      "kind": "repository-tests-and-code",
+      "paths": [
+        "tests/bash-signal.test.ts:14-87",
+        "tests/bash-signal-worker.test.ts:44-63",
+        "tests/skill-delivery.test.ts",
+        "tests/pi-worker.test.ts:265-300",
+        "tests/pi-worker.test.ts:385-415",
+        "tests/execution-plan.test.ts:126-196",
+        "src/catalog.ts:31-35",
+        "src/pi-worker.ts:112-115",
+        "src/pi-worker.ts:165-173",
+        "src/pi-worker.ts:206-209"
+      ],
+      "purpose": "Текущие patch и skill delivery guards, включая реальное SDK чтение"
+    },
+    {
+      "id": "S09",
+      "kind": "repository-tests",
+      "paths": [
+        "tests/implementation-recipes.test.ts:47-187",
+        "tests/research-trio.test.ts"
+      ],
+      "purpose": "Authoring, snapshot, verification, finish guards и offline SDK recipes"
+    },
+    {
+      "id": "S10",
+      "kind": "git-history",
+      "revisions": [
+        "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "d06da9fb9c74448099a436059c76a94e251831a1",
+        "2d9f9d2",
+        "fea2136"
+      ],
+      "purpose": "Сопоставление текущей базы с исправлениями patch, skill и UI; история не заменяет код HEAD"
+    },
+    {
+      "id": "S11",
+      "kind": "existing-local-dependencies",
+      "paths": [
+        "node_modules/@earendil-works/pi-coding-agent/package.json",
+        "node_modules/@earendil-works/pi-ai/package.json",
+        "node_modules/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai/package.json",
+        "node_modules/@earendil-works/pi-coding-agent/dist/utils/child-process.js",
+        "node_modules/@earendil-works/pi-coding-agent/dist/utils/child-process.d.ts",
+        "node_modules/@earendil-works/pi-coding-agent/dist/core/tools/bash.js",
+        "node_modules/@earendil-works/pi-coding-agent/dist/core/tools/bash.d.ts"
+      ],
+      "purpose": "Чтение manifests и hash-approved SDK файлов существующего разрешённого dev; без изменений, установки и credentials"
+    },
+    {
+      "id": "S12",
+      "kind": "retained-own-reports",
+      "purpose": "Полные исходные md/json; байты/хеши совпали с retainedEvidence, но старая операция failed.",
+      "provenancePointer": "continuationProvenance.oldReports"
+    },
+    {
+      "id": "S13",
+      "kind": "retained-own-action-records",
+      "purpose": "21 сохранённая команда без stdout/exit status; прочитаны как evidence, не исполнены заново.",
+      "provenancePointer": "continuationProvenance.preservedActionEvidence"
+    },
+    {
+      "id": "S14",
+      "kind": "retained-own-offline-evidence",
+      "purpose": "Перечитанные сводки тестов, pack manifest, probe и сравнительные hardlink/SDK fixtures; сырые логи не публикуются.",
+      "provenancePointer": "continuationProvenance.retainedLocalEvidence"
+    },
+    {
+      "id": "S15",
+      "kind": "post-study-git-objects",
+      "revisions": [
+        "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+        "3d8ba65ee84402c0e3b0587f70095b7847824a9f"
+      ],
+      "purpose": "Отдельный already-fixed контекст authoring validation/reviewer docs и scoped diff; не study-source test execution."
+    }
+  ],
+  "continuationProvenance": {
+    "mode": "carry-complete-own-reports-with-independent-read-only-verification",
+    "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+    "currentRunId": "run-9dbb044c-664f-4dd8-96c0-57192dc4ed89",
+    "oldOperationStatus": "failed",
+    "retainedFailure": {
+      "version": 1,
+      "code": "provider",
+      "phase": "execution",
+      "effects": "unknown",
+      "diagnostic": {
+        "dispatch": "http-observed"
+      },
+      "providerResponse": {
+        "status": 429
+      }
+    },
+    "failureInterpretation": "Только переданные метаданные исходной операции; не отдельная продуктовая находка и не вывод о квотах/причине provider error.",
+    "oldReportMetadataStatus": "complete",
+    "successfulOldSubmissionClaimed": false,
+    "oldReportsCompleteByInspection": true,
+    "oldWorkspace": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/945bd8a5705082c2160ee88810e3b2b413c4321de606d2c2540db0a5697b02cb",
+    "currentWorkspace": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/945bd8a5705082c2160ee88810e3b2b413c4321de606d2c2540db0a5697b02cb",
+    "oldReports": [
+      {
+        "path": "research/2026-09-20-astra-max/r16-packaging-onboarding.md",
+        "bytes": 35612,
+        "sha256": "712acf6ba4e8ab767df405b521454974fdeeb39d6dc50c0f3a53ea8f171fde96",
+        "symlink": false,
+        "hashMatchedRetainedEvidence": true
+      },
+      {
+        "path": "research/2026-09-20-astra-max/r16-packaging-onboarding.json",
+        "bytes": 39150,
+        "sha256": "694e4fb85f56d4195b531ba8e7e16022ec9e15ad38be06ffb2e3d00cf7caabab",
+        "symlink": false,
+        "jsonValid": true,
+        "hashMatchedRetainedEvidence": true
+      }
+    ],
+    "preservedActionEvidence": {
+      "path": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r16-actions.json",
+      "sha256": "935ce0af0f79cb5ab166e771d1bee31c62636219ec7db9eb8c932d3f8fbfbdc4",
+      "records": 21,
+      "recordKeys": [
+        "command",
+        "id"
+      ],
+      "boundary": "Список команд, без stdout/exit status; сами команды не исполнялись повторно."
+    },
+    "transferred": {
+      "findingIds": [
+        "R16-B01",
+        "R16-I01",
+        "R16-U01",
+        "R16-F01",
+        "R16-F02"
+      ],
+      "experimentIds": [
+        "E00",
+        "E01",
+        "E02",
+        "E03",
+        "E04",
+        "E05",
+        "E06",
+        "E07",
+        "E08"
+      ],
+      "facts": [
+        "Исходные 106 pass, девять guard cases, hardlink bug и его контрпримеры.",
+        "Clean install/minimum Node/Linux/live boundaries, refutations и уже реализованные study-source guards.",
+        "Операционное отклонение E02 не удалено и не объявлено соблюдением старых ограничений."
+      ]
+    },
+    "rechecked": {
+      "experimentIds": [
+        "C00",
+        "C01",
+        "C02",
+        "C03"
+      ],
+      "facts": [
+        "Старые SHA256 и полнота файлов; 5 ID/классификации/сумма 106.",
+        "57 корректных диапазонов, 37 исходных файлов равны старому cwd и Git sourceRevision; ключевые источники перечитаны.",
+        "Сводки трёх сохранённых test logs и pack manifest; hardlink E05 послесостояние и E04 probe/copy hash-state.",
+        "Lock maps/versions/URLs/integrity; профильный diff к publicationRevision пуст."
+      ]
+    },
+    "added": {
+      "newFindings": 0,
+      "items": [
+        "Continuation provenance, отдельная маркировка source-run/current-operation evidence.",
+        "Read-only подтверждение сохранённых результатов и границы их доказательности.",
+        "Две post-study already-fixed пометки без новой рекомендации внедрения."
+      ]
+    },
+    "notRepeated": [
+      "E00–E08 commands",
+      "npm/test/install/pack executions",
+      "SDK installer/helper executions",
+      "model/provider calls",
+      "real run controls",
+      "writes to old worktree or old fixtures"
+    ],
+    "validationLimits": [
+      "Сводки retained tests подтверждены чтением сохранённых файлов, а не повторным прогоном.",
+      "E04 raw stdout/exit result отдельно не сохранён; его результаты перенесены из полного исходного отчёта, проверены код probe и остаточные состояния.",
+      "E06 удалил свою fixture; этот результат перенесён, сравнительный E05 поддержан сохранившимися файлами.",
+      "Метаданные failed/effects=unknown не подменены успешным исходом исторической операции."
+    ],
+    "completionMeaning": "complete относится к проверенному пакету двух новых отчётов, не к исходной операции и не к live провайдеру.",
+    "retainedLocalEvidence": [
+      {
+        "path": "/tmp/r16-offline-tests.AqcHhf/results.tap",
+        "sha256": "afd2e7e317d0bab99c175c02ad78220c468fe406868b6e97f47ea2dce72b3e77",
+        "summary": {
+          "tests": 85,
+          "passed": 85,
+          "failed": 0,
+          "skipped": 0
+        },
+        "readOnly": true
+      },
+      {
+        "path": "/tmp/r16-sdk-tests.KN0IFE/signal.tap",
+        "sha256": "389309cbad86aa9d1de58887e4102d18ad2c56f40458d84560e394372b1bd84e",
+        "summary": {
+          "tests": 11,
+          "passed": 11,
+          "failed": 0,
+          "skipped": 0
+        },
+        "readOnly": true
+      },
+      {
+        "path": "/tmp/r16-sdk-tests.KN0IFE/skill.tap",
+        "sha256": "fcbd0dbbbd2766478617052196dcaf2e8e777942534c592a780652ebfbd98634",
+        "summary": {
+          "tests": 10,
+          "passed": 10,
+          "failed": 0,
+          "skipped": 0
+        },
+        "readOnly": true
+      },
+      {
+        "path": "/tmp/r16-pack-manifest.HDz7oH/pack.json",
+        "sha256": "a57e61bdff66d30f1342b0a8dba77d47b2cb624e0f53f103e3239b8615e5e614",
+        "readOnly": true
+      },
+      {
+        "path": "/tmp/r16-sdk-guard.VUyo5U/probe.mjs",
+        "sha256": "169beabdd8efdd6cc61d060e01067a25d2b8ed72dda7449b8d8d0bc7a8b5dc60",
+        "matchesRecordedScript": true,
+        "readOnly": true
+      },
+      {
+        "path": "/tmp/r16-hardlink-fixture.stjd5b",
+        "readOnly": true,
+        "sourcePatchBeforeSha256": "420dfa269e3bdc9ae72104d912d246005d54bb1d44cf098609e09161d54ed9b5",
+        "sourcePatchAfterHardlinkSha256": "c2a47e0e9c899cc27c90fdcbae1ea4df614d3d3be6537f6928dc938081d40d27",
+        "sourceIdInE05": "r16_rebound",
+        "outputHardlinkCount": 2,
+        "sourceOutputSameInode": true,
+        "newDirectorySourceUnchanged": true,
+        "symlinkSourceUnchanged": true
+      }
+    ]
+  },
+  "publicationContext": {
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "revisionOrigin": "Явный вход задания; Git-объекты просмотрены, текущий worktree оставлен на e15bc407.",
+    "separateFromStudySource": true,
+    "testsExecutedOnPublicationRevision": false,
+    "alreadyFixedSinceSource": [
+      {
+        "classification": "already-fixed",
+        "revision": "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+        "topic": "Ранняя authoring parallel writer isolation validation",
+        "observed": "validateWorkflow вызывает общий parallelWriterIsolationIssues; добавлены профильные документы/рецепт и tests. Повторная реализация не предлагается.",
+        "sources": [
+          "git show 86f5e07 -- src/graph.ts src/parallel-isolation.ts PROJECT_INFO/graph-contract.md PROJECT_INFO/known-issues.md"
+        ],
+        "boundary": "Прочитан код/diff, новые tests не запускались; это отдельная post-study пометка, не study-source finding."
+      },
+      {
+        "classification": "already-fixed",
+        "revision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+        "topic": "Документация reviewer artifact revision binding",
+        "observed": "Skill объясняет обязательный верхнеуровневый input.artifactRevision для reviewer-схемы с таким required, точное копирование и отличие от новой reportRevision. Повторное внедрение не предлагается.",
+        "sources": [
+          {
+            "path": "skills/dynamic-workflows/SKILL.md",
+            "lines": [
+              110,
+              114
+            ]
+          },
+          {
+            "path": "skills/dynamic-workflows/references/authoring.md",
+            "lines": [
+              128,
+              156
+            ]
+          }
+        ],
+        "boundary": "Прочитана документация этой ревизии, не новый feature test."
+      }
+    ],
+    "unchangedFindingScope": [
+      "package.json",
+      "package-lock.json",
+      "scripts",
+      "bin",
+      "src/doctor.ts",
+      "src/catalog.ts",
+      "src/pi-worker.ts",
+      "skills/dynamic-workflows/recipes/implementation-review/instantiate.mjs",
+      "skills/dynamic-workflows/recipes/implementation-review/README.md"
+    ],
+    "scopedDiffExitCode": 0,
+    "inference": "R16-B01/I01/U01 не объявляются устранёнными этими post-study коммитами. Pack/test counts относятся к sourceRevision, не ко всему расширенному skill публикационной базы."
+  }
+}

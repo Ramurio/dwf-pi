@@ -1,0 +1,1345 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "researchId": "r09",
+    "topic": "UX approvals/gates/await и продолжения задачи",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "date": "2026-09-20",
+    "timezone": "UTC",
+    "language": "ru",
+    "mode": "Исследование, не реализация; завершение сохранённого доказательного пакета",
+    "cwd": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/296767b722d7bc81389cc890291795fd34e157c7adfa3ccfa548b000fff995ca",
+    "reportMd": "research/2026-09-20-astra-max/r09-waits-gates-ux.md",
+    "reportJson": "research/2026-09-20-astra-max/r09-waits-gates-ux.json",
+    "historicalEnvironment": {
+      "platform": "macOS",
+      "node": "v26.8.1",
+      "browser": "Chrome/153.0.8010.52",
+      "dependencies": "E01–E04 исполнялись из разрешённого integration-dev с уже существующими node_modules; по прежнему md HEAD совпадал с базой. При продолжении dev уже на publicationRevision, старые тесты оттуда не повторялись."
+    },
+    "independence": "Прочитаны только собственные прежние отчёты/retained actions/probes и исходники. Отчёты соседних исследователей не читались.",
+    "constraintsObserved": [
+      "В Git записаны только два назначенных отчёта в фактическом новом cwd; исходники, tests, PROJECT_INFO, package/lock не изменялись.",
+      "При продолжении нет новых запусков Dynamicwf, supervisor, Chrome, моделей, провайдеров, живой панели или управления пользовательскими процессами.",
+      "Пакеты не устанавливались; git commit/push/checkout/reset не выполнялись; полный npm test и typecheck не запускались.",
+      "Веб не использовался. Учётные данные и файлы секретов не открывались; сырые логи в отчёт не включены.",
+      "В текущей финализации временные fixtures не создавались; прежние commands не исполнялись. E00–E09 и source verification labels описывают прежние этапы, не новые запуски."
+    ],
+    "modelProvenance": {
+      "historicalCollection": "Исторические 13 успешных исследований коллекции выполнены на max (по входу управляющего); имя каталога сохраняется. Это не утверждение об успешности прежней операции r09.",
+      "currentContinuation": "По входу: будущие pi — openai-codex/gpt-6-astra thinking=low; из узла pi/providers не вызывались. Предыдущие этапы не переименованы в low."
+    }
+  },
+  "summary": {
+    "findingCount": 7,
+    "classificationCounts": {
+      "bug": 2,
+      "idea": 1,
+      "unknown": 1,
+      "already-fixed": 3
+    },
+    "conclusion": "На базе подтверждены два UX-дефекта: сохранённый на паузе ответ остаётся публично ждущим ответа, а семантическое обновление снимка теряет native focus submit/summary await. Обхода серверного допуска, утраты durable response или самопроизвольного resume не обнаружено.",
+    "historicalSelectedTestCount": 83,
+    "historicalTestFailures": 0,
+    "historicalTestSkipped": 0,
+    "historicalBehavioralProbes": [
+      "E04",
+      "E05"
+    ],
+    "newBehavioralExecutions": 0,
+    "completionMeaning": "Завершены исследование и оба отчёта с provenance; не утверждается, что старая failed-операция была успешной.",
+    "postStudyNotCountedAsFindings": "Два уже известных изменения publicationRevision записаны отдельно в postStudyAlreadyFixed; число 7 относится к независимым записям исследования базы."
+  },
+  "continuationProvenance": {
+    "sourceRunId": "run-9dbb044c-664f-4dd8-96c0-57192dc4ed89",
+    "oldOperationStatus": "failed",
+    "retainedFailure": {
+      "code": "provider",
+      "phase": "execution",
+      "effects": "unknown",
+      "diagnostic": {
+        "dispatch": "http-observed"
+      },
+      "providerResponse": {
+        "status": 503
+      }
+    },
+    "oldWorkspace": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/296767b722d7bc81389cc890291795fd34e157c7adfa3ccfa548b000fff995ca",
+    "oldReports": [
+      {
+        "path": "research/2026-09-20-astra-max/r09-waits-gates-ux.md",
+        "bytes": 66622,
+        "sha256": "0bafdf1d874af73c61b752958433e4cc9d7fe55d2fd615ce1a0b786dd9f7e5bb",
+        "hashMatchesRetainedEvidence": true
+      },
+      {
+        "path": "research/2026-09-20-astra-max/r09-waits-gates-ux.json",
+        "bytes": 69880,
+        "sha256": "0db7138bed195a5d62d20407392bd30525f9777166dfe31c0d92ec049b3a8012",
+        "hashMatchesRetainedEvidence": true
+      }
+    ],
+    "retainedActionEvidence": {
+      "path": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v2-low/r09-retained-actions.json",
+      "sha256": "5e2ee16678e18dd806d4c75b936f681a8349c4435dd29130ae83cc0329e97fbb",
+      "entries": 16,
+      "limitation": "recordedToolResult не содержит stdout/exit; команды не исполнялись автоматически."
+    },
+    "carried": [
+      "Все 7 находок, 83 исторических теста, E00–E09, исходники двух fixtures, источники и unknowns. Предыдущий provenance сохранён в priorContinuationProvenance."
+    ],
+    "rechecked": [
+      "SHA256/размер обоих входных отчётов, JSON без duplicate keys, 7 ID и классификации совпадают с Markdown.",
+      "Все 32 source paths существуют; заявленные ranges в пределах файлов. Причины двух bugs перечитаны в текущем коде.",
+      "14 файлов из sourceByteComparisons совпадают со старым worktree и Git blob базы.",
+      "Два JS-блока Markdown имеют сохранённые SHA256 финальных fixtures."
+    ],
+    "added": [
+      "Только provenance этой финализации и разграничение исторических проверок от текущих."
+    ],
+    "notRepeated": [
+      "E00–E09 команды",
+      "Поведенческие tests/probes",
+      "Chrome/supervisor/provider/live run"
+    ],
+    "newBehavioralExecutions": 0,
+    "clarification": "Прежняя фраза E09 о возвращённых внешнему управляющему хешах не доказывает успешного submit: старая операция failed. Нынешний результат относится только к новой паре файлов."
+  },
+  "coverage": [
+    {
+      "path": "Ожидание → положительный или отрицательный ответ",
+      "established": "await — сохранённый JSON по авторской схеме без приведения типов, не универсальный обязательный approval. Отрицательный ответ может маршрутизироваться в succeeded + rejected.",
+      "citations": [
+        "src/run-store.ts:562-579",
+        "src/task-outcome.ts:10-22",
+        "tests/await-outcome.test.ts:211-256"
+      ],
+      "experiments": [
+        "E01",
+        "E04"
+      ]
+    },
+    {
+      "path": "Одинаковые вопросы параллельных ветвей",
+      "established": "Путь и ID видимы; draft/disclosure привязаны к wait ID и не смешиваются при перестановке карточек. Уже исправлено.",
+      "findingIds": [
+        "R09-AF02"
+      ],
+      "experiments": [
+        "E01",
+        "E05"
+      ]
+    },
+    {
+      "path": "Пауза → сохранить ответ → продолжить",
+      "established": "Сохранение разрешено на паузе и не запускает finish. Между durable resolve и resume проекции расходятся с фактом сохранения.",
+      "findingIds": [
+        "R09-B01"
+      ],
+      "experiments": [
+        "E01",
+        "E04",
+        "E05"
+      ]
+    },
+    {
+      "path": "Отказ в приёмке и повторная работа",
+      "established": "finish rejected/inconclusive — решение графа, не технический сбой. Завершённому succeeded-графу не требуется resume; изменённый план той же задачи оформляется continuation.",
+      "citations": [
+        "src/observation.ts:46-68",
+        "src/graph-view/app.js:389-396",
+        "src/graph-view/app.js:453-464",
+        "src/run-store.ts:349-368"
+      ],
+      "findingIds": [
+        "R09-I01"
+      ]
+    },
+    {
+      "path": "Отмена",
+      "established": "Намерение монотонно; новый ответ после отмены не допускается. Подтверждение связано с исходным run/visit. Это не откат внешних эффектов и не удостоверение неизвестной группы процессов.",
+      "citations": [
+        "src/run-store.ts:349-368",
+        "src/run-store.ts:571-572",
+        "src/graph-view/app.js:405-419",
+        "src/graph-view/app.js:1567-1579"
+      ],
+      "experiments": [
+        "E01",
+        "E03"
+      ]
+    },
+    {
+      "path": "Смерть supervisor во время await",
+      "established": "Исторический собственный процессный тест сохраняет wait ID и завершённую запись, resolve возобновляет граф. Это не допуск повтора неопределённого agent/check.",
+      "citations": [
+        "src/run-controller.ts:305-310",
+        "tests/await-outcome.test.ts:82-110"
+      ],
+      "experiments": [
+        "E01"
+      ]
+    },
+    {
+      "path": "Восстановление операции",
+      "established": "Инспекция → точные checkpoint/workspaceDigest → accept либо одноразовый retry → отдельно resume. Сохраняются исходная ошибка и расход; форма фиксирует decisionId и запрос, сама не повторяет POST.",
+      "citations": [
+        "src/reconciliation.ts:18-49",
+        "src/run-controller.ts:281-324",
+        "src/graph-view/app.js:698-756",
+        "tests/reconciliation.test.ts:56-177"
+      ],
+      "experiments": [
+        "E01",
+        "E02"
+      ]
+    },
+    {
+      "path": "Продолжение изменённого графа и reuse",
+      "established": "Новый run ID сохраняет связанную задачу/историю и наследует паузу источника. Старый источник ограждён от нового resolve/resume; reuse проверяет происхождение и заявленные версии, не делает старое approve одобрением нового артефакта.",
+      "citations": [
+        "src/run-store.ts:352-353",
+        "src/run-store.ts:567-572",
+        "src/lineage.ts:316-360",
+        "tests/continuation.test.ts:199-271"
+      ],
+      "experiments": [
+        "E01"
+      ]
+    },
+    {
+      "path": "Клавиатура и динамическое представление",
+      "established": "Native Chrome fixture проверяет textarea, Tab/Space submit и потерю фокуса summary. IME, VoiceOver и другие браузеры не проверены.",
+      "findingIds": [
+        "R09-B02",
+        "R09-AF02",
+        "R09-U01"
+      ],
+      "experiments": [
+        "E01",
+        "E05"
+      ]
+    }
+  ],
+  "contractBoundaries": [
+    {
+      "statement": "Отдельного встроенного обязательного approval/gate-этапа в контракте не найдено: граф задаёт условия, await и finish; допуск восстановления проверяется отдельно.",
+      "kind": "source-observation",
+      "citations": [
+        "PROJECT_INFO/graph-contract.md",
+        "PROJECT_INFO/outcomes-and-waits.md",
+        "PROJECT_INFO/reconciliation.md"
+      ]
+    },
+    {
+      "statement": "resolvedBy/actor — описательные метки участника, не криптографически удостоверенная личность. Произвольный finish.evidence проверяется на форму массива, не на доказательную силу.",
+      "kind": "documented-and-source-confirmed",
+      "citations": [
+        "PROJECT_INFO/outcomes-and-waits.md",
+        "src/task-outcome.ts:10-14",
+        "src/reconciliation.ts:18-30"
+      ]
+    },
+    {
+      "statement": "Reviewer guard действует при обязательном artifactRevision в итоговой схеме, включая custom schema. Он сравнивает непустую верхнеуровневую строку входа с выходом и строковую acceptanceCriteriaRevision при наличии; runtime не вычисляет подлинность произвольной заявленной строки. ArtifactRevision относится к рецензируемому артефакту, не новому отчёту критика.",
+      "kind": "source-observation-with-post-study-documentation",
+      "citations": [
+        "src/run-runtime.ts:359-372",
+        "src/reconciliation.ts:33-45",
+        "src/lineage.ts:338-357"
+      ],
+      "postStudyReference": "3d8ba65ee84402c0e3b0587f70095b7847824a9f"
+    },
+    {
+      "statement": "Зелёные offline отрицательные ветки рецептов S/P/C подтверждают форму маршрутизации, не качество live reviewer и не права/квоты провайдера.",
+      "kind": "evidence-limit",
+      "citations": [
+        "tests/implementation-recipes.test.ts:47-91"
+      ],
+      "experiments": [
+        "E02"
+      ]
+    }
+  ],
+  "findings": [
+    {
+      "id": "R09-B01",
+      "classification": "bug",
+      "title": "Ответ сохранён на паузе, но узел всё ещё «Ждёт ответа»",
+      "severity": "medium",
+      "confidence": "high-within-reproduced-offline-scenario",
+      "scope": "Правдивость состояния browser/watch и подтверждение сохранённого решения, не серверный допуск",
+      "continuationDisposition": "Перенесено из прежнего md; сохранённые результаты/снимки и причина в коде независимо перепроверены, поведенчески заново не исполнялось.",
+      "trigger": "Дождаться открытого await при живом supervisor → поставить паузу до status=paused → сохранить валидный JSON → оставаться на паузе без resume. Это разрешённый пользовательский путь, без ручной правки БД.",
+      "expected": "Отличать вопрос без ответа от сохранённого ответа, задержанного операторской паузой. Показывать read-only квитанцию/значение и точную идентичность, не писать «Ждёт ответа», не запускать работу и не объявлять незавершённый await succeeded.",
+      "observed": {
+        "status": "paused",
+        "desired": "paused",
+        "durableWaitStatus": "resolved",
+        "response": {
+          "allow": false
+        },
+        "activeKeysCount": 0,
+        "waitingKeysCount": 1,
+        "graphNodeStatus": "waiting",
+        "inspectorLabel": "Ждёт ответа",
+        "waitCardsCount": 0,
+        "waitSummaryHidden": true,
+        "resumeVisible": true,
+        "nowText": "Новых задач пока нет. Ожидание следующего шага.",
+        "monitorStillShowsQuestionAndWaitId": true,
+        "finishBeforeResume": false,
+        "afterResume": {
+          "status": "succeeded",
+          "taskOutcome": "rejected",
+          "waitingKeysCount": 0
+        }
+      },
+      "causalEvidence": [
+        {
+          "citation": "src/run-store.ts:573-577",
+          "fact": "Транзакция успешно фиксирует validated response, status=resolved и wait.resolved."
+        },
+        {
+          "citation": "src/run-runtime.ts:163-167",
+          "fact": "waiting:false записывается только после await gate(signal); на паузе gate не пропускает."
+        },
+        {
+          "citation": "src/run-runtime.ts:82-90",
+          "fact": "Gate проверяет операторское desired; paused не получает допуск."
+        },
+        {
+          "citation": "src/observation.ts:37-39",
+          "fact": "activationState называет running await с metadata.waiting=true состоянием waiting."
+        },
+        {
+          "citation": "src/observation.ts:68-68",
+          "fact": "waitingKeys строится из activationState без durable WaitRecord."
+        },
+        {
+          "citation": "src/graph-view/model.ts:54-57",
+          "fact": "Узел графа также получает waiting из metadata, не по статусу сохранённого wait."
+        },
+        {
+          "citation": "src/graph-view/model.ts:79-83",
+          "fact": "Статус активации в snapshot, используемый инспектором, берётся из activationState."
+        },
+        {
+          "citation": "src/monitor.ts:105-107",
+          "fact": "Watch повторяет причину/ID вопроса по metadata.waiting."
+        },
+        {
+          "citation": "src/graph-view/app.js:466-469",
+          "fact": "Wait summary учитывает только durable open и скрывается после resolved."
+        },
+        {
+          "citation": "src/graph-view/app.js:1133-1137",
+          "fact": "Раздел «Сейчас» пересоздаётся и пропускает resolved-карточку."
+        },
+        {
+          "citation": "src/graph-view/app.js:1178-1198",
+          "fact": "Подсказка о паузе существует только в открытой карточке; общего подтверждения сохранённого ответа нет."
+        }
+      ],
+      "inference": "Долговечный ответ и ещё не завершённая активация — разные состояния. Продукт использует одно слово waiting для второго и создаёт ложное впечатление, что ответ ещё нужен. Причина не связана с прежними ownership/draft fixes.",
+      "reproduction": {
+        "experimentIds": [
+          "E04",
+          "E05"
+        ],
+        "commands": [
+          "node --import \"$DEV/node_modules/tsx/dist/loader.mjs\" \"$P/paused.mjs\" \"$DEV\" \"$P\"",
+          "node \"$P/browser.mjs\" \"$REPO\" \"$P\""
+        ],
+        "fixtures": "Полные побайтные paused.mjs и browser.mjs в приложении Markdown; P должен быть новым /tmp/r09-reproduce.*, DEV/REPO — исходники e15bc40 с существующими зависимостями.",
+        "safety": "Только собственная временная БД/supervisor без модели; браузер рисует сохранённый snapshot и перехватывает resolve в mock fetch, не отправляя mutations в живую панель. При продолжении команды не повторены."
+      },
+      "counterEvidence": [
+        {
+          "citation": "tests/await-outcome.test.ts:112-124",
+          "statement": "Прошедший тест защищает сохранность паузы и отсутствие finish до resume, но не проверяет waitingKeys, подпись узла или подтверждение ответа."
+        },
+        {
+          "citation": "tests/graph-view-observation.test.ts:286-303",
+          "statement": "Тест stale snapshots уже утверждает исчезновение формы после resolved. Это защищает актуальность снимка, но не правдивость оставшейся подписи узла или квитанцию."
+        },
+        {
+          "experimentId": "E04",
+          "statement": "Точная повторная доставка дала только одно wait.resolved, конфликтующая отклонена, после resume использован именно allow:false. Потери ответа или снятия паузы нет."
+        },
+        {
+          "citation": "src/graph-view/model.ts:33-35",
+          "statement": "Полный snapshot и run.waits содержат resolved response; отсутствие обычной карточки не означает утрату журнала."
+        }
+      ],
+      "limits": [
+        "Длительный случай доказан для ручной паузы; частота/длительность промежутка без паузы не измерялась.",
+        "Браузерная часть — настоящий HTML/DOM, но подставной транспорт; это не end-to-end live provider."
+      ],
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Сопоставлять проекцию/представление с durable WaitRecord по точному ID/key, показывать «Ответ сохранён · на паузе» и read-only значение, исключать resolved из вопросов, требующих ответа. Не объявлять такую активацию работающей или succeeded.",
+        "avoid": "Не переносить механически waiting:false перед gate: metadata участвует в activeWork/учёте паузы.",
+        "risk": "Расхождение watch/browser, смешение одинаковых вопросов map по nodeId вместо key, ложное завершение/допуск; нужна совместимость старых записей.",
+        "acceptanceCriteria": [
+          "Реальный pause→resolve(true/false) остаётся paused с 0 active work и отображает точную квитанцию/ответ, не предлагает повторно отвечать и не пишет «Ждёт ответа».",
+          "Соседний unresolved await остаётся вопросом с собственной идентичностью.",
+          "Resume потребляет сохранённый ответ один раз; watch/snapshot/browser согласованы.",
+          "Отмена и continuation не переоткрывают resolved wait; idempotency и fence сохраняются."
+        ]
+      }
+    },
+    {
+      "id": "R09-B02",
+      "classification": "bug",
+      "title": "Семантический опрос выбрасывает фокус с действия await",
+      "severity": "medium",
+      "confidence": "high-for-native-Chrome-fixture",
+      "scope": "Клавиатурное управление submit и disclosure summary того же открытого wait",
+      "continuationDisposition": "Перенесено; финальный browser.mjs/result перечитаны, причинная цепочка и границы существующего теста перепроверены. Chrome заново не запускался.",
+      "trigger": "В «Сейчас» ввести JSON, перейти Tab на «Сохранить ответ»; до Space приходит значимый снимок того же run. Для summary — установить фокус на «Данные и формат ответа» перед таким обновлением. Heartbeat сам по себе недостаточен.",
+      "expected": "Если тот же wait открыт и control доступен, сохранить фокус точного submit/summary; Space должен выполнить выбранное действие без повторного Tab-наведения.",
+      "observed": {
+        "browser": "Chrome/153.0.8010.52",
+        "beforeSemantic": {
+          "tag": "BUTTON",
+          "text": "Сохранить ответ"
+        },
+        "heartbeatOnlyFocus": "BUTTON",
+        "afterSemanticFocus": "BODY",
+        "mockPostsAfterSpaceWithLostFocus": 0,
+        "mockPostsAfterRefocusTabSpace": 1,
+        "summaryAfterSemantic": {
+          "focusTag": "BODY",
+          "detailsOpen": true
+        },
+        "textareaControl": {
+          "focusTag": "TEXTAREA",
+          "text": "{\"allow\":false}",
+          "selection": [
+            2,
+            7
+          ],
+          "direction": "backward",
+          "detailsOpen": true
+        },
+        "trustedSubmitKeySequence": [
+          "Tab",
+          "Space",
+          "Tab",
+          "Space"
+        ],
+        "summaryFocusMethod": "Native summary.focus(); Tab/Space на summary отдельно не проверялись"
+      },
+      "causalEvidence": [
+        {
+          "citation": "src/graph-view/app.js:1459-1468",
+          "fact": "Значимое изменение JSON signature вызывает renderPanel; heartbeat/time observation исключены."
+        },
+        {
+          "citation": "src/graph-view/app.js:1131-1133",
+          "fact": "renderNow удаляет карточки целиком через replaceChildren."
+        },
+        {
+          "citation": "src/graph-view/app.js:490-507",
+          "fact": "Восстановление focus/selection/scroll связано только с dataset.waitId активного поля."
+        },
+        {
+          "citation": "src/graph-view/app.js:1157-1160",
+          "fact": "dataset.waitId и адресуемый id назначены textarea."
+        },
+        {
+          "citation": "src/graph-view/app.js:1162-1175",
+          "fact": "Submit не имеет соответствующего маркера фокуса; его native DOM заменяется."
+        },
+        {
+          "citation": "src/graph-view/app.js:1144-1146",
+          "fact": "Details сохраняет open по wait ID, но summary не получает идентичность для восстановления focus."
+        }
+      ],
+      "inference": "Сохранение disclosure.open не сохраняет клавиатурный фокус заголовка. Удаление focused native button/summary переводит activeElement в BODY; следующий Space уже не относится к выбранной кнопке. Это отдельное свойство от исправленного textarea caret/scroll.",
+      "reproduction": {
+        "experimentId": "E05",
+        "command": "node \"$P/browser.mjs\" \"$REPO\" \"$P\"",
+        "fixture": "Полный browser.mjs в приложении Markdown; snapshots создаёт paused.mjs. Реальные index.html/CSS/модули базы; отключён только автоматический startup/polling, вызван production refreshSnapshot.",
+        "semanticChange": "Для детерминированной перерисовки в fixture увеличен usage.totalTokens. Модель/соседний live agent не вызывались.",
+        "safety": "Свой Chrome profile и static loopback fixture server; resolve перехвачен внутри страницы. Текущая операция fixture не исполняла."
+      },
+      "counterEvidence": [
+        {
+          "experimentId": "E05",
+          "statement": "Heartbeat-only update сохранил BUTTON: дефект не на каждом polling."
+        },
+        {
+          "citation": "tests/graph-view-observation.test.ts:120-132",
+          "statement": "Зелёный тест уже защищает текст, focus, directional selection и scroll textarea. Native положительный контроль текста/selection/disclosure также прошёл."
+        },
+        {
+          "citation": "tests/graph-view-observation.test.ts:31-84",
+          "statement": "Fake DOM replaceChildren не моделирует native потерю activeElement при удалении focused button; успех такого suite не опровергает контрпример Chrome."
+        },
+        {
+          "experimentId": "E05",
+          "statement": "После повторного наведения focus→Tab→Space mock resolve сработал ровно один раз. Кнопка не недоступна вообще; ошибочная отправка или потеря текста не доказаны."
+        }
+      ],
+      "limits": [
+        "Применимость к обновлению соседней ветви выведена из общей signature-перерисовки; частота события в live задачах не измерялась.",
+        "CDP создавал trusted Tab/Space для submit; физическая клавиатура/AT/IME не использовались. Summary проверен через native focus(), без отдельного клавиатурного действия.",
+        "Ранние диагностические Enter-варианты не дали корректного положительного контроля; дефект Enter не заявляется."
+      ],
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Сохранять control identity (run visit + waitId + submit/summary) и возвращать focus только существующему доступному control либо не пересоздавать неизменившийся keyed DOM.",
+        "avoid": "Не возвращать фокус старому wait после смены run/visit, resolve, cancellation или continuation fence.",
+        "risk": "Focus stealing у другой карточки, возвращение на исчезнувшее действие, нарушение textarea caret/scroll и двойная отправка.",
+        "acceptanceCriteria": [
+          "Native Chrome: Tab/Space submit и summary переживают semantic update и перестановку соседей; Space на submit — ровно один разрешённый resolve, Space на summary — переключение соответствующего details без POST.",
+          "Heartbeat остаётся no-op для DOM.",
+          "Смена run/visit и закрытие wait не возвращают старый focus/control.",
+          "Положительные проверки текста, backward selection, scroll и disclosure остаются зелёными."
+        ]
+      }
+    },
+    {
+      "id": "R09-I01",
+      "classification": "idea",
+      "title": "Короткий безопасный переход от причины остановки к конкретной операции",
+      "severity": "informational",
+      "continuationDisposition": "Перенесено, место вызова recovery уточнено по текущим строкам.",
+      "facts": [
+        "Шапка технического сбоя показывает failure/подробности ошибки, но recovery находится в деталях выбранной failed/interrupted активации.",
+        "Для непроверенных групп уже есть навигация к задаче.",
+        "Кнопка resume при failed скрыта намеренно; rejected у succeeded-графа не является техническим сбоем."
+      ],
+      "citations": [
+        "src/graph-view/app.js:398-404",
+        "src/graph-view/app.js:415-417",
+        "src/graph-view/app.js:656-657",
+        "src/graph-view/app.js:667-695",
+        "src/graph-view/app.js:394-394"
+      ],
+      "inference": "Навигационный переход может сократить путь к существующей инспекции, не ослабляя допуск. Эффективность для пользователя не измерялась; это не установленный bug.",
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "В причине сбоя добавить «Показать неудачную операцию» либо список точных key/path/attempt. Для succeeded+rejected/inconclusive пояснить: граф завершён, изменённый план той же задачи — continuation через существующий CLI/MCP, не resume исходника.",
+        "risk": "Выбрать не тот map/visit или предложить восстановление уже запечатанного collect/родителем результата.",
+        "acceptanceCriteria": [
+          "Навигация открывает точную активацию и её blockers, сама не выполняет POST и не запускает сканирование файлов.",
+          "Не добавлены mutation endpoint, автоматические accept/retry, скрытые approvals или лимиты.",
+          "Для rejected без failed leaf не предлагается retry."
+        ]
+      },
+      "proposedValidation": "Ручной offline проход от run failure к инспекции, затем пользовательская проверка discoverability; не выполнялись."
+    },
+    {
+      "id": "R09-AF01",
+      "classification": "already-fixed",
+      "title": "Владение асинхронными эффектами панели уже связано с исходным run visit",
+      "severity": "informational",
+      "continuationDisposition": "Перенесено; код, git log и соответствующие тесты перечитаны, сохранённый E01 результат подтверждён.",
+      "commits": [
+        "b4aaa3d",
+        "10d5cc6",
+        "1ee48ff",
+        "b04ef8d",
+        "d72df5d"
+      ],
+      "facts": [
+        "Поздний snapshot/401 не возвращает прежнюю форму и не перезагружает новое посещение.",
+        "Cancel/управление связаны с исходным ID/visit, после навигации late feedback не переносится на новый запуск.",
+        "Recovery receipts сохраняются под прежним ключом без повторного POST и без изменения notice нового посещения."
+      ],
+      "citations": [
+        "src/graph-view/app.js:165-180",
+        "src/graph-view/app.js:744-750",
+        "src/graph-view/app.js:1448-1482",
+        "src/graph-view/app.js:1514-1540",
+        "src/graph-view/app.js:1567-1579",
+        "tests/graph-view-observation.test.ts:135-282",
+        "tests/graph-view-observation.test.ts:286-368",
+        "tests/graph-view-observation.test.ts:414-612"
+      ],
+      "experiments": [
+        "E01"
+      ],
+      "refutation": "Не переоткрывать прежний ownership defect по старому main. R09-B01/B02 имеют другие причинные цепочки.",
+      "limit": "Не утверждается полнота для любых мыслимых сетевых перестановок.",
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Нового изменения не требуется; сохранить эти контроли при работе над B01/B02.",
+        "risk": "Упрощение keyed state способно вернуть старый ownership defect.",
+        "acceptanceCriteria": [
+          "Существующие late-response, decoding, return-to-same-run и cancel cases остаются зелёными без автоматического повторения POST."
+        ]
+      }
+    },
+    {
+      "id": "R09-AF02",
+      "classification": "already-fixed",
+      "title": "Идентичность, черновик, раскрытие и положение редактора await уже сохраняются",
+      "severity": "informational",
+      "continuationDisposition": "Перенесено; текущий код и тесты перечитаны, E05 result подтверждает native положительный контроль.",
+      "commits": [
+        "b4aaa3d",
+        "fea2136",
+        "e15bc40"
+      ],
+      "facts": [
+        "Отдельные draft по wait ID, видимые путь и ID, стабильное disclosure.open при обновлении/перестановке.",
+        "Textarea сохраняет focus, directional selection и scroll; E05 отдельно подтверждает native текст/backward selection/open.",
+        "Full reload сбрасывает in-memory draft по документированному контракту; неуниверсальность disclosure других инспекторных блоков явно описана."
+      ],
+      "citations": [
+        "src/graph-view/app.js:484-507",
+        "src/graph-view/app.js:1138-1161",
+        "tests/graph-view-observation.test.ts:96-132",
+        "tests/graph-view-observation.test.ts:615-635",
+        "PROJECT_INFO/outcomes-and-waits.md",
+        "PROJECT_INFO/known-issues.md"
+      ],
+      "experiments": [
+        "E01",
+        "E05"
+      ],
+      "refutation": "Не считать B02 повтором исправленного caret/scroll/disclosure: новый контрпример касается submit и summary, не textarea.",
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Не внедрять повторно уже исправленный draft/identity; сохранять достигнутые свойства при исправлении фокуса других controls.",
+        "risk": "Смешение одинаковых вопросов по позиции карточки, утрата выделения или раскрытия.",
+        "acceptanceCriteria": [
+          "Существующие reorder/navigation и textarea selection/scroll tests плюс native positive control остаются успешными."
+        ]
+      }
+    },
+    {
+      "id": "R09-AF03",
+      "classification": "already-fixed",
+      "title": "Старый await не запускает заменённый или отменяемый run",
+      "severity": "informational",
+      "continuationDisposition": "Перенесено; ссылки на fence/cancellation исправлены до точных строк, результаты E01/E03 сохранены и проверены.",
+      "commits": [
+        "3b8ad7e",
+        "b4aaa3d"
+      ],
+      "facts": [
+        "Continuation fence/cancellation проверяются в транзакции до изменения нового открытого ответа.",
+        "Идентичный уже сохранённый ответ идемпотентен, первая метка источника сохраняется, конфликт отвергается.",
+        "Контроллер не запускает replaced source; панель не предлагает там ответ/resume, обычная пауза разрешает сохранить ответ."
+      ],
+      "citations": [
+        "src/run-store.ts:349-356",
+        "src/run-store.ts:562-579",
+        "src/run-controller.ts:305-310",
+        "src/graph-view/app.js:394-394",
+        "src/graph-view/app.js:1125-1129",
+        "src/graph-view/app.js:1148-1154",
+        "tests/continuation.test.ts:199-271",
+        "tests/graph-view-observation.test.ts:371-411",
+        "tests/run-store.test.ts:48-72"
+      ],
+      "experiments": [
+        "E01",
+        "E03",
+        "E04"
+      ],
+      "refutation": "B01 — неправдивая подпись при корректной паузе, не нарушение continuation fence/идемпотентности.",
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Нового допуска или повторов не добавлять; сохранить атомарность response/event и ограждение источника.",
+        "risk": "Проверка только в UI вместо транзакции могла бы допустить старый ответ или перезапуск источника.",
+        "acceptanceCriteria": [
+          "Source-fence, cancellation, identical/conflicting delivery и rollback response/event cases остаются зелёными."
+        ]
+      }
+    },
+    {
+      "id": "R09-U01",
+      "classification": "unknown",
+      "title": "IME и озвучивание динамических изменений assistive technology",
+      "severity": "unassessed",
+      "continuationDisposition": "Перенесено как unknown, новых IME/AT проверок не добавлено.",
+      "observedFact": "Textarea пересоздаётся при значимом снимке, хотя текст/focus/selection/scroll восстанавливаются.",
+      "citations": [
+        "src/graph-view/app.js:1133-1133",
+        "src/graph-view/app.js:1157-1157",
+        "tests/graph-view-observation.test.ts:128-131",
+        "src/graph-view/index.html:28-32"
+      ],
+      "unresolved": "Не установлено, прерывается ли живая IME composition и достаточно ли VoiceOver/другой screen reader объявляет новый вопрос, сохранение ответа и смену состояния.",
+      "whyNotBug": "Обычный JSON-input, наличие role=status/alert и activeElement не доказывают поведение composition/озвучивания. Результата воспроизведения нет.",
+      "proposedExperiment": "Изолированная страница с настоящей IME composition и параллельным semantic update; ручной VoiceOver-проход до/после resolve await и открытия cancellation dialog. Не выполнялся.",
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Сначала воспроизвести; до этого не внедрять workaround. Если подтвердится, предпочесть сохранение keyed DOM/явное состояние, не автоматическую отправку и не принудительный перехват фокуса.",
+        "risk": "Поспешное исправление способно дать двойную озвучку, потерю составного символа или focus stealing.",
+        "acceptanceCriteria": [
+          "Составной ввод сохраняется до commit/cancel; статус и доступное действие объявляются один раз без ложного approve."
+        ]
+      }
+    }
+  ],
+  "alreadyFixedRefutations": {
+    "studySourceFindingIds": [
+      "R09-AF01",
+      "R09-AF02",
+      "R09-AF03"
+    ],
+    "notReopened": [
+      "skill delivery уже исправлена; не предмет нового бага r09, live skill checks не запускались.",
+      "Асинхронная ownership панели/control/await и recovery receipts уже исправлена.",
+      "Await draft/identity/disclosure/caret/scroll уже исправлены; native button/summary focus — отдельный B02.",
+      "succeeded не равно accepted, request_changes/inconclusive не технический сбой; не требуется универсальная кнопка approve/resume.",
+      "Ответ на паузе разрешён и не должен снимать паузу; B01 требует правдивого представления, не смены допуска."
+    ],
+    "conflictingEvidenceResolution": [
+      "83 зелёных теста не опровергают B01: pause test не проверяет waitingKeys/квитанцию, stale snapshot test намеренно проверяет исчезновение старой формы.",
+      "Зелёный editor test не опровергает B02: он проверяет textarea, fake DOM не сбрасывает activeElement при удалении button; native положительный контроль textarea сохраняется.",
+      "Неудачные ранние Enter варианты E05 не используются как доказательство product bug; финальный Space вариант имеет положительный контроль и сохранённый result."
+    ]
+  },
+  "postStudyAlreadyFixed": [
+    {
+      "classification": "already-fixed",
+      "revision": "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+      "topic": "Ранняя authoring parallel-isolation validation",
+      "evidence": [
+        "src/graph.ts:198-200",
+        "src/parallel-isolation.ts:6-36",
+        "src/execution-plan.ts:94-98"
+      ],
+      "revisionAppliesToEvidence": "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+      "verification": "Прочитан git show изменения кода; tests parallel-authoring в продолжении не запускались.",
+      "conclusion": "Известное пользователю исправление уже есть после study source; не предлагается внедрять повторно, не относится к B01/B02.",
+      "countedAsStudyFinding": false
+    },
+    {
+      "classification": "already-fixed",
+      "revision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "topic": "Документация reviewer binding",
+      "evidence": [
+        "skills/dynamic-workflows/SKILL.md:112-114",
+        "skills/dynamic-workflows/references/authoring.md:128-156"
+      ],
+      "revisionAppliesToEvidence": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "verification": "Прочитан git show двух документов и сверено с существующим guard runtime/reconciliation базы.",
+      "conclusion": "Уже объяснены top-level input.artifactRevision, custom required schema и отличие версии рецензируемого артефакта от отчёта критика. Не переоткрывать документационную задачу.",
+      "countedAsStudyFinding": false
+    }
+  ],
+  "experiments": [
+    {
+      "id": "E00",
+      "phase": "historical-carried",
+      "command": "pwd; git rev-parse HEAD; git status --short; cat AGENTS.md; git log -16 --oneline; чтение PROJECT_INFO и тематический git log/show",
+      "outcome": "По сохранённому md исходная ревизия e15bc40 подтверждена. В продолжении отдельная E06/E07 повторяет только чтение/сверку исходников.",
+      "limits": "Не аудит установленного main/runtime. Retained action list не содержит stdout E00."
+    },
+    {
+      "id": "E01",
+      "phase": "historical-executed-results-rechecked",
+      "cwd": "Исторический integration-dev на базе, не нынешний dev",
+      "command": "TMPDIR=\"$TMP\" node --import tsx --test --test-concurrency=1 tests/graph-view-observation.test.ts tests/await-outcome.test.ts tests/pause-resume-admission.test.ts tests/continuation.test.ts",
+      "outcome": {
+        "tests": 60,
+        "pass": 60,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "durationMs": 154663.149542
+      },
+      "limits": "Реальные временные supervisor/check/Git/SQLite; graph-view observation — fake DOM/HTTP fixtures, не live provider. Счётчик Node включает под-тесты. В продолжении не исполнялось."
+    },
+    {
+      "id": "E02",
+      "phase": "historical-executed-results-rechecked",
+      "cwd": "Исторический integration-dev на базе",
+      "command": "TMPDIR=\"$TMP\" node --import tsx --test --test-concurrency=1 tests/observation.test.ts tests/reconciliation.test.ts tests/implementation-recipes.test.ts",
+      "outcome": {
+        "tests": 20,
+        "pass": 20,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "durationMs": 31143.193084
+      },
+      "limits": "Восстановление/история, локальные артефакты, отрицательные gate-условия рецептов; модельный reviewer не вызывался. В продолжении не исполнялось."
+    },
+    {
+      "id": "E03",
+      "phase": "historical-executed-results-rechecked",
+      "cwd": "Исторический integration-dev на базе",
+      "command": "TMPDIR=\"$TMP\" node --import tsx --test --test-name-pattern='wait admission is fenced|pause drains leaves|control cancellation is monotonic' tests/run-store.test.ts",
+      "outcome": {
+        "tests": 3,
+        "pass": 3,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "durationMs": 2026.837625
+      },
+      "limits": "Только три выбранных case, не полный run-store suite; при продолжении прочитан сохранённый итог."
+    },
+    {
+      "id": "E04",
+      "phase": "historical-executed-results-rechecked",
+      "command": "node --import \"$DEV/node_modules/tsx/dist/loader.mjs\" \"$P/paused.mjs\" \"$DEV\" \"$P\"",
+      "historicalP": "/tmp/r09-waits-ux.YJ2ack",
+      "outcome": "Все assertions по сохранённым script/result: await→pause→resolve(false) остаётся paused с resolved response, waitingKeys=1/graph waiting, activeKeys=0. Одна запись wait.resolved при одинаковой доставке, конфликт отказан, resume→succeeded+rejected и waitingKeys=0.",
+      "limits": "Настоящий supervisor/SQLite в собственной временной папке, без agent/check/model. Снимки только для локального browser fixture. В продолжении E04 не запускался."
+    },
+    {
+      "id": "E05",
+      "phase": "historical-executed-results-rechecked",
+      "command": "node \"$P/browser.mjs\" \"$REPO\" \"$P\"",
+      "historicalP": "/tmp/r09-waits-ux.YJ2ack",
+      "outcome": "Финальный Chrome/153.0.8010.52 fixture дал BODY после semantic update submit/summary, 0 mock POST после Space с потерянным фокусом и 1 после refocus. Heartbeat оставил BUTTON; textarea/text/backward selection/open сохранились. Paused resolved view скрывает карточки и summary, оставляет waiting в инспекторе и resume.",
+      "limits": "Native HTML/DOM/CDP настоящие, snapshot и resolve transport подставные. Только static GET к своему fixture server; не Dynamicwf live panel и не provider. Summary проверен через focus(), trusted Tab/Space — только submit. В продолжении Chrome не запускался.",
+      "historicalHarnessDiagnostics": [
+        "Два ранних Enter варианта истекли на ожидании mock POST без успешного положительного контроля. Ошибка Enter продукта не заявляется; Space контроль прошёл.",
+        "Один диагностический вариант достиг внешнего 60-секундного timeout; причина не установлена. По старому md/retained commands завершена только опознанная собственная Chrome-группа по уникальному profile path.",
+        "Финальный скрипт отключает extensions, выбирает CDP target по точному loopback URL и имеет 10-секундный CDP observation deadline с cleanup. Это изменение harness, не исправление Dynamicwf.",
+        "При продолжении cleanup/exit ранних диагностических вариантов отдельно не перепроверялись и никакие их PID/профили не использовались."
+      ]
+    },
+    {
+      "id": "E06",
+      "phase": "continuation-executed-read-only",
+      "command": "pwd; git status --short; git rev-parse HEAD; cat AGENTS.md; ls -l <old-r09-md> <old-r09-json>; shasum -a 256 <old-r09-md> <retained/r09-actions.json>",
+      "outcome": "Новый cwd/HEAD=e15bc40. Старый md существует, 38612 bytes и ожидаемый SHA256 совпали; json отсутствует. Retained actions прочитаны и хешированы.",
+      "limits": "Отсутствующий json дал ожидаемую ошибку ls, подтверждающую неполноту старого пакета. Это не новое выполнение прежней операции."
+    },
+    {
+      "id": "E07",
+      "phase": "continuation-executed-read-only",
+      "command": "nl -ba <related-source>; чтение профильных PROJECT_INFO/tests; git log -16 --oneline; git show 86f5e07 -- src/graph.ts src/parallel-isolation.ts src/execution-plan.ts src/compiler.ts src/workspaces.ts; git show 3d8ba65 -- skills/dynamic-workflows; git -C <dev> rev-parse HEAD",
+      "outcome": "Проверены причинные цепочки B01/B02, current fixes и контрдоказательства; dev=3d8ba65, новый cwd=e15bc40. Исторические команды не повторялись на новом dev.",
+      "limits": "Статическое сопоставление исходников, не новый тест поведения publicationRevision/installed runtime."
+    },
+    {
+      "id": "E08",
+      "phase": "continuation-executed-static-validation",
+      "command": "shasum -a 256 <own-E01-E05-files>; grep -E '^(✔|✖|ℹ|not ok)' <own-test-results>; python3 с json.loads/assertions сохранённых snapshot/result и сравнением read_bytes() с git show e15bc40:<path>; git diff e15bc40 3d8ba65 -- <14-related-paths>",
+      "outcome": "Подтверждены 60+20+3 pass без fail/skip, все перечисленные SHA256, согласованные run/wait identities и поля paused/Chrome result. 14/14 файлов совпали между старым/new worktree/Git blob; publication diff пуст.",
+      "limits": "Сохранённый результат не объявляется свежим выполнением. Прочитаны только собственные файлы, старые fixtures не изменялись."
+    },
+    {
+      "id": "E09",
+      "phase": "continuation-executed-package-validation",
+      "command": "Python: parse report JSON, unique IDs/classifications/source ranges, SHA256 retained evidence, extract Markdown JS blocks into new mktemp /tmp/r09-continuation.*; node --check \"$P/paused.mjs\"; node --check \"$P/browser.mjs\"; git diff --exit-code -- src tests package.json package-lock.json PROJECT_INFO; shasum -a 256 research/2026-09-20-astra-max/r09-waits-gates-ux.md research/2026-09-20-astra-max/r09-waits-gates-ux.json",
+      "outcome": "Пакет проверен статически: полный JSON, семь уникальных записей, оба fixture в Markdown совпадают с сохранёнными файлами и проходят node --check. Финальные SHA256 возвращены в structured result.",
+      "limits": "--check не исполняет скрипты: новых supervisor/Chrome/provider/live-run действий нет. Финальные хеши отчётов находятся во внешнем результате, чтобы не создавать самоссылку SHA256 JSON."
+    },
+    {
+      "id": "E10",
+      "phase": "current-finalization-read-only-and-report-write",
+      "command": "Python: SHA256 входных md/json; json.loads с duplicate-key guard; MD/JSON ID/classification comparison; source paths/ranges и 14 Git blob byte comparisons; SHA256 двух embedded fixtures; git rev-parse HEAD/status; чтение ключевых причин через sed. Затем запись только назначенной пары и финальная проверка SHA256.",
+      "outcome": "Входные хеши совпали; 7 ID/классификаций согласованы, 32 source paths/ranges и 14 byte comparisons проверены; оба embedded fixture совпали с сохранёнными SHA256.",
+      "limits": "Новых поведенческих выполнений и node --check нет. Исторические 83 pass перенесены из проверенной пары, не пересчитаны по старым сырым логам в этой операции."
+    }
+  ],
+  "proposedExperimentsNotExecuted": [
+    {
+      "findingId": "R09-B01",
+      "description": "Матрица pause→resolve(true/false) с соседним unresolved wait и согласованными browser/watch/snapshot квитанциями после будущего исправления."
+    },
+    {
+      "findingId": "R09-B02",
+      "description": "Новые native browser регрессии submit/summary Space через semantic update/reorder, смену run/visit и закрытие wait; положительные editor контроли."
+    },
+    {
+      "findingId": "R09-I01",
+      "description": "Измерение discoverability пути от причины остановки к существующей инспекции; без автоматического mutation/сканирования."
+    },
+    {
+      "findingId": "R09-U01",
+      "description": "Настоящая IME composition и ручной VoiceOver-проход."
+    },
+    {
+      "findingId": null,
+      "description": "Безопасная будущая подготовка обоих сохранённых probe из git archive базы в новый /tmp/r09-reproduce.* с symlink на существующие зависимости; приведена в Markdown, в продолжении не выполнялась."
+    }
+  ],
+  "sources": [
+    {
+      "path": "AGENTS.md",
+      "verification": "reread-in-continuation",
+      "purpose": "Инварианты и разрешённая граница исследования с пользовательским исключением для двух Git-отчётов"
+    },
+    {
+      "path": "PROJECT_INFO/architecture.md",
+      "verification": "reread-in-continuation",
+      "purpose": "Общий путь задачи/журнала/панели"
+    },
+    {
+      "path": "PROJECT_INFO/development.md",
+      "verification": "reread-in-continuation",
+      "purpose": "Профильные offline tests и ограничения доказательств"
+    },
+    {
+      "path": "PROJECT_INFO/known-issues.md",
+      "verification": "reread-in-continuation",
+      "purpose": "Уже исправленные UX/skill/ownership и оставшаяся disclosure граница"
+    },
+    {
+      "path": "PROJECT_INFO/graph-contract.md",
+      "verification": "reread-in-continuation",
+      "purpose": "Типы узлов, author-defined переходы и reviewer guard"
+    },
+    {
+      "path": "PROJECT_INFO/outcomes-and-waits.md",
+      "verification": "reread-in-continuation",
+      "purpose": "succeeded/accepted, await, response на паузе, idempotency/fence"
+    },
+    {
+      "path": "PROJECT_INFO/observation.md",
+      "verification": "reread-in-continuation",
+      "purpose": "Смысл waitingKeys и пользовательский контракт панели/watch"
+    },
+    {
+      "path": "PROJECT_INFO/reconciliation.md",
+      "verification": "reread-in-continuation",
+      "purpose": "Явная инспекция/accept/retry и границы внешних эффектов"
+    },
+    {
+      "path": "PROJECT_INFO/service.md",
+      "verification": "reread-in-continuation",
+      "purpose": "CLI/MCP, pause/resume/cancel/continue, единый допуск"
+    },
+    {
+      "path": "skills/dynamic-workflows/references/continuation.md",
+      "verification": "reread-in-continuation",
+      "purpose": "Пауза источника, dispositions, reuse и история"
+    },
+    {
+      "path": "src/run-runtime.ts",
+      "ranges": [
+        [
+          82,
+          90
+        ],
+        [
+          154,
+          171
+        ],
+        [
+          359,
+          372
+        ]
+      ],
+      "verification": "reread-in-continuation",
+      "purpose": "Gate, wait metadata, reviewer equality"
+    },
+    {
+      "path": "src/run-store.ts",
+      "ranges": [
+        [
+          349,
+          368
+        ],
+        [
+          527,
+          579
+        ]
+      ],
+      "verification": "reread-in-continuation",
+      "purpose": "Транзакция response/event, idempotency, монотонная отмена/fence"
+    },
+    {
+      "path": "src/run-controller.ts",
+      "ranges": [
+        [
+          98,
+          105
+        ],
+        [
+          266,
+          337
+        ]
+      ],
+      "verification": "reread-in-continuation",
+      "purpose": "snapshot, control, recovery, resolve и relaunch fence"
+    },
+    {
+      "path": "src/reconciliation.ts",
+      "ranges": [
+        [
+          18,
+          49
+        ]
+      ],
+      "verification": "reread-in-continuation",
+      "purpose": "Форма решения, output validation и reviewer binding"
+    },
+    {
+      "path": "src/lineage.ts",
+      "ranges": [
+        [
+          316,
+          360
+        ]
+      ],
+      "verification": "reread-in-continuation",
+      "purpose": "Reuse identity, схема и версия артефакта/критериев"
+    },
+    {
+      "path": "src/task-outcome.ts",
+      "ranges": [
+        [
+          10,
+          22
+        ]
+      ],
+      "verification": "reread-in-continuation",
+      "purpose": "Форма evidence и технический успех отдельно от приёмки"
+    },
+    {
+      "path": "src/observation.ts",
+      "ranges": [
+        [
+          7,
+          39
+        ],
+        [
+          46,
+          74
+        ]
+      ],
+      "verification": "reread-in-continuation",
+      "purpose": "activeWork, waitingKeys и общая проекция"
+    },
+    {
+      "path": "src/graph-view/model.ts",
+      "ranges": [
+        [
+          10,
+          105
+        ]
+      ],
+      "verification": "reread-in-continuation",
+      "purpose": "Durable waits рядом с metadata-проекцией статуса"
+    },
+    {
+      "path": "src/monitor.ts",
+      "ranges": [
+        [
+          97,
+          109
+        ]
+      ],
+      "verification": "reread-in-continuation",
+      "purpose": "Отображение вопроса после resolve на паузе"
+    },
+    {
+      "path": "src/graph-view/app.js",
+      "ranges": [
+        [
+          165,
+          180
+        ],
+        [
+          389,
+          507
+        ],
+        [
+          656,
+          756
+        ],
+        [
+          1125,
+          1198
+        ],
+        [
+          1448,
+          1581
+        ]
+      ],
+      "verification": "reread-in-continuation",
+      "purpose": "UI controls, draft/focus, квитанции, semantic refresh и async ownership"
+    },
+    {
+      "path": "src/graph-view/index.html",
+      "verification": "reread-in-continuation",
+      "purpose": "Native DOM, sections, кнопки и cancellation dialog"
+    },
+    {
+      "path": "src/graph-view/server.ts",
+      "ranges": [
+        [
+          139,
+          159
+        ],
+        [
+          182,
+          209
+        ]
+      ],
+      "verification": "reread-in-continuation",
+      "purpose": "Разделение control/resolve, snapshot с waits и локальный допуск"
+    },
+    {
+      "path": "tests/await-outcome.test.ts",
+      "verification": "reread-in-continuation; historical E01 execution",
+      "purpose": "Пауза/ответ, process recovery, отрицательная ветка и HTTP contract"
+    },
+    {
+      "path": "tests/continuation.test.ts",
+      "ranges": [
+        [
+          199,
+          271
+        ]
+      ],
+      "verification": "reread-in-continuation; historical E01 execution",
+      "purpose": "Наследование паузы, source-fence, одинаковая доставка"
+    },
+    {
+      "path": "tests/graph-view-observation.test.ts",
+      "ranges": [
+        [
+          31,
+          132
+        ],
+        [
+          135,
+          635
+        ]
+      ],
+      "verification": "reread-in-continuation; historical E01 execution",
+      "purpose": "Fake DOM и реальные утверждения текущих fixes"
+    },
+    {
+      "path": "tests/pause-resume-admission.test.ts",
+      "verification": "historical E01 execution; retained result rechecked",
+      "purpose": "Типизированный отказ допуска при pause/resume, без нового выполнения"
+    },
+    {
+      "path": "tests/observation.test.ts",
+      "ranges": [
+        [
+          19,
+          76
+        ]
+      ],
+      "verification": "reread-in-continuation; historical E02 execution",
+      "purpose": "Разделение процесса, результата, паузы и ожидающих активаций"
+    },
+    {
+      "path": "tests/reconciliation.test.ts",
+      "ranges": [
+        [
+          56,
+          177
+        ]
+      ],
+      "verification": "reread-in-continuation; historical E02 execution",
+      "purpose": "История/usage/пауза, одноразовый retry, reviewer binding и HTTP receipts"
+    },
+    {
+      "path": "tests/implementation-recipes.test.ts",
+      "ranges": [
+        [
+          47,
+          91
+        ]
+      ],
+      "verification": "reread-in-continuation; historical E02 execution",
+      "purpose": "Отрицательные gate-условия S/P/C; не live reviewer"
+    },
+    {
+      "path": "tests/run-store.test.ts",
+      "ranges": [
+        [
+          48,
+          72
+        ],
+        [
+          325,
+          378
+        ]
+      ],
+      "verification": "historical E03 selected execution; source and retained result rechecked",
+      "purpose": "Атомарность ответа/события, pause drain и монотонность cancellation"
+    },
+    {
+      "path": "tests/graph-node-accessibility.test.ts",
+      "verification": "historical source inspection only, suite not executed",
+      "purpose": "Прежний browser harness как исходный подход собственного E05"
+    },
+    {
+      "path": "tests/graph-transition-scope.test.ts",
+      "verification": "historical source inspection only, suite not executed",
+      "purpose": "Подход изолированного Chrome fixture; suite не исполнялся"
+    }
+  ],
+  "sourceConventions": {
+    "defaultRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "accessDate": "2026-09-20",
+    "lineNumbers": "1-indexed inclusive; postStudyAlreadyFixed explicitly overrides revision",
+    "webSources": [],
+    "historyInspected": [
+      "git log -16 --oneline at e15bc40",
+      "fea2136",
+      "b4aaa3d",
+      "3b8ad7e",
+      "86f5e07",
+      "3d8ba65"
+    ]
+  },
+  "unknowns": {
+    "classifiedFindingIds": [
+      "R09-U01"
+    ],
+    "untestedBoundaries": [
+      "Safari/Firefox, мобильный layout, физическая клавиатура и assistive technology/IME.",
+      "Потеря питания и все аварийные окна Git; не запускался полный npm test/typecheck.",
+      "Live provider, квоты/права аккаунта, содержательное качество reviewer и skill delivery live probes.",
+      "Пользовательская живая панель, реально загруженная версия installed main/runtime.",
+      "Частота semantic refresh при живых параллельных задачах; fixture проверяет причинный механизм, не статистику.",
+      "Причина исторического внешнего timeout одного диагностического Chrome варианта."
+    ],
+    "notBlockers": "Эти границы ограничивают выводы, но не мешают завершить назначенное исследование и оба отчёта."
+  },
+  "blockers": [],
+  "priorContinuationProvenance": {
+    "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+    "oldOperationStatus": "failed",
+    "retainedFailure": {
+      "version": 1,
+      "code": "provider",
+      "phase": "execution",
+      "effects": "unknown",
+      "message": "Pi assistant turn failed: terminated",
+      "diagnostic": {
+        "dispatch": "http-observed"
+      },
+      "providerResponse": {
+        "status": 200
+      }
+    },
+    "failureInterpretation": "Полученный HTTP 200 не доказывает успешного завершения старой операции. Неопределённые действия не повторялись. Причина сбоя провайдера не исследовалась и не выводилась из квот.",
+    "oldWorkspace": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/296767b722d7bc81389cc890291795fd34e157c7adfa3ccfa548b000fff995ca",
+    "oldReports": [
+      {
+        "path": "research/2026-09-20-astra-max/r09-waits-gates-ux.md",
+        "exists": true,
+        "bytes": 38612,
+        "sha256": "c081214baf157e492ad8029b36f4181ff6980e9f15b73b2c5a78f5332bbfdec7",
+        "hashMatchesRetainedEvidence": true,
+        "completeness": "Основные разделы заполнены, приложение обрывается до обещанных двух скриптов; не полный доказательный пакет."
+      },
+      {
+        "path": "research/2026-09-20-astra-max/r09-waits-gates-ux.json",
+        "exists": false,
+        "sha256": null,
+        "completeness": "Файл отсутствовал; нынешний JSON создан впервые."
+      }
+    ],
+    "preservedActionEvidence": {
+      "path": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r09-actions.json",
+      "sha256": "84a99a90d9c655acb957cd18aa9626bbbad274921332ba4b93ba5e7366c2915c",
+      "read": true,
+      "limitation": "Содержит команды, не stdout/exit codes. Успех E01–E05 установлен не только по этому списку: отдельно прочитаны сохранившиеся собственные результаты и assertions."
+    },
+    "carried": [
+      "Все семь устойчивых ID и классификаций R09-B01/B02/I01/AF01/AF02/AF03/U01.",
+      "Исторические итоги E01–E03: 60+20+3 выбранных теста, ноль fail/skip; не объявлены новым выполнением.",
+      "Наблюдения E04/E05, положительные контроли heartbeat/textarea/disclosure, границы настоящего Chrome и mock resolve.",
+      "Диагностика ранних неудачных вариантов browser fixture из старого md и последовательности retained commands; причина внешнего timeout остаётся неустановленной."
+    ],
+    "rechecked": [
+      "Старый md совпадает с переданными размером/SHA256, старого JSON нет.",
+      "Ключевые причины и контрдоказательства повторно прочитаны на e15bc40; 14 исходников/package/lock совпали побайтно между старым worktree, новым cwd и Git blob базы.",
+      "SHA256 сохранённых тестовых итогов, обоих финальных скриптов и result/snapshot JSON вычислены заново без записи в старые fixtures.",
+      "Согласованы идентичности run/wait waiting и paused snapshot, resolved response, waitingKeys, activeKeys и выводы result JSON.",
+      "Diff базы и publicationRevision по тем же 14 файлам пуст; post-study изменения прочитаны отдельно, не выданы за результат повторного исследования."
+    ],
+    "added": [
+      "Полный JSON отчёта и явный continuation provenance.",
+      "Два сохранённых финальных fixture добавлены в Markdown побайтно; новая подготовительная команда через git archive предложена, но не исполнялась.",
+      "Уточнены ссылки: run-store.ts:571 — continuation fence, :572 — cancellation; app.js:656–657 — вызов recovery в инспекторе.",
+      "Уточнено, что summary в E05 фокусировался программно, а trusted Tab/Space проверялись для submit.",
+      "Отдельные post-study already-fixed записи, статическая проверка двух скриптов/структуры отчётов/ссылок и финальные SHA256."
+    ],
+    "notRepeated": [
+      "E01",
+      "E02",
+      "E03",
+      "E04",
+      "E05"
+    ],
+    "sourceByteComparisons": [
+      "src/graph-view/app.js",
+      "src/graph-view/model.ts",
+      "src/graph-view/index.html",
+      "src/graph-view/server.ts",
+      "src/run-store.ts",
+      "src/run-runtime.ts",
+      "src/run-controller.ts",
+      "src/observation.ts",
+      "src/monitor.ts",
+      "src/reconciliation.ts",
+      "src/task-outcome.ts",
+      "src/lineage.ts",
+      "package.json",
+      "package-lock.json"
+    ],
+    "retainedArtifacts": [
+      {
+        "experimentId": "E01",
+        "path": "/tmp/r09-profile-tests.9ofJZe/results.txt",
+        "sha256": "7bd68f3a7455b307e38ea87adb22675ef89c75cd52ea928479f838f0e5becad4",
+        "readMode": "Отфильтрованные итоги, сырые логи не опубликованы"
+      },
+      {
+        "experimentId": "E02",
+        "path": "/tmp/r09-gates-tests.XWFHJ7/results.txt",
+        "sha256": "7dd7e3c061652fb3f3a4a386569a5ab9c01c124c9709e39d86b1925a7154d95e",
+        "readMode": "Отфильтрованные итоги, сырые логи не опубликованы"
+      },
+      {
+        "experimentId": "E03",
+        "path": "/tmp/r09-gates-tests.XWFHJ7/store.txt",
+        "sha256": "138696adfc15559792fdd87b7c8ba8c384cec3f766b910489706d4792e321b96",
+        "readMode": "Отфильтрованные итоги, сырые логи не опубликованы"
+      },
+      {
+        "experimentId": "E04",
+        "path": "/tmp/r09-waits-ux.YJ2ack/paused.mjs",
+        "sha256": "82870575aad81940bd6be2ec053194cafc9de561cc455f0d0c75a16b71354042",
+        "readMode": "Полный скрипт; добавлен в Markdown"
+      },
+      {
+        "experimentId": "E04",
+        "path": "/tmp/r09-waits-ux.YJ2ack/paused-result.json",
+        "sha256": "c002089c12b0ebb849aec1764dac699067efe9a769bdbc8a089588176b78b9be",
+        "readMode": "Полный компактный результат"
+      },
+      {
+        "experimentId": "E04",
+        "path": "/tmp/r09-waits-ux.YJ2ack/waiting.json",
+        "sha256": "8f0da43945e06da25950052e6575d847b754579ce0ffe0a4c7c3522bb00e4ab2",
+        "readMode": "Проверены поля и идентичности, полный снимок не опубликован"
+      },
+      {
+        "experimentId": "E04",
+        "path": "/tmp/r09-waits-ux.YJ2ack/paused-resolved.json",
+        "sha256": "6011880d51066e1354b245b38434f0b166d67e15c87529b5146193a7cf59b6c8",
+        "readMode": "Проверены поля и идентичности, полный снимок не опубликован"
+      },
+      {
+        "experimentId": "E05",
+        "path": "/tmp/r09-waits-ux.YJ2ack/browser.mjs",
+        "sha256": "46b39553e77e8e9d5c73c65a131d15e4445c9dea732a8066013364fce37c0d1a",
+        "readMode": "Полный финальный скрипт; добавлен в Markdown"
+      },
+      {
+        "experimentId": "E05",
+        "path": "/tmp/r09-waits-ux.YJ2ack/browser-result.json",
+        "sha256": "0029a80beeafff5c2bc971e41de2e2764cd8c164c82993330ca2b4d4c77e2144",
+        "readMode": "Полный компактный результат"
+      }
+    ]
+  }
+}

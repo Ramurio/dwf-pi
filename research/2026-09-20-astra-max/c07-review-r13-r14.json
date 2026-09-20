@@ -1,0 +1,192 @@
+{
+  "metadata": {
+    "ID": "c07",
+    "topic": "Ревью r13/r14: заблокированный входной пакет",
+    "date": "2026-09-20",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "artifactRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "acceptanceCriteriaRevision": "dwf-astra-research-evidence-v1"
+  },
+  "status": "blocked",
+  "decision": "inconclusive",
+  "reviewedMaterialDigest": "sha256:0323514e846334a12f35c0da4b7be06c451e30f03c3bd497c97f948a9fe08672",
+  "reviewedResearchIds": [
+    "r13",
+    "r14"
+  ],
+  "reviewedArtifactRevisions": [
+    "sha256:d824ee96087cee9c13bd5a5b16f209afd15fa0f895de89ad43898b3a72ac272b"
+  ],
+  "inputIntegrity": {
+    "r13": {
+      "status": "succeeded",
+      "value": {
+        "result": {
+          "status": "complete",
+          "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+          "reportMd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/0f47b6cc04ca6586af79878fc6baffeb8f730bc1e699065bb43d5e7a2c47d827/research/2026-09-20-astra-max/r13-security-provider-cancel.md",
+          "reportJson": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/0f47b6cc04ca6586af79878fc6baffeb8f730bc1e699065bb43d5e7a2c47d827/research/2026-09-20-astra-max/r13-security-provider-cancel.json",
+          "reportSha256": {
+            "markdown": "c5367e59ca0ce4b7df8575c17b651fe671a3cfb49b9ea7ad214b82450bb94992",
+            "json": "d824ee96087cee9c13bd5a5b16f209afd15fa0f895de89ad43898b3a72ac272b"
+          },
+          "summary": "Доказательный пакет завершён из сохранённых материалов: восстановлены приложения, проверены хеши, ссылки и результаты 141/141 исторических тестов без повторных probes. Один bug: Bedrock выполняет скрытые HTTP-повторы при maxRetries:0. Всего 7 findings; continuation provenance и post-study исправления разделены.",
+          "blockers": [],
+          "researchId": "r13",
+          "artifactRevision": "sha256:d824ee96087cee9c13bd5a5b16f209afd15fa0f895de89ad43898b3a72ac272b",
+          "findingCount": 7
+        },
+        "workspace": {
+          "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/0f47b6cc04ca6586af79878fc6baffeb8f730bc1e699065bb43d5e7a2c47d827",
+          "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/0f47b6cc04ca6586af79878fc6baffeb8f730bc1e699065bb43d5e7a2c47d827",
+          "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+          "head": "8c2111a1a8139efb0f4e8946b5f82c1676744212"
+        }
+      }
+    },
+    "r14": {
+      "status": "failed",
+      "failure": {
+        "version": 1,
+        "code": "provider",
+        "phase": "execution",
+        "effects": "unknown",
+        "message": "Pi assistant turn failed: fetch failed",
+        "diagnostic": {
+          "dispatch": "fetch-attempted"
+        }
+      }
+    }
+  },
+  "coverage": [
+    "Статусы collect проверены до чтения value; у r14 value отсутствует.",
+    "Оба файла r13 найдены в producer workspace; SHA256 совпали до чтения JSON.",
+    "Прочитаны AGENTS, architecture, development, known-issues, git log; HEAD совпал с study-source.",
+    "Частичная проверка src/pi-worker.ts:164,234–235 подтверждает передачу maxRetries:0, но не доказывает поведение Bedrock transport."
+  ],
+  "findings": [
+    {
+      "id": "C07-U01",
+      "classification": "unknown",
+      "severity": "error",
+      "message": "r14: collect failed, отчёты и producer hashes не переданы; ревью пары заблокировано.",
+      "evidence": "researchResults.r14.status=failed; failure.code=provider; phase=execution; effects=unknown",
+      "recommendation": {
+        "minimalChange": "Передать новую успешную collect-оболочку r14 с обоими файлами и хешами; повторно связать ревью с digest новых материалов.",
+        "risk": "Старый вердикт нельзя переносить на новый пакет.",
+        "acceptance": "Оба producer complete, файлы доступны и SHA256 совпадают; выполнено независимое содержательное ревью."
+      }
+    }
+  ],
+  "authorFindingReview": [
+    {
+      "id": "R13-B01",
+      "disposition": "unknown",
+      "evidence": "Содержательная независимая проверка не завершена: входной gate пары заблокирован r14. Исторические эксперименты автора не считаются выполненными критиком.",
+      "authorLocations": [
+        "src/pi-worker.ts:164",
+        "src/pi-worker.ts:223-236",
+        "src/model-runtime.ts:34-38",
+        "package-lock.json:104-106,983-993",
+        "node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js:47-120,126,155-156",
+        "node_modules/@earendil-works/pi-ai/dist/api/simple-options.js:30",
+        "node_modules/@aws-sdk/client-bedrock-runtime/dist-cjs/runtimeConfig.js:60"
+      ]
+    },
+    {
+      "id": "R13-I01",
+      "disposition": "unknown",
+      "evidence": "Содержательная независимая проверка не завершена: входной gate пары заблокирован r14. Исторические эксперименты автора не считаются выполненными критиком.",
+      "authorLocations": [
+        "src/pi-worker.ts:155-160",
+        "node_modules/@earendil-works/pi-ai/dist/auth/resolve.js:77-113"
+      ]
+    },
+    {
+      "id": "R13-U01",
+      "disposition": "unknown",
+      "evidence": "Содержательная независимая проверка не завершена: входной gate пары заблокирован r14. Исторические эксперименты автора не считаются выполненными критиком.",
+      "authorLocations": [
+        "src/credential-persistence.ts:12-25",
+        "src/pi-worker.ts:358-366",
+        "src/process-client.ts:29-49",
+        "tests/oauth-refresh-abort.test.ts:36-50",
+        "node_modules/@earendil-works/pi-ai/dist/auth/resolve.js:26-28"
+      ]
+    },
+    {
+      "id": "R13-A01",
+      "disposition": "unknown",
+      "evidence": "Содержательная независимая проверка не завершена: входной gate пары заблокирован r14. Исторические эксперименты автора не считаются выполненными критиком.",
+      "authorLocations": [
+        "src/credential-persistence.ts:9-25",
+        "src/model-runtime.ts:16-18",
+        "src/sdk-auth-storage.ts:11-23",
+        "tests/oauth-refresh-abort.test.ts",
+        "node_modules/@earendil-works/pi-ai/dist/auth/resolve.js:20-24,40-54"
+      ]
+    },
+    {
+      "id": "R13-A02",
+      "disposition": "unknown",
+      "evidence": "Содержательная независимая проверка не завершена: входной gate пары заблокирован r14. Исторические эксперименты автора не считаются выполненными критиком.",
+      "authorLocations": [
+        "src/pi-worker.ts:164,223-281",
+        "src/provider-response.ts:6-33",
+        "src/provider-failure-message.ts",
+        "src/retry-policy.ts:17-28"
+      ]
+    },
+    {
+      "id": "R13-A03",
+      "disposition": "unknown",
+      "evidence": "Содержательная независимая проверка не завершена: входной gate пары заблокирован r14. Исторические эксперименты автора не считаются выполненными критиком.",
+      "authorLocations": [
+        "src/execution-plan.ts:43-54",
+        "src/pi-worker.ts:108-116,145-173,207-218",
+        "src/model-runtime.ts:14-15",
+        "src/catalog.ts:31-35,85-95"
+      ]
+    },
+    {
+      "id": "R13-A04",
+      "disposition": "unknown",
+      "evidence": "Содержательная независимая проверка не завершена: входной gate пары заблокирован r14. Исторические эксперименты автора не считаются выполненными критиком.",
+      "authorLocations": [
+        "src/pi-worker.ts:126-136,317-330,358-366",
+        "src/pi-worker-process.ts:9-18,29-42",
+        "src/process-client.ts:54-64,102-130",
+        "scripts/apply-sdk-bash-signal.mjs:14-17"
+      ]
+    }
+  ],
+  "experiments": [
+    {
+      "command": "Python hashlib.sha256 для обоих producer файлов r13",
+      "outcome": "Оба совпали с metadata",
+      "limits": "Целостность, не доказательство истинности claims"
+    },
+    {
+      "command": "git rev-parse HEAD; grep -n maxRetries src/pi-worker.ts",
+      "outcome": "study HEAD подтверждён; maxRetries:0 присутствует",
+      "limits": "Offline behavioral fixtures и тесты не запускались"
+    }
+  ],
+  "alreadyFixedRefutations": [
+    "Ни один already-fixed claim автора не переоткрывается. Post-study b86f5e07 и 3d8ba65 не считаются изменениями study-source."
+  ],
+  "sources": [
+    "AGENTS.md",
+    "PROJECT_INFO/architecture.md",
+    "PROJECT_INFO/development.md",
+    "PROJECT_INFO/known-issues.md",
+    "src/pi-worker.ts:164",
+    "src/pi-worker.ts:234-235",
+    "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/0f47b6cc04ca6586af79878fc6baffeb8f730bc1e699065bb43d5e7a2c47d827/research/2026-09-20-astra-max/r13-security-provider-cancel.json"
+  ],
+  "unknowns": [
+    "Все семь содержательных findings r13 остаются непроверенными этим критиком.",
+    "Findings r14 неизвестны: failed collect не содержит отчёта.",
+    "141 исторический тест не воспроизводился; live provider не проверялся."
+  ]
+}

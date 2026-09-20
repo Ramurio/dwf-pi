@@ -1,0 +1,263 @@
+{
+  "metadata": {
+    "id": "c04",
+    "topic": "Независимое ревью r07/r08",
+    "date": "2026-09-20",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "artifactRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "acceptanceCriteriaRevision": "dwf-astra-research-evidence-v1"
+  },
+  "status": "complete",
+  "decision": "approve",
+  "reviewedMaterialDigest": "sha256:8677d575b6cd304044dd0181ceaa960e041155ea9fba63880c1ea3d64a5f839d",
+  "reviewedResearchIds": [
+    "r07",
+    "r08"
+  ],
+  "reviewedArtifactRevisions": [
+    "sha256:4ea71d4ada5ee4bf3b4ae7c063a816ab1ae56878e39749f96bcb76ba3b983474",
+    "sha256:ffec7efcf77bb7ab2481096f03069f754759de6509886e19dc6c773668de5af5"
+  ],
+  "materialBindings": {
+    "r07": {
+      "status": "succeeded",
+      "value": {
+        "result": {
+          "status": "complete",
+          "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+          "reportMd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b/research/2026-09-20-astra-max/r07-authoring-cli-mcp.md",
+          "reportJson": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b/research/2026-09-20-astra-max/r07-authoring-cli-mcp.json",
+          "reportSha256": {
+            "markdown": "9eae292cbfc22378efd1aa5a8646943d31a7db85caa8057888ba13264442e2d3",
+            "json": "4ea71d4ada5ee4bf3b4ae7c063a816ab1ae56878e39749f96bcb76ba3b983474"
+          },
+          "summary": "Доказательный пакет восстановлен и независимо проверен: 4 воспроизведённых bug и 1 idea. Сохранённые результаты 181 теста перенесены без повторного запуска. Проверены хеши, fixture, исходники и ссылки; provenance и два post-study already-fixed выделены отдельно.",
+          "blockers": [],
+          "researchId": "r07",
+          "artifactRevision": "sha256:4ea71d4ada5ee4bf3b4ae7c063a816ab1ae56878e39749f96bcb76ba3b983474",
+          "findingCount": 5
+        },
+        "workspace": {
+          "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b",
+          "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b",
+          "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+          "head": "e0dfac01836f02fb2182a01d173f5987746841a7"
+        }
+      }
+    },
+    "r08": {
+      "status": "succeeded",
+      "value": {
+        "result": {
+          "status": "complete",
+          "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+          "reportMd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/6ddc23ed0afc5c81d40f8032ac685dea1350acc4ecde6436ec3ab19c90071ca2/research/2026-09-20-astra-max/r08-roles-skills-eval.md",
+          "reportJson": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/6ddc23ed0afc5c81d40f8032ac685dea1350acc4ecde6436ec3ab19c90071ca2/research/2026-09-20-astra-max/r08-roles-skills-eval.json",
+          "reportSha256": {
+            "markdown": "7245c39a24e2c1d28ede088593ae4c38076e45db9da541e9f1c56ea99f6f6e74",
+            "json": "ffec7efcf77bb7ab2481096f03069f754759de6509886e19dc6c773668de5af5"
+          },
+          "summary": "Пакет перенесён с проверенными историческими хешами и явным continuation provenance. Перепроверены источники, шесть схем и corpus из 24 сценариев; уточнены golden-ответы. Четыре находки, новых подтверждённых bugs нет. Model eval не запускался; post-study fixes отмечены отдельно.",
+          "blockers": [],
+          "researchId": "r08",
+          "artifactRevision": "sha256:ffec7efcf77bb7ab2481096f03069f754759de6509886e19dc6c773668de5af5",
+          "findingCount": 4
+        },
+        "workspace": {
+          "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/6ddc23ed0afc5c81d40f8032ac685dea1350acc4ecde6436ec3ab19c90071ca2",
+          "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/6ddc23ed0afc5c81d40f8032ac685dea1350acc4ecde6436ec3ab19c90071ca2",
+          "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+          "head": "e21957fd8094f917e4d13e40bec67ab50417a3c5"
+        }
+      }
+    }
+  },
+  "coverage": [
+    "authoring CAS",
+    "CLI/MCP continuation validation",
+    "public draft schema",
+    "service lifetime",
+    "role defaults/custom prompts",
+    "frozen skill delivery/manual-only",
+    "eval corpus structural contracts"
+  ],
+  "findings": [
+    {
+      "id": "R07-B01",
+      "classification": "bug",
+      "assessment": "confirmed",
+      "locations": [
+        "src/lineage.ts:244-259",
+        "src/mcp-tools.ts:37-40"
+      ],
+      "evidence": "Повторный offline fixture: MCP отвергает [hash], CLI создаёт paused successor; правильная повторная доставка возвращает тот же ID. reuse:null принят CLI, отвергнут MCP.",
+      "limits": "Неверная строка hash отвергнута; обход свежести и повтор внешних эффектов не установлены."
+    },
+    {
+      "id": "R07-B02",
+      "classification": "bug",
+      "assessment": "confirmed",
+      "locations": [
+        "src/store.ts:42-49",
+        "src/cli.ts:30-31",
+        "tests/store.test.ts:9-34"
+      ],
+      "evidence": "Барьер двух отдельных CLI: ровно один успех, revision=2, проигравший Error без revision-полей. Последовательный stale patch возвращает RevisionConflictError.",
+      "limits": "CAS работает; это диагностика, не потеря обновления. Естественная частота гонки не измерена."
+    },
+    {
+      "id": "R07-B03",
+      "classification": "bug",
+      "assessment": "confirmed",
+      "locations": [
+        "src/service.ts:91-93",
+        "src/authoring.ts:31-39",
+        "src/public-schema.ts:20-48"
+      ],
+      "evidence": "Ajv после JSON round-trip: только draft даёт reference Json resolves to more than one schema. portableInputSchema исправляет компиляцию и принимает незавершённый draft.",
+      "limits": "Не дефект patch/id; не доказана несовместимость со всеми валидаторами."
+    },
+    {
+      "id": "R07-B04",
+      "classification": "bug",
+      "assessment": "confirmed",
+      "locations": [
+        "src/service.ts:48-69",
+        "src/service.ts:114-120"
+      ],
+      "evidence": "Immediate close перед await prepare, затем повторный close: обе SQLite connection доступны; future dispatch отвергнут; normal await/close закрывает connection.",
+      "limits": "Не доказан транспортный MCP disconnect или production leak; CLI normal ordering корректен."
+    },
+    {
+      "id": "R07-I01",
+      "classification": "idea",
+      "assessment": "confirmed",
+      "locations": [
+        "src/mcp.ts:19-34",
+        "src/cli.ts:24-34"
+      ],
+      "evidence": "Негативные запросы дают разные name/message, но одинаково отвергаются; stale revision сохраняет одинаковые поля.",
+      "limits": "Это идея унификации, не доказанный контракт побайтового равенства."
+    },
+    {
+      "id": "R08-F01",
+      "classification": "already-fixed",
+      "assessment": "confirmed",
+      "locations": [
+        "src/catalog.ts:31-35,59-75,93-95",
+        "src/pi-worker.ts:164-173",
+        "tests/skill-delivery.test.ts:17-65"
+      ],
+      "evidence": "Новый scripted SDK probe подтвердил видимость и чтение frozen skill и reference всеми шестью ролями; исходные файлы удалены fixture-ом.",
+      "limits": "Исторические 129 тестов не перезапускались. Scripted выбор read не предсказывает поведение модели."
+    },
+    {
+      "id": "R08-F02",
+      "classification": "unknown",
+      "assessment": "confirmed",
+      "locations": [
+        "src/pi-worker.ts:312",
+        "node_modules/@earendil-works/pi-coding-agent/dist/core/skills.js:275-278"
+      ],
+      "evidence": "Парный probe: visible-not-read видим, hidden невидим, оба submit успешны; SDK явно фильтрует disableModelInvocation.",
+      "limits": "Подтверждена граница и корректность unknown, а не баг. Требуется продуктовый контракт manual-only."
+    },
+    {
+      "id": "R08-F03",
+      "classification": "idea",
+      "assessment": "confirmed",
+      "locations": [
+        "src/catalog.ts:67-75",
+        "src/output-schema.ts:26-46"
+      ],
+      "evidence": "Шесть schemas: 24 golden pass, 72 malformed reject, 48 планов, 3 fixture checks. Schema-valid ложный total=999 принят, как и должно быть без semantic oracle.",
+      "limits": "Не совет менять универсальный каталог; oracle и corpus не являются доказательством live качества."
+    },
+    {
+      "id": "R08-F04",
+      "classification": "unknown",
+      "assessment": "confirmed",
+      "locations": [
+        "src/catalog.ts:58-75,85-95",
+        "src/pi-worker.ts:169,312",
+        "PROJECT_INFO/development.md:151-171"
+      ],
+      "evidence": "Custom prompt заменяет роль, mandatory protocol остаётся; visible skill не обязательно читается. Документированный prompt eval не охватывает эти шесть ролей со skills.",
+      "limits": "Качество/injection устойчивость остаются unknown; scripted transport не модельный eval."
+    }
+  ],
+  "experiments": [
+    {
+      "id": "C04-E01",
+      "command": "python3: SHA256 четырёх supplied report paths; git rev-parse HEAD",
+      "outcome": "Обе collect succeeded, result complete; все четыре SHA совпали; HEAD совпал с sourceRevision.",
+      "limits": "Хеш связывает материал, не доказывает его истинность."
+    },
+    {
+      "id": "C04-E02",
+      "command": "TMPDIR=/private/tmp/c04-review-Sef9DX/tmp node --import /private/tmp/c04-review-Sef9DX/node_modules/tsx/dist/loader.mjs /private/tmp/c04-review-Sef9DX/probe.mjs /private/tmp/c04-review-Sef9DX /private/tmp/c04-review-Sef9DX",
+      "outcome": "Все assertions R07 fixture прошли; B01–B04 и I01 воспроизведены.",
+      "limits": "Копия src и package.json из текущего worktree; зависимости существующего dev через symlink. Два первых запуска через /tmp завершились MCP ConnectionClosed; canonical /private/tmp устранил различие путей entrypoint. Это не новая находка. Изменён только stderr handler для диагностики в собственной копии fixture. Только собственные БД/процессы, без supervisor."
+    },
+    {
+      "id": "C04-E03",
+      "command": "node --import /private/tmp/c04-review-Sef9DX/node_modules/tsx/dist/loader.mjs /private/tmp/c04-review-Sef9DX/roles.mjs /private/tmp/c04-review-Sef9DX",
+      "outcome": "10 scripted cases прошли: шесть ролей читают skill/reference; visible-not-read, hidden, custom, invalid подтверждены.",
+      "limits": "Исходник из offlineProbes.rolesAndSkills, заменён только /tmp prefix на c04. Нет live provider."
+    },
+    {
+      "id": "C04-E04",
+      "command": "node --import /private/tmp/c04-review-Sef9DX/node_modules/tsx/dist/loader.mjs /private/tmp/c04-review-Sef9DX/corpus.mjs <supplied r08 reportJson> /private/tmp/c04-review-Sef9DX",
+      "outcome": "6 schemas, 24 golden, 72 negative, 48 plans, 3 checks; semanticMismatchAccepted=1, modelCalls=0.",
+      "limits": "Исходник из offlineProbes.corpusContracts, только prefix c04. Это structural eval, не независимая оценка всех семантических golden ответов."
+    }
+  ],
+  "alreadyFixedRefutations": [
+    "Skill delivery не переоткрыт; runtime visibility не равна качеству применения.",
+    "B03 не дублирует исправленный public patch id; B02 не опровергает атомарность CAS.",
+    "Post-study: 86f5e07 early parallel-isolation и 3d8ba65 reviewer-binding docs отделены от study; повторная реализация не рекомендуется. Эти post-study изменения не тестировались здесь.",
+    "Ownership UI/control/await и wait disclosure не входят в новые findings."
+  ],
+  "sources": [
+    "AGENTS.md",
+    "PROJECT_INFO/architecture.md",
+    "PROJECT_INFO/development.md",
+    "PROJECT_INFO/known-issues.md",
+    "PROJECT_INFO/service.md",
+    "PROJECT_INFO/authoring.md",
+    "git log -5 --oneline",
+    "src/lineage.ts:244-259",
+    "src/mcp-tools.ts:37-40",
+    "src/store.ts:42-49",
+    "src/cli.ts:30-31",
+    "tests/store.test.ts:9-34",
+    "src/service.ts:91-93",
+    "src/authoring.ts:31-39",
+    "src/public-schema.ts:20-48",
+    "src/service.ts:48-69",
+    "src/service.ts:114-120",
+    "src/mcp.ts:19-34",
+    "src/cli.ts:24-34",
+    "src/catalog.ts:31-35,59-75,93-95",
+    "src/pi-worker.ts:164-173",
+    "tests/skill-delivery.test.ts:17-65",
+    "src/pi-worker.ts:312",
+    "node_modules/@earendil-works/pi-coding-agent/dist/core/skills.js:275-278",
+    "src/catalog.ts:67-75",
+    "src/output-schema.ts:26-46",
+    "src/catalog.ts:58-75,85-95",
+    "src/pi-worker.ts:169,312",
+    "PROJECT_INFO/development.md:151-171"
+  ],
+  "unknowns": [
+    "Live provider, качество prompts и injection не проверялись.",
+    "Исторические 181/129 tests не повторялись; проверены ключевые самостоятельные fixtures, не весь test suite.",
+    "MCP disconnect lifetime race и естественная частота CAS не измерены."
+  ],
+  "recommendation": {
+    "minimalChange": "Отчёты можно агрегировать без содержательной правки. Для будущих исправлений использовать узкие acceptance criteria авторов; идеи не внедрять автоматически.",
+    "risk": "Нельзя переносить approve на иной digest или считать его разрешением изменения runtime.",
+    "acceptance": "Сохранить source/material binding, unknowns, counterevidence и разделение study/post-study."
+  },
+  "blockers": []
+}

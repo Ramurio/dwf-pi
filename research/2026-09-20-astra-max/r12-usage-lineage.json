@@ -1,0 +1,1120 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "researchId": "r12",
+    "topic": "Наблюдаемость usage и lineage",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "date": "2026-09-20",
+    "assembledAtUtc": "2026-09-20T13:14:40+00:00",
+    "language": "ru",
+    "cwd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/3b11a6a47c97b1cc15eb29d7130232de1f7942cba4e5984c44d1c7558b61c9c9",
+    "reportMarkdown": "research/2026-09-20-astra-max/r12-usage-lineage.md",
+    "reportJson": "research/2026-09-20-astra-max/r12-usage-lineage.json",
+    "environment": {
+      "node": "v26.8.1",
+      "piSdk": "0.85.1",
+      "worktreeDependenciesPresent": false,
+      "continuationProbeSource": "git archive sourceRevision, 67 files byte verified",
+      "dependencyPolicy": "Existing dev node_modules, no install or edits"
+    },
+    "artifactRevisionRule": "sha256:<SHA256 окончательного JSON>; вычисляется после записи и возвращается в submit_result, не самореференс внутри JSON."
+  },
+  "status": "complete",
+  "summary": {
+    "text": "Два воспроизведённых дефекта наблюдаемости: успешный missing-usage SSE становится полным 0; usage report старой попытки получает current attempt в подписи. Ledger/lineage/trace в профильных regressions сохраняют суммы, происхождение и неопределённость. SDK cost не billing.",
+    "findingCount": 8,
+    "findingCountBasis": "Все study-source записи findings, включая refutations/unknown; postStudyAlreadyFixed отдельно, не входит.",
+    "classificationCounts": {
+      "bug": 2,
+      "idea": 1,
+      "already-fixed": 2,
+      "unknown": 3
+    },
+    "historicalTestsPassed": 196,
+    "historicalTestsReexecutedDuringContinuation": 0,
+    "newOfflineFixtureExecutions": 2,
+    "liveProviderChecks": 0
+  },
+  "continuationProvenance": {
+    "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+    "newRunId": "run-9dbb044c-664f-4dd8-96c0-57192dc4ed89",
+    "oldWorkspace": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/3b11a6a47c97b1cc15eb29d7130232de1f7942cba4e5984c44d1c7558b61c9c9",
+    "oldOperationStatus": "failed",
+    "oldPackageComplete": false,
+    "oldReports": [
+      {
+        "path": "research/2026-09-20-astra-max/r12-usage-lineage.md",
+        "exists": true,
+        "bytes": 44103,
+        "sha256": "e6ed845eb74a15cdefd2980a034197f812ffa5cc4a9d848fc3168643dcf9bab6",
+        "matchesRetainedEvidence": true
+      },
+      {
+        "path": "research/2026-09-20-astra-max/r12-usage-lineage.json",
+        "exists": false
+      }
+    ],
+    "retainedFailure": {
+      "code": "provider",
+      "phase": "execution",
+      "effects": "unknown",
+      "message": "Pi assistant turn failed: terminated",
+      "providerResponse": {
+        "status": 200
+      },
+      "diagnostic": {
+        "dispatch": "http-observed"
+      },
+      "version": 1
+    },
+    "failureInterpretation": "Не объясняет первопричину, не означает успешную сдачу и не разрешает повтор прежнего writer.",
+    "actions": {
+      "path": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r12-actions.json",
+      "sha256": "92abb273100b78ba634daca1a3e9b7953bc257494ff348707d204eca035b42d5",
+      "count": 33,
+      "content": "Список команд без stdout/exit results."
+    },
+    "retainedLogs": [
+      {
+        "experimentId": "R12-E01",
+        "file": "/tmp/r12-usage-lineage.g0edSf/tests-core.log",
+        "sha256": "038a52bbbdb52128b307fde95bc95741218a055a1c39af65967fe7bf0bdec761",
+        "counts": {
+          "tests": 129,
+          "pass": 129,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        "durationMs": 2666.794833,
+        "inspectedDuringContinuation": true,
+        "publishedRawLog": false
+      },
+      {
+        "experimentId": "R12-E02",
+        "file": "/tmp/r12-usage-lineage.g0edSf/tests-lineage.log",
+        "sha256": "410ba7ddb0e4dced7affba28f55c1c8cb96da34291ba407c8162e549df97de65",
+        "counts": {
+          "tests": 44,
+          "pass": 44,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        "durationMs": 124028.003709,
+        "inspectedDuringContinuation": true,
+        "publishedRawLog": false
+      },
+      {
+        "experimentId": "R12-E03",
+        "file": "/tmp/r12-usage-lineage.g0edSf/tests-sdk-accounting.log",
+        "sha256": "00b28ec6297219ac5a97e57f2d2ea492e05e93c730f616c41cc6c66559144751",
+        "counts": {
+          "tests": 13,
+          "pass": 13,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        "durationMs": 1627.733625,
+        "inspectedDuringContinuation": true,
+        "publishedRawLog": false
+      },
+      {
+        "experimentId": "R12-E04",
+        "file": "/tmp/r12-usage-lineage.g0edSf/tests-transport.log",
+        "sha256": "22151cbef72a2bdaa4e6a00ad846bcf5200c2ee4f073dbbd6dc3ed0e4d4c53d1",
+        "counts": {
+          "tests": 9,
+          "pass": 9,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        "durationMs": 4514.191333,
+        "inspectedDuringContinuation": true,
+        "publishedRawLog": false
+      },
+      {
+        "experimentId": "R12-E05",
+        "file": "/tmp/r12-usage-lineage.g0edSf/tests-ui-accounting.log",
+        "sha256": "d9a598ceaf1a3fcaffe9609d87b53c44d3975702b74ab71d5d41b8add7acfbba",
+        "counts": {
+          "tests": 1,
+          "pass": 1,
+          "fail": 0,
+          "cancelled": 0,
+          "skipped": 0
+        },
+        "durationMs": 501.499083,
+        "inspectedDuringContinuation": true,
+        "publishedRawLog": false
+      }
+    ],
+    "fixtures": {
+      "missing-usage.mts": {
+        "markdownMarker": "r12-fixture:missing-usage.mts",
+        "sha256": "87d5555696e99c982641cef8a1dd3d64ca44885c6475789638f6cc7cff1cf4e9",
+        "oldTmpMatches": true
+      },
+      "attempt-label.mts": {
+        "markdownMarker": "r12-fixture:attempt-label.mts",
+        "sha256": "63e5f4e392d9d03daf2b53a7e8fe9993a30aa2df3fe208f8bea77ebc52eb47c0",
+        "oldTmpMatches": true
+      }
+    },
+    "carriedForward": [
+      "Все восемь study-source IDs, классификации, рекомендации и границы; E01-E07 из собственной старой ветви.",
+      "E01-E05 pass counts сверены по сохранённым логам, не по одним commands.",
+      "Полные fixtures из старого Markdown совпали с собственными старыми tmp файлами."
+    ],
+    "reverified": [
+      "HEAD, обязательные документы, профильные исходники и history; SDK parser/pins.",
+      "C01: SHA старого Markdown/actions/logs, отсутствие JSON, соответствие fixture bytes.",
+      "C02: две fixture заново, новый tmp/source e15bc40; missing/zero/positive и 8/12/20 подтверждены.",
+      "C03: профильный source diff к publication revision пуст; post-study исправления отделены."
+    ],
+    "added": [
+      "JSON создан впервые; provenance и manifest evidence.",
+      "Новые проверки C01-C03, безопасная команда точного sourceRevision в приложении Markdown.",
+      "Отдельный post-study already-fixed context; уточнение old vs new test execution.",
+      "Исправлены унаследованные ссылки: run-journal.md:179–239 на 179–233 (конец файла), monitor history на 77–84; substantive выводы не изменены."
+    ],
+    "notReplayed": [
+      "196 tests, старые tmp fixtures, пользовательские run/processes, live provider вызовы."
+    ],
+    "oldWorkspaceModified": false,
+    "oldTmpModified": false,
+    "neighborReportsRead": false
+  },
+  "coverage": [
+    {
+      "area": "SDK usage source, partial vs zero",
+      "refs": [
+        "src/pi-worker.ts:100-105,219-280,311-352",
+        "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js:171-184,378-387,494-504"
+      ],
+      "evidence": [
+        "R12-E03",
+        "R12-E04",
+        "R12-E06",
+        "R12-C02"
+      ],
+      "boundary": "Native parser + mock HTTP; live frequency unknown."
+    },
+    {
+      "area": "Ledger, attempts, cumulative accounting",
+      "refs": [
+        "src/run-store.ts:459-499,595-615,889-989",
+        "src/service.ts:178-204,352-359",
+        "src/usage.ts:55-129"
+      ],
+      "evidence": [
+        "R12-E01",
+        "R12-E03",
+        "R12-E07",
+        "R12-C02"
+      ],
+      "boundary": "Known subtotal не складывается с архивом повторно; legacy partial sticky."
+    },
+    {
+      "area": "Operation metadata",
+      "refs": [
+        "src/operation-record.ts:11-31",
+        "src/run-runtime.ts:235-258,277-284",
+        "src/run-store.ts:478-524"
+      ],
+      "evidence": [
+        "R12-E02",
+        "R12-C03"
+      ],
+      "boundary": "Intent/progress не proof внешнего результата; новая операция не replay writer."
+    },
+    {
+      "area": "Lineage и ancestor attribution",
+      "refs": [
+        "src/lineage.ts:279-381",
+        "src/run-controller.ts:166-191,356-465",
+        "src/run-store.ts:997-1130"
+      ],
+      "evidence": [
+        "R12-E01",
+        "R12-E02",
+        "R12-C03"
+      ],
+      "boundary": "Fixture chains/digests/schema/producers; actor attestations отделены от machine facts."
+    },
+    {
+      "area": "Trace и run/task meanings",
+      "refs": [
+        "src/run-store.ts:617-661",
+        "src/observation.ts:49-76",
+        "src/service.ts:284-305"
+      ],
+      "evidence": [
+        "R12-E02",
+        "R12-C03"
+      ],
+      "boundary": "Решение ребра не старт цели, succeeded не accepted, lineage task не дополнительный исполнитель."
+    },
+    {
+      "area": "Monitor/browser projections",
+      "refs": [
+        "src/monitor.ts:38-84,197-233",
+        "src/graph-view/model.ts:78-102",
+        "src/graph-view/app.js:1319-1446",
+        "src/graph-view/task-scope.js"
+      ],
+      "evidence": [
+        "R12-E01",
+        "R12-E02",
+        "R12-E05",
+        "R12-E07",
+        "R12-C02"
+      ],
+      "boundary": "Исполняемый minimal DOM и projections, не ручная проверка Chrome."
+    },
+    {
+      "area": "Actionable errors",
+      "refs": [
+        "src/pi-worker.ts:291-308,354-357",
+        "src/graph-view/app.js:759-769",
+        "src/terminal.ts:58-65",
+        "tests/provider-response.test.ts"
+      ],
+      "evidence": [
+        "R12-E04",
+        "R12-C03"
+      ],
+      "boundary": "Доступные HTTP/Retry-After, без сырого приватного body и без угадывания квот/причины из текста."
+    }
+  ],
+  "accountingMeanings": {
+    "response": "(runId, activationKey, attempt, reportId); responses — число числовых SDK отчётов.",
+    "attempt": "accounting из ledger точной попытки; current — изменяемый snapshot, visit — отдельное посещение.",
+    "activation": "metadata.usage — накопление попыток и доказанной legacy базы. reported — число agent activations с subtotal, не число HTTP requests.",
+    "run": "Техническое исполнение одного frozen plan; presentation.taskOutcome относится к этому run, succeeded не accepted.",
+    "lineageTask": "Явно связанные run; сумма их agent usage, reuse не вызывает модель и не считается missing agent. Actor reason/evidence — attestation; identities/checkpoints/digests — machine facts.",
+    "cost": "SDK estimate; без costReported 0 не означает известного отсутствия расхода; subscriptionInvoice=false и unknownCostIsZero=false."
+  },
+  "findings": [
+    {
+      "id": "R12-B01",
+      "classification": "bug",
+      "scope": "study-source",
+      "title": "Успешный SSE без provider usage превращается в полный нулевой отчёт",
+      "severity": "medium",
+      "confidence": "high-for-offline-boundary",
+      "provenance": "Перенесено из собственного сохранённого Markdown, причина перепроверена на sourceRevision и заново воспроизведена R12-C02.",
+      "facts": [
+        "Закреплённый SDK 0.85.1 принимает finish_reason=tool_calls без блока usage и оставляет исходные нули usage/cost.",
+        "hasProviderReportedUsage возвращает true для успешного stopReason без отдельного признака наличия usage.",
+        "RunStore и graphSnapshot затем сохраняют и показывают полный 0; результат задания {answer:42} успешен."
+      ],
+      "trigger": "openai-completions, корректный submit_result, finish_reason=tool_calls и [DONE]; во всех HTTP/SSE chunks и choices отсутствует usage. Транспорт полностью подставной, SDK parser настоящий.",
+      "expected": "Успех задания независим от полноты учёта: отсутствие provider usage остаётся неизвестностью/partial. Явный provider zero сохраняется как известный ноль.",
+      "observed": [
+        {
+          "mode": "missing",
+          "providerUsageSent": false,
+          "calls": 1,
+          "reportCount": 1,
+          "settled": true,
+          "totalTokens": 0,
+          "partial": false,
+          "costReported": 1,
+          "tokenSummary": "Токены: 0 · отчётов: 1/1",
+          "graphTotal": 0,
+          "graphPartial": false
+        },
+        {
+          "mode": "zero",
+          "providerUsageSent": true,
+          "calls": 1,
+          "reportCount": 1,
+          "settled": true,
+          "totalTokens": 0,
+          "partial": false,
+          "costReported": 1,
+          "tokenSummary": "Токены: 0 · отчётов: 1/1",
+          "graphTotal": 0,
+          "graphPartial": false
+        },
+        {
+          "mode": "positive",
+          "providerUsageSent": true,
+          "calls": 1,
+          "reportCount": 1,
+          "settled": true,
+          "totalTokens": 13,
+          "partial": false,
+          "costReported": 1,
+          "tokenSummary": "Токены: 13 · отчётов: 1/1",
+          "graphTotal": 13,
+          "graphPartial": false
+        }
+      ],
+      "rootCause": [
+        {
+          "ref": "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js:171-184,378-387,494-504",
+          "statement": "SDK создаёт нулевой placeholder; завершение требует finish_reason, но не usage."
+        },
+        {
+          "ref": "src/pi-worker.ts:100-105,274-281,341-344",
+          "statement": "Успешный stopReason считается достаточным для report; complete проверяет reports/turns, а не исходное наличие provider usage."
+        },
+        {
+          "ref": "src/run-store.ts:898-915,929-959",
+          "statement": "Хранилище принимает уже нормализованные данные, утраченный provenance восстановить не может."
+        }
+      ],
+      "reproduction": {
+        "fixture": "missing-usage.mts",
+        "fixtureSha256": "87d5555696e99c982641cef8a1dd3d64ca44885c6475789638f6cc7cff1cf4e9",
+        "source": "research/2026-09-20-astra-max/r12-usage-lineage.md",
+        "command": "(cd /tmp/r12-cont.IkejEZ/source && node --import tsx /tmp/r12-cont.IkejEZ/missing-usage.mts)",
+        "setup": "Команда в приложении Markdown экспортирует точную sourceRevision в новый /tmp/r12-repro.*, подключает существующий node_modules и извлекает полный fixture. Не запускать в старом tmp; новый каталог обязателен.",
+        "experiments": [
+          "R12-E06",
+          "R12-C02"
+        ],
+        "markdownMarker": "r12-fixture:missing-usage.mts"
+      },
+      "counterEvidence": [
+        "R12-E04: tests/wave5-c08.test.ts:98-152 защищает error/abort placeholders, известные положительные токены и настоящий zero. Это другой stopReason, не успешный missing-usage поток.",
+        "R12-E01/R12-E05: при корректном отсутствующем входе UI/агрегатор не заменяют его нулём.",
+        "В R12-C02 explicit-zero даёт 0, positive даёт 13; проблема не арифметика сумм и не поломка успешного результата."
+      ],
+      "limits": [
+        "Не доказана встречаемость такого SSE у live OpenAI/xAI/Codex.",
+        "Не измерен billing; costReported=1 означает принятую оценку SDK, не списание.",
+        "Не исполнена вся матрица provider adapters."
+      ],
+      "recommendation": {
+        "minimalChange": "Сохранить отдельный per-response признак наличия provider usage на границе SDK и передать его в worker accounting. При доказанном отсутствии выпускать usage.unavailable и incomplete, не меняя result success. Если публичный SDK event теряет признак, нужен узкий upstream/версионированный adapter contract; UI-only изменение недостаточно.",
+        "risk": "Средний: различия API, совместимость SDK; отбрасывание всех нулей сломает реальные zero reports. Не использовать HTTP 200 или приватные transcript для угадывания расхода.",
+        "acceptance": [
+          "Native-parser fixture missing -> reported=0 и partial=true; explicit-zero -> полный 0; positive -> полный 13.",
+          "Цепочка positive+missing сохраняет известный subtotal с partial=true.",
+          "Error/abort regressions зелёные, успешность результата и полнота usage независимы."
+        ],
+        "implemented": false,
+        "acceptanceExecuted": false
+      },
+      "unknownRefs": [
+        "R12-U01",
+        "R12-U03"
+      ]
+    },
+    {
+      "id": "R12-B02",
+      "classification": "bug",
+      "scope": "study-source",
+      "title": "Старый usage report получает номер текущей попытки в браузерной подписи",
+      "severity": "low",
+      "confidence": "high-for-production-renderer-offline",
+      "provenance": "Перенесено и заново воспроизведено R12-C02.",
+      "trigger": "У одной agent activation попытка 1 failed с 8 токенами; попытка 2 succeeded с 12. После второй попытки раскрыты отчёты вкладки Токены.",
+      "expected": "Строка report.attempt=1 подписана только попыткой 1; общий scope/node/visit не переносит номер текущей попытки в старый report.",
+      "observed": {
+        "headers": [
+          "work · проход 1 · попытка 2 · r12-run · попытка 1 · ответ 1",
+          "work · проход 1 · попытка 2 · r12-run · попытка 2 · ответ 1"
+        ],
+        "archiveTotal": 8,
+        "currentTotal": 12,
+        "activationTotal": 20
+      },
+      "rootCause": [
+        {
+          "ref": "src/monitor.ts:38-50",
+          "statement": "activationPath включает текущий a.attempt."
+        },
+        {
+          "ref": "src/graph-view/model.ts:78-90",
+          "statement": "Snapshot сохраняет current path."
+        },
+        {
+          "ref": "src/graph-view/app.js:1381-1387",
+          "statement": "Report ищет активацию по key/run, берёт current path и дописывает собственный report.attempt. Код общий для run/task views."
+        }
+      ],
+      "reproduction": {
+        "fixture": "attempt-label.mts",
+        "fixtureSha256": "63e5f4e392d9d03daf2b53a7e8fe9993a30aa2df3fe208f8bea77ebc52eb47c0",
+        "source": "research/2026-09-20-astra-max/r12-usage-lineage.md",
+        "command": "(cd /tmp/r12-cont.IkejEZ/source && node --import tsx /tmp/r12-cont.IkejEZ/attempt-label.mts)",
+        "setup": "Извлечение полного fixture и новый экспорт sourceRevision — приложение Markdown. Реальный RunStore, graphSnapshot и renderTokens; авто-network startup отключён, DOM минимальный.",
+        "experiments": [
+          "R12-E07",
+          "R12-C02"
+        ],
+        "markdownMarker": "r12-fixture:attempt-label.mts"
+      },
+      "counterEvidence": [
+        "Ledger, run.attempts и usageReports содержат правильные попытки и суммы 8/12/20.",
+        "R12-E02: graph-view-task-scope проверяет producer run/key navigation; неправильная подпись не доказывает порчу identity или двойной счёт.",
+        "Task mode использует тот же код по инспекции; самостоятельный DOM reproducer в r12 исполнил run mode, не отдельный браузерный task mode."
+      ],
+      "adjacentObservation": {
+        "classification": "idea",
+        "statement": "Monitor history также подписывает накопительные 20 токенов current attempt 2. Это activation subtotal, не доказанный арифметический баг; полезна подпись суммы попыток.",
+        "refs": [
+          "src/monitor.ts:77-84,225-228"
+        ]
+      },
+      "limits": [
+        "Минимальный offline DOM, не ручная проверка Chrome.",
+        "Не воспроизводился новый live retry; две записи попыток созданы только в собственной SQLite fixture."
+      ],
+      "recommendation": {
+        "minimalChange": "Разделить путь активации без attempt и подпись текущей попытки; для usage report номер брать только из report.attempt. Накопительную сумму явно назвать суммой попыток.",
+        "risk": "Низкий: presentation-only; не потерять scope/visit и producer links.",
+        "acceptance": [
+          "Первый report содержит только attempt 1, второй только attempt 2.",
+          "Run/task producer navigation остаётся корректной; суммы 8/12/20 и API не меняются."
+        ],
+        "implemented": false,
+        "acceptanceExecuted": false
+      }
+    },
+    {
+      "id": "R12-I01",
+      "classification": "idea",
+      "scope": "study-source",
+      "title": "Явно хранить provenance observedEffort",
+      "provenance": "Перенесено; код заново осмотрен, новый transport experiment не запускался.",
+      "facts": [
+        "В pi-worker.ts:238-243 для native xAI наблюдается отправленное reasoning.effort.",
+        "В pi-worker.ts:278-280 observedEffort выбирает SDK message providerThinkingLevel, иначе request sentReasoning, иначе unknown.",
+        "RunStore хранит только строку, UI одинаково подписывает reasoning; источник неразличим."
+      ],
+      "refs": [
+        "src/pi-worker.ts:238-243,274-280",
+        "src/run-store.ts:905-915,967-972",
+        "src/graph-view/app.js:1387",
+        "tests/repair-core.test.ts:115-129"
+      ],
+      "inference": "Отправленный параметр не доказывает реально выполненный объём рассуждений; это улучшение provenance, не доказанный дефект runtime-политики.",
+      "counterEvidence": [
+        "Диагностика уже отличает configured thinking и sentReasoning: src/request-observation.ts и src/graph-view/app.js:767-768.",
+        "Осмотренный repair-core test подтверждает payload/отчёт, но не server-side effort; r12 этот набор не запускал."
+      ],
+      "recommendation": {
+        "minimalChange": "Необязательный discriminator sdk-message/request-payload/unknown в usage record; UI различает сообщено SDK и отправлено. Старые данные не получают выдуманный источник.",
+        "risk": "Низкий/средний: совместимость event/ledger/API и legacy. Нельзя менять thinking, budgets или retries ради телеметрии.",
+        "acceptance": [
+          "Два одинаковых текста effort с разным источником различимы в API/UI.",
+          "Requested-only настройка не становится observed fact; offline test не объявляется live-доказательством."
+        ],
+        "implemented": false,
+        "acceptanceExecuted": false
+      }
+    },
+    {
+      "id": "R12-AF01",
+      "classification": "already-fixed",
+      "scope": "study-source",
+      "title": "Ledger, legacy и partial/zero корректны после корректного входа",
+      "provenance": "Перенесённые E01/E03/E05, логи сверены C01; профильный код заново осмотрен.",
+      "facts": [
+        "Одинаковая доставка report идемпотентна; конфликтующий ID отвергается; report, aggregate и event откатываются вместе.",
+        "Каждая попытка имеет отдельный ledger; activation usage накопителен. Архив нельзя суммировать поверх subtotal.",
+        "Legacy baseline берётся из последнего пригодного immutable pre-ledger checkpoint, не суммы всех архивных subtotal; usageLegacyIncomplete sticky, включая accept.",
+        "Partial fields независимы; reasoning не добавляется второй раз, reuse/check/контейнеры не учитываются как agent.",
+        "Настоящий zero показывается нулём; отсутствие/невалидный отчёт и partial не маскируются при корректном входе."
+      ],
+      "refs": [
+        "src/run-store.ts:595-615,898-959",
+        "src/usage.ts:55-124",
+        "tests/legacy-usage.test.ts",
+        "tests/usage-contract.test.ts",
+        "tests/monitor.test.ts",
+        "tests/usage-boundary.test.ts"
+      ],
+      "experiments": [
+        "R12-E01",
+        "R12-E03",
+        "R12-E05",
+        "R12-C01"
+      ],
+      "refutation": "R12-B01 расположен до этих проекций и не переоткрывает исправленный UI missing-as-zero.",
+      "recommendation": {
+        "minimalChange": "Нового изменения не требуется; сохранить перечисленные regression tests.",
+        "risk": "При переработке входа B01 нельзя ломать известные zero и sticky partial.",
+        "acceptance": [
+          "Существующие ledger/legacy/partial/zero regressions остаются зелёными."
+        ],
+        "implemented": false
+      }
+    },
+    {
+      "id": "R12-AF02",
+      "classification": "already-fixed",
+      "scope": "study-source",
+      "title": "Ancestor provenance, operation intent, trace и исходы имеют раздельные значения",
+      "provenance": "Перенесённые E02/E04, логи сверены C01; ключевые code paths заново осмотрены.",
+      "facts": [
+        "Chained reuse сохраняет оригинального producer; source schema digest не подменяется producer schema. Источники ограничены ancestry; fixture tests отвергают cycle/graft/stale.",
+        "Operation metadata архивируется перед новой попыткой, старые operation/session/worker/model observations очищаются. Intent/progress не доказывают завершённый внешний эффект.",
+        "Trace хранит решение с attempt/scope/visit; решение ребра не доказывает старт цели. Source может succeed, а route и run fail; recovery не повторяет успешное действие.",
+        "Старый v2 помечается unsupported, история не выдумывается.",
+        "succeeded и accepted различны. Типизированные failure и доступные HTTP/Retry-After сохраняются runtime→API→браузер→terminal; сырое приватное тело не публикуется. HTTP 200 не доказывает успех задания."
+      ],
+      "refs": [
+        "src/lineage.ts:279-381",
+        "src/run-controller.ts:166-191,413-465",
+        "src/run-store.ts:475-499,617-661,997-1130",
+        "src/operation-record.ts:11-31",
+        "src/observation.ts:49-76",
+        "src/graph-view/app.js:759-769",
+        "src/terminal.ts:58-65",
+        "src/service.ts:284-305"
+      ],
+      "experiments": [
+        "R12-E02",
+        "R12-E04",
+        "R12-C01"
+      ],
+      "refutation": "R12-B02 — дефект подписи, не порча ledger identity. Actor reason/evidence — attestation, не машинное доказательство отсутствия внешних эффектов.",
+      "recommendation": {
+        "minimalChange": "Сохранить инварианты и regressions; не добавлять новый механизм повторов.",
+        "risk": "Неверное объединение intent/эффектов или run/task outcome может разрешить небезопасное повторение writer.",
+        "acceptance": [
+          "Точная redelivery, ancestor/schema/producer validation, original failure preservation и trace no-replay regressions остаются зелёными."
+        ],
+        "implemented": false
+      }
+    },
+    {
+      "id": "R12-U01",
+      "classification": "unknown",
+      "scope": "study-source",
+      "title": "Частота успешного missing-usage у live провайдеров не установлена",
+      "facts": [
+        "R12-C02 доказывает обработку поддержанным native parser успешного подставного SSE без usage."
+      ],
+      "unresolved": "Нет наблюдений live OpenAI/xAI/Codex, частоты, стоимости, квот или серверной политики.",
+      "refs": [
+        "src/pi-worker.ts:100-105,274-281",
+        "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js:171-184,378-387,494-504"
+      ],
+      "proposedCheck": {
+        "command": null,
+        "fixture": "Расширить собственный offline corpus поддержанными transport-вариантами с missing/zero/positive usage.",
+        "executed": false,
+        "minimalChange": "Только тестовые fixtures, не product policy. Live-проверка требует отдельного задания.",
+        "risk": "Низкий при подставном transport; нельзя переносить успешность mock на live provider.",
+        "acceptance": "Наличие usage различимо по доказанному входу; частота live остаётся unknown без самостоятельных данных."
+      }
+    },
+    {
+      "id": "R12-U02",
+      "classification": "unknown",
+      "scope": "study-source",
+      "title": "Согласованность summary/page при конкурентной записи не проверена",
+      "facts": [
+        "service.run.usage читает listActivations и usageReports последовательно; task.usage отдельно читает members/records и страницу.",
+        "listActivations использует несколько SELECT; в отличие от attempts здесь нет общей read transaction."
+      ],
+      "refs": [
+        "src/service.ts:178-185,295-305",
+        "src/run-store.ts:596-608,663-665"
+      ],
+      "inference": "Возможен временно смешанный снимок при внешнем конкурентном writer; из осмотра кода не следует воспроизведённая пользовательская ошибка.",
+      "unresolved": "Гонка не воспроизводилась, bug не заявлен. Сумма одной страницы в любом случае не обязана равняться полному summary.",
+      "proposedCheck": {
+        "command": null,
+        "fixture": "Две собственные SQLite connections; controlled interleaving после чтения records и до report page.",
+        "executed": false,
+        "minimalChange": "Сначала детерминированный тест; решение о единой read transaction/as-of cursor только после evidence.",
+        "risk": "Низкий у isolated fixture; read snapshot изменение потребует оценки задержек/совместимости.",
+        "acceptance": "Либо показан смешанный снимок, либо точно описан неохваченный interleaving; не считать отсутствие воспроизведения доказательством отсутствия гонки."
+      }
+    },
+    {
+      "id": "R12-U03",
+      "classification": "unknown",
+      "scope": "study-source",
+      "title": "Server-side effort и точность SDK pricing/invoice не установлены",
+      "facts": [
+        "Исследованы сохранение observedEffort и SDK cost в проекции.",
+        "summarizeTaskUsage явно задаёт sdkCostIsEstimate=true, subscriptionInvoice=false, unknownCostIsZero=false."
+      ],
+      "refs": [
+        "src/pi-worker.ts:278-280",
+        "src/usage.ts:121-124",
+        "src/monitor.ts:208-210"
+      ],
+      "unresolved": "Не все providerThinkingLevel adapters/ценовые каталоги осмотрены; invoices и реальный объём reasoning не проверялись. costReported>0 означает наличие оценки, не измеренное списание.",
+      "proposedCheck": {
+        "command": null,
+        "fixture": "Отдельные offline cases происхождения SDK message и request-payload (I01), фиксация версии pricing metadata.",
+        "executed": false,
+        "minimalChange": "Provenance test/документация, не расчёт billing задним числом.",
+        "risk": "Низкий offline; риск ложных финансовых выводов при смешении источников.",
+        "acceptance": "Источник effort/pricing явно отмечен; никакое mock число не называется счётом подписки."
+      }
+    }
+  ],
+  "alreadyFixedAndRefutations": {
+    "studySource": [
+      "R12-AF01",
+      "R12-AF02"
+    ],
+    "scopeLimits": [
+      "R12-B01 не повторяет уже исправленный UI missing-as-zero или error/abort placeholders.",
+      "R12-B02 не доказывает двойное суммирование либо порчу producer identity.",
+      "Skill delivery, scoped async dashboard/control/await, wait disclosure/caret/scroll уже исправлены на базе; live-перепроверкой этих unrelated сценариев r12 не занимался."
+    ]
+  },
+  "postStudyAlreadyFixed": [
+    {
+      "id": "R12-PS-AF01",
+      "classification": "already-fixed",
+      "scope": "publication-context-not-study-finding",
+      "revision": "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+      "title": "Ранняя parallel writer isolation validation",
+      "evidence": "Осмотрен git diff src/graph.ts: validateWorkflow вызывает parallelWriterIsolationIssues; прочитан stat профильных tests/docs.",
+      "recommendation": "Не внедрять повторно.",
+      "limits": "Новые authoring tests r12 не выполнял."
+    },
+    {
+      "id": "R12-PS-AF02",
+      "classification": "already-fixed",
+      "scope": "publication-context-not-study-finding",
+      "revision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "title": "Документация reviewer artifact revision binding",
+      "evidence": "Осмотрены SKILL.md и references/authoring.md diff: top-level input.artifactRevision, точное копирование версии входного артефакта.",
+      "recommendation": "Не предлагать повторное документирование/новую реализацию binding.",
+      "limits": "Post-study documentation fix, не bug на study-source."
+    }
+  ],
+  "experiments": [
+    {
+      "id": "R12-E01",
+      "phase": "original-operation",
+      "execution": "performed-originally; retained-result-verified-C01; not-rerun",
+      "cwdAtExecution": "/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "command": "TMPDIR=/tmp/r12-usage-lineage.g0edSf node --import tsx --test --test-concurrency=1 tests/usage-boundary.test.ts tests/usage-contract.test.ts tests/usage-pages.test.ts tests/monitor.test.ts tests/legacy-usage.test.ts tests/lineage.test.ts",
+      "result": {
+        "tests": 129,
+        "pass": 129,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "durationMs": 2666.794833,
+      "logSha256": "038a52bbbdb52128b307fde95bc95741218a055a1c39af65967fe7bf0bdec761",
+      "limits": "Только offline accounting/legacy/monitor/lineage regressions; legacy import включает дополнительную accept-regression.",
+      "replayWarning": "Историческая команда, не инструкция повторно писать в старый TMPDIR. Для повторения нужен новый /tmp/r12-*."
+    },
+    {
+      "id": "R12-E02",
+      "phase": "original-operation",
+      "execution": "performed-originally; retained-result-verified-C01; not-rerun",
+      "cwdAtExecution": "/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "command": "TMPDIR=/tmp/r12-usage-lineage.g0edSf node --import tsx --test --test-concurrency=1 tests/attempt-history.test.ts tests/task-usage.test.ts tests/continuation.test.ts tests/graph-view-task-scope.test.ts tests/routing-trace.test.ts",
+      "result": {
+        "tests": 44,
+        "pass": 44,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "durationMs": 124028.003709,
+      "logSha256": "410ba7ddb0e4dced7affba28f55c1c8cb96da34291ba407c8162e549df97de65",
+      "limits": "Fixture процессы, SQLite и Git, включая crash/recovery. Не управляли пользовательскими run.",
+      "replayWarning": "Историческая команда, не инструкция повторно писать в старый TMPDIR. Для повторения нужен новый /tmp/r12-*."
+    },
+    {
+      "id": "R12-E03",
+      "phase": "original-operation",
+      "execution": "performed-originally; retained-result-verified-C01; not-rerun",
+      "cwdAtExecution": "/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "command": "TMPDIR=/tmp/r12-usage-lineage.g0edSf node --import tsx --test --test-concurrency=1 --test-name-pattern='usage|accounting|response|continued|repair preserves|cancelling an active repair|unknown final|SDK provider failure' tests/pi-worker.test.ts tests/run-store.test.ts",
+      "result": {
+        "tests": 13,
+        "pass": 13,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "durationMs": 1627.733625,
+      "logSha256": "00b28ec6297219ac5a97e57f2d2ea492e05e93c730f616c41cc6c66559144751",
+      "limits": "Только 13 выбранных name-pattern cases; невыбранные cases не исполнены и не включены в число.",
+      "replayWarning": "Историческая команда, не инструкция повторно писать в старый TMPDIR. Для повторения нужен новый /tmp/r12-*."
+    },
+    {
+      "id": "R12-E04",
+      "phase": "original-operation",
+      "execution": "performed-originally; retained-result-verified-C01; not-rerun",
+      "cwdAtExecution": "/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "command": "TMPDIR=/tmp/r12-usage-lineage.g0edSf node --import tsx --test --test-concurrency=1 tests/wave5-c08.test.ts tests/provider-response.test.ts",
+      "result": {
+        "tests": 9,
+        "pass": 9,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "durationMs": 4514.191333,
+      "logSha256": "22151cbef72a2bdaa4e6a00ad846bcf5200c2ee4f073dbbd6dc3ed0e4d4c53d1",
+      "limits": "Настоящий SDK с fixture HTTP/SSE; не права аккаунта и не live provider.",
+      "replayWarning": "Историческая команда, не инструкция повторно писать в старый TMPDIR. Для повторения нужен новый /tmp/r12-*."
+    },
+    {
+      "id": "R12-E05",
+      "phase": "original-operation",
+      "execution": "performed-originally; retained-result-verified-C01; not-rerun",
+      "cwdAtExecution": "/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "command": "TMPDIR=/tmp/r12-usage-lineage.g0edSf node --import tsx --test --test-concurrency=1 --test-name-pattern='run navigation distinguishes' tests/graph-view-observation.test.ts",
+      "result": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0
+      },
+      "durationMs": 501.499083,
+      "logSha256": "d9a598ceaf1a3fcaffe9609d87b53c44d3975702b74ab71d5d41b8add7acfbba",
+      "limits": "Только missing/zero/partial navigation case, не вся панель.",
+      "replayWarning": "Историческая команда, не инструкция повторно писать в старый TMPDIR. Для повторения нужен новый /tmp/r12-*."
+    },
+    {
+      "id": "R12-E06",
+      "phase": "original-operation",
+      "execution": "reported-in-retained-md; fixture-and-command-retained; independently-reproduced-C02",
+      "command": "node --import tsx /tmp/r12-usage-lineage.g0edSf/missing-usage.mts",
+      "cwdAtExecution": "/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "result": "Сохранённый отчёт описывает успешное воспроизведение R12-B01; исходники fixture совпали, результат независимо подтверждён C02.",
+      "limits": "Старый stdout этих двух команд в actions отсутствует; новый результат не выдается за ранее успешную сдачу пакета.",
+      "fixture": {
+        "markdownMarker": "r12-fixture:missing-usage.mts",
+        "sha256": "87d5555696e99c982641cef8a1dd3d64ca44885c6475789638f6cc7cff1cf4e9",
+        "oldTmpMatches": true
+      }
+    },
+    {
+      "id": "R12-E07",
+      "phase": "original-operation",
+      "execution": "reported-in-retained-md; fixture-and-command-retained; independently-reproduced-C02",
+      "command": "node --import tsx /tmp/r12-usage-lineage.g0edSf/attempt-label.mts",
+      "cwdAtExecution": "/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "result": "Сохранённый отчёт описывает успешное воспроизведение R12-B02; исходники fixture совпали, результат независимо подтверждён C02.",
+      "limits": "Старый stdout этих двух команд в actions отсутствует; новый результат не выдается за ранее успешную сдачу пакета.",
+      "fixture": {
+        "markdownMarker": "r12-fixture:attempt-label.mts",
+        "sha256": "63e5f4e392d9d03daf2b53a7e8fe9993a30aa2df3fe208f8bea77ebc52eb47c0",
+        "oldTmpMatches": true
+      }
+    },
+    {
+      "id": "R12-C01",
+      "phase": "continuation",
+      "execution": "performed",
+      "command": "sha256sum OLD_WORKSPACE/research/2026-09-20-astra-max/r12-usage-lineage.md PRESERVED_ACTION_EVIDENCE; sha256sum /tmp/r12-usage-lineage.g0edSf/tests-{core,lineage,sdk-accounting,transport,ui-accounting}.log; tail -12 каждого лога; Python hashlib/re сверка fixtures и итогов",
+      "parameters": {
+        "OLD_WORKSPACE": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/3b11a6a47c97b1cc15eb29d7130232de1f7942cba4e5984c44d1c7558b61c9c9",
+        "PRESERVED_ACTION_EVIDENCE": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r12-actions.json"
+      },
+      "result": {
+        "oldMdHashMatches": true,
+        "oldJsonAbsent": true,
+        "actionCount": 33,
+        "allActionsR12": true,
+        "retainedTests": 196,
+        "retainedPass": 196,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "fixtureBytesMatch": true
+      },
+      "limits": "Read-only проверка собственных retained files, не новое исполнение 196 tests. Actions содержит команды без результатов."
+    },
+    {
+      "id": "R12-C02",
+      "phase": "continuation",
+      "execution": "performed",
+      "commands": [
+        "git archive e15bc407da8753fd6b683c0aa4a68634e3c458a7 src package.json package-lock.json | tar -x -C /tmp/r12-cont.IkejEZ/source",
+        "ln -s /Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev/node_modules /tmp/r12-cont.IkejEZ/source/node_modules",
+        "(cd /tmp/r12-cont.IkejEZ/source && node --import tsx /tmp/r12-cont.IkejEZ/missing-usage.mts)",
+        "(cd /tmp/r12-cont.IkejEZ/source && node --import tsx /tmp/r12-cont.IkejEZ/attempt-label.mts)"
+      ],
+      "setup": "mktemp создал новый /tmp/r12-cont.IkejEZ; fixtures извлечены из собственного retained md. Python сравнил экспорт с cwd побайтно, 67 файлов совпали. Полная portable команда для нового tmp есть в приложении Markdown. Проверено отдельно: R12_DEV не задан, fixtures выбирали cwd экспортированного базиса.",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "result": {
+        "exitCodes": [
+          0,
+          0
+        ],
+        "byteVerifiedExportFiles": 67,
+        "sdkFixtureRequests": 3,
+        "requestsPerVariant": 1,
+        "missingUsage": [
+          {
+            "mode": "missing",
+            "providerUsageSent": false,
+            "calls": 1,
+            "reportCount": 1,
+            "settled": true,
+            "totalTokens": 0,
+            "partial": false,
+            "costReported": 1,
+            "tokenSummary": "Токены: 0 · отчётов: 1/1",
+            "graphTotal": 0,
+            "graphPartial": false
+          },
+          {
+            "mode": "zero",
+            "providerUsageSent": true,
+            "calls": 1,
+            "reportCount": 1,
+            "settled": true,
+            "totalTokens": 0,
+            "partial": false,
+            "costReported": 1,
+            "tokenSummary": "Токены: 0 · отчётов: 1/1",
+            "graphTotal": 0,
+            "graphPartial": false
+          },
+          {
+            "mode": "positive",
+            "providerUsageSent": true,
+            "calls": 1,
+            "reportCount": 1,
+            "settled": true,
+            "totalTokens": 13,
+            "partial": false,
+            "costReported": 1,
+            "tokenSummary": "Токены: 13 · отчётов: 1/1",
+            "graphTotal": 13,
+            "graphPartial": false
+          }
+        ],
+        "attemptLabels": [
+          "work · проход 1 · попытка 2 · r12-run · попытка 1 · ответ 1",
+          "work · проход 1 · попытка 2 · r12-run · попытка 2 · ответ 1"
+        ],
+        "attemptTotals": [
+          8,
+          12,
+          20
+        ]
+      },
+      "outputDigests": {
+        "missing-usage.out": "c67638041dcacc8b8c4e6efccb6e7553386f504e1eb8f79c6d0629d044bd6913",
+        "attempt-label.out": "76e1c5438aae1abf5aff17db9decc2d160ca9c13608b90153e0e94315eda4d75"
+      },
+      "limits": "Подставной HTTP, настоящий SDK parser/SQLite/production renderer; минимальный DOM. Только свои новые временные файлы, без live provider/user run и без установки."
+    },
+    {
+      "id": "R12-C03",
+      "phase": "continuation",
+      "execution": "performed",
+      "commands": [
+        "git rev-parse HEAD",
+        "git -C /Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev log --format=\"%h %s\" e15bc407da8753fd6b683c0aa4a68634e3c458a7..3d8ba65ee84402c0e3b0587f70095b7847824a9f -- src tests PROJECT_INFO skills",
+        "git -C /Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev diff e15bc407da8753fd6b683c0aa4a68634e3c458a7 3d8ba65ee84402c0e3b0587f70095b7847824a9f -- src/pi-worker.ts src/usage.ts src/run-store.ts src/lineage.ts src/run-controller.ts src/monitor.ts src/graph-view/app.js src/graph-view/model.ts src/operation-record.ts src/observation.ts src/service.ts",
+        "git -C DEV show 86f5e07 -- src/graph.ts; git -C DEV show 3d8ba65 -- PROJECT_INFO skills; nl -ba ключевых source ranges"
+      ],
+      "result": "HEAD=e15bc40, dev=3d8ba65; указанный профильный diff пуст; прочитаны post-study validation/doc changes и обязательные документы/история. File:line причин B01/B02 подтверждены.",
+      "limits": "Не полный regression run publication revision. Соседние отчёты не читались."
+    }
+  ],
+  "scaffoldingNote": {
+    "origin": "retained-markdown-and-command-sequence",
+    "statement": "Старый E06 сначала остановился с ERR_PACKAGE_PATH_NOT_EXPORTED при CommonJS require.resolve до fixture, затем импорт исправлен только в собственном tmp на dist/index.js.",
+    "independentlyReplayed": false,
+    "productFinding": false
+  },
+  "sources": [
+    {
+      "id": "R12-S01",
+      "kind": "repository-contract-and-history",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "refs": [
+        "AGENTS.md",
+        "PROJECT_INFO/architecture.md",
+        "PROJECT_INFO/development.md",
+        "PROJECT_INFO/known-issues.md",
+        "PROJECT_INFO/observation.md:388-451",
+        "PROJECT_INFO/run-journal.md:179-233",
+        "PROJECT_INFO/retry-and-failures.md",
+        "skills/dynamic-workflows/references/usage.md",
+        "skills/dynamic-workflows/references/continuation.md"
+      ],
+      "inspection": "Первоначально и в продолжении; git log -12 и профильная история."
+    },
+    {
+      "id": "R12-S02",
+      "kind": "source",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "refs": [
+        "src/pi-worker.ts:100-105,219-280,311-352",
+        "src/run-runtime.ts:235-269",
+        "src/run-store.ts:459-524,595-677,889-989",
+        "src/usage.ts:55-129",
+        "src/service.ts:178-204,284-305,352-359"
+      ],
+      "inspection": "Ключевые ranges перепроверены в новом cwd."
+    },
+    {
+      "id": "R12-S03",
+      "kind": "source",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "refs": [
+        "src/lineage.ts:279-381,423-434",
+        "src/run-controller.ts:166-191,356-465",
+        "src/operation-record.ts:11-31",
+        "src/run-store.ts:997-1130",
+        "src/observation.ts:49-76"
+      ],
+      "inspection": "Ключевые ranges перепроверены."
+    },
+    {
+      "id": "R12-S04",
+      "kind": "source",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "refs": [
+        "src/graph-view/model.ts:78-102",
+        "src/graph-view/app.js:759-769,1319-1446",
+        "src/graph-view/task-scope.js",
+        "src/monitor.ts:38-84,197-233",
+        "src/terminal.ts:58-72"
+      ],
+      "inspection": "Current source и исполняемый renderer в C02, не старый main."
+    },
+    {
+      "id": "R12-S05",
+      "kind": "installed-dependency",
+      "package": "@earendil-works/pi-ai",
+      "version": "0.85.1",
+      "pinnedBy": [
+        "package.json:27-29",
+        "package-lock.json:12-14"
+      ],
+      "refs": [
+        "node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js:171-184,378-387,494-504,1180-1205",
+        "node_modules/@earendil-works/pi-ai/dist/api/openai-responses-shared.js:439-459"
+      ],
+      "sha256": {
+        "dist/api/openai-completions.js": "1e2097ced37cf0e21aa5711297eecc77916de8a4ed81a9019bc7d97b22825fa3",
+        "dist/api/openai-responses-shared.js": "b5d9f001e97bfafa8dfeef2e292f923c39f77fa8aef014132bf3530760f222e3"
+      },
+      "inspection": "Локально осмотренная существующая зависимость; не файл Git worktree и не веб-источник."
+    },
+    {
+      "id": "R12-S06",
+      "kind": "tests-and-retained-results",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "refs": [
+        "tests/usage-boundary.test.ts",
+        "tests/usage-contract.test.ts",
+        "tests/usage-pages.test.ts",
+        "tests/legacy-usage.test.ts",
+        "tests/monitor.test.ts",
+        "tests/lineage.test.ts",
+        "tests/attempt-history.test.ts:61-75",
+        "tests/task-usage.test.ts",
+        "tests/continuation.test.ts:322-450",
+        "tests/graph-view-task-scope.test.ts",
+        "tests/routing-trace.test.ts",
+        "tests/pi-worker.test.ts",
+        "tests/run-store.test.ts",
+        "tests/wave5-c08.test.ts:98-152",
+        "tests/provider-response.test.ts",
+        "tests/graph-view-observation.test.ts"
+      ],
+      "inspection": "E01-E05 исполнены в прежней операции, сохранённые логи проверены C01. Не выдается за новое исполнение."
+    },
+    {
+      "id": "R12-S07",
+      "kind": "inspected-not-executed-test",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "refs": [
+        "tests/repair-core.test.ts:115-129"
+      ],
+      "inspection": "Осмотр для I01; r12 этот test suite не запускал."
+    },
+    {
+      "id": "R12-S08",
+      "kind": "own-retained-evidence",
+      "refs": [
+        "continuationProvenance.oldReports",
+        "continuationProvenance.actions",
+        "continuationProvenance.retainedLogs"
+      ],
+      "inspection": "Хеши и содержимое проверены; commands-only actions не заменяет результаты."
+    },
+    {
+      "id": "R12-S09",
+      "kind": "own-offline-fixtures",
+      "refs": [
+        "research/2026-09-20-astra-max/r12-usage-lineage.md"
+      ],
+      "fixtures": {
+        "missing-usage.mts": {
+          "markdownMarker": "r12-fixture:missing-usage.mts",
+          "sha256": "87d5555696e99c982641cef8a1dd3d64ca44885c6475789638f6cc7cff1cf4e9",
+          "oldTmpMatches": true
+        },
+        "attempt-label.mts": {
+          "markdownMarker": "r12-fixture:attempt-label.mts",
+          "sha256": "63e5f4e392d9d03daf2b53a7e8fe9993a30aa2df3fe208f8bea77ebc52eb47c0",
+          "oldTmpMatches": true
+        }
+      },
+      "inspection": "Полные sources в Markdown, побайтно совпали с сохранёнными mts, заново исполнены C02."
+    },
+    {
+      "id": "R12-S10",
+      "kind": "post-study-git-diff",
+      "revision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "refs": [
+        "86f5e0756e67fa7a18e925d77b7d2728db2f0627:src/graph.ts",
+        "3d8ba65ee84402c0e3b0587f70095b7847824a9f:skills/dynamic-workflows/SKILL.md",
+        "3d8ba65ee84402c0e3b0587f70095b7847824a9f:skills/dynamic-workflows/references/authoring.md"
+      ],
+      "inspection": "Прочитаны только соответствующие code/docs diffs и имена tests; не соседние отчёты."
+    }
+  ],
+  "conflictingEvidence": [
+    {
+      "claim": "Отсутствующий usage не ноль по PROJECT_INFO/observation.md и skills usage reference.",
+      "counterObservation": "B01: SDK placeholder на успешном stopReason становится полным report, хотя HTTP fixture не передавал usage.",
+      "resolution": "Контракт и прошедшие UI/accounting tests не опровергают дефект normalization boundary; live распространённость unknown."
+    },
+    {
+      "claim": "Attempt/producer accounting корректен по E02 и SQLite.",
+      "counterObservation": "B02: report header одновременно attempt 2 и attempt 1.",
+      "resolution": "Presentation label defect при корректных identity и 8/12/20; не переписывать ledger."
+    }
+  ],
+  "unknowns": [
+    "R12-U01",
+    "R12-U02",
+    "R12-U03"
+  ],
+  "notPerformed": [
+    "Полный npm test/typecheck",
+    "Live provider/model CLI/subagents",
+    "Ручная Chrome проверка панели",
+    "Финансовая сверка или чтение billing/учётных данных",
+    "Доступ к живому пользовательскому журналу или управление run/processes",
+    "Веб/curl исследование",
+    "Новые authoring/post-study tests",
+    "Приёмочные тесты предложенных исправлений"
+  ],
+  "webSources": [],
+  "blockers": []
+}

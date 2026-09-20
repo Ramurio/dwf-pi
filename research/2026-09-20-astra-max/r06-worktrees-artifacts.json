@@ -1,0 +1,898 @@
+{
+  "metadata": {
+    "researchId": "r06",
+    "topic": "Worktree/integrate и ревизия артефакта",
+    "date": "2026-09-20",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "language": "ru",
+    "kind": "evidence-research-not-implementation",
+    "cwd": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/00926e26e13d4c9c311099d455a644d39595d6d0ff1732efa62ed4d82ad27267",
+    "reportMd": "research/2026-09-20-astra-max/r06-worktrees-artifacts.md",
+    "reportJson": "research/2026-09-20-astra-max/r06-worktrees-artifacts.json",
+    "artifactRevisionRule": "В итоговом результате: sha256: + SHA256 окончательных байтов этого JSON. Самоссылочный хеш в JSON не встраивается.",
+    "environmentObservedNow": {
+      "node": "v26.8.1",
+      "git": "2.50.1 (Apple Git-155)"
+    },
+    "environmentObservedNowScope": "Значения перенесены из предыдущей операции; в текущей финализации версии Node/Git не измерялись."
+  },
+  "summary": {
+    "findingCount": 7,
+    "counts": {
+      "bug": 2,
+      "idea": 0,
+      "unknown": 1,
+      "already-fixed": 4
+    },
+    "conclusion": "На базовой ревизии подтверждены два узких дефекта защиты Git: перезапись незафиксированного файла внутри игнорируемого вложенного репозитория и принятие скрыто грязных tracked-файлов с assume-unchanged/skip-worktree. Основные проверки владения, реального HEAD и crash recovery уже реализованы. В новой операции заново проверены сохранённые доказательства, а не запущены прежние операции.",
+    "implementationPerformed": false,
+    "newRuntimeTestExecutions": 0,
+    "retainedTargetedTests": {
+      "total": 50,
+      "passed": 50,
+      "failed": 0,
+      "skipped": 0
+    },
+    "retainedProbeCases": 5
+  },
+  "continuationProvenance": {
+    "sourceRunId": "run-9dbb044c-664f-4dd8-96c0-57192dc4ed89",
+    "currentRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+    "oldOperationStatus": "failed",
+    "priorFailureAsSupplied": {
+      "code": "provider",
+      "phase": "execution",
+      "effects": "unknown",
+      "httpStatus": 200,
+      "message": "Pi assistant turn failed: terminated"
+    },
+    "oldReportsChecked": [
+      {
+        "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/00926e26e13d4c9c311099d455a644d39595d6d0ff1732efa62ed4d82ad27267/research/2026-09-20-astra-max/r06-worktrees-artifacts.md",
+        "sha256": "f5679263d060aa84519616894da577a53347e707eb1db155caa2049f7125baf1",
+        "verified": true
+      },
+      {
+        "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/00926e26e13d4c9c311099d455a644d39595d6d0ff1732efa62ed4d82ad27267/research/2026-09-20-astra-max/r06-worktrees-artifacts.json",
+        "sha256": "f1beb1b8552bd14c483c5416cdc7990f4503857aac3c0876fbab7b97dd89dc3c",
+        "verified": true
+      }
+    ],
+    "retainedActionEvidence": {
+      "sha256": "ecefc2b8910c24d4c5d7f9636b72d10e2926142dbc14f186632a7d7425917277",
+      "path": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v2-low/r06-retained-actions.json",
+      "interpretation": "Прочитан как данные; команды не исполнялись. Наличие toolCall не доказывает эксперимент."
+    },
+    "transferredFacts": [
+      "Все 7 findings, historical E00–E05, результаты 50 тестов и 5 probe cases перенесены из проверенной пары без нового исполнения."
+    ],
+    "recheckedFacts": [
+      "SHA256 обоих входных файлов совпали с retainedEvidence; JSON валиден.",
+      "Все 27 repository source manifest hashes совпали с git show study revision.",
+      "Идентификаторы и число findings согласованы с Markdown; hash встроенного reproduction script совпал.",
+      "Причинные guards integrate/ignored collision/clean повторно прочитаны вместе с профильным контрактом."
+    ],
+    "addedFacts": [
+      "Только provenance финализации и проверки согласованности; новых багов или runtime experiments нет."
+    ],
+    "historicalProvenance": {
+      "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+      "currentRunId": "run-9dbb044c-664f-4dd8-96c0-57192dc4ed89",
+      "oldOperationStatus": "failed",
+      "priorFailureAsSupplied": {
+        "code": "provider",
+        "phase": "execution",
+        "effects": "unknown",
+        "httpStatus": 429
+      },
+      "failureInterpretation": "Только provenance прерванной операции. Причина ответа провайдера, квоты и безопасность повтора внешних действий из него не выводятся.",
+      "oldWorkspace": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/00926e26e13d4c9c311099d455a644d39595d6d0ff1732efa62ed4d82ad27267",
+      "oldReportsChecked": [
+        {
+          "path": "research/2026-09-20-astra-max/r06-worktrees-artifacts.md",
+          "exists": false,
+          "sha256": null
+        },
+        {
+          "path": "research/2026-09-20-astra-max/r06-worktrees-artifacts.json",
+          "exists": false,
+          "sha256": null
+        }
+      ],
+      "oldReportConclusion": "Отчётов нет; их SHA256 вычислить невозможно. Новые файлы созданы впервые в текущем cwd, это не перенос ранее успешного выхода.",
+      "retainedArtifacts": [
+        {
+          "id": "retained-actions",
+          "path": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r06-actions.json",
+          "sha256": "a17f22aeb13b5968812b86221a2ec57939765738dce4b0a18913d1f789e17111",
+          "meaning": "16 сохранённых записей команд; результатов tool в самом файле нет."
+        },
+        {
+          "id": "frozen-test-log",
+          "path": "/tmp/r06-frozen-baseline-LLFhzs/targeted.tap",
+          "sha256": "c3ef8030fb8f72084968cb8fc477ccf2b174e705956f1cd65eb0b26f967fc935",
+          "meaning": "Основной исторический лог: 50 положительных результатов, итог pass 50/fail 0/skipped 0."
+        },
+        {
+          "id": "frozen-probe-script",
+          "path": "/tmp/r06-frozen-baseline-LLFhzs/probes/reproduce.mts",
+          "sha256": "be7918a89442d31553d4a02704bbfb97faefa0493b650e6c1a3cb1b387d7eded",
+          "meaning": "Инспектированный воспроизводитель, полностью включён в reproduction.script."
+        },
+        {
+          "id": "frozen-probe-results",
+          "path": "/tmp/r06-frozen-baseline-LLFhzs/probes/result.txt",
+          "sha256": "f5b0d16b622281f121151538d81e31007319a9edc8f5b5d0c0f880cdb1fc386a",
+          "meaning": "Пять структурированных итогов с пройденными assert; не вывод модели."
+        }
+      ],
+      "transferredFacts": [
+        "E01: 50/50 профильных offline-тестов из сохранённого frozen-baseline, включая 10 crash/retry сценариев.",
+        "E02: r06-B01 reproduced в ignored-nested; unignored-nested и ignored-regular являются отрицательными контролями.",
+        "E02: r06-B02 reproduced отдельно для assume-unchanged и skip-worktree; снятие флага возвращает отказ dirty source."
+      ],
+      "recheckedFacts": [
+        "Фактическое отсутствие обоих старых отчётов и SHA256 всех четырёх используемых сохранённых артефактов.",
+        "199 файлов src/, tests/, implementation-review/ и package/lock сохранённого snapshot и нового cwd побайтно совпали с git show базовой ревизии.",
+        "Число положительных строк тестов и все пять структурированных результатов проверены отдельным Python assert.",
+        "Причинные участки кода, документированные контракты и контрпримеры инспектированы в новом cwd с номерами строк."
+      ],
+      "addedFacts": [
+        "Публикационный dev HEAD проверен read-only: 3d8ba65ee84402c0e3b0587f70095b7847824a9f.",
+        "GitWorkspaces и parseWorkspaceSources между базой и publication побайтно совпадают после исключения перенесённой authoring-проверки и импортов; исправления B01/B02 там нет.",
+        "Проверены post-study commits 86f5e0756e67fa7a18e925d77b7d2728db2f0627 и 3d8ba65ee84402c0e3b0587f70095b7847824a9f; они отделены от базовых выводов.",
+        "Составлены новые md/json, переносимый рецепт воспроизведения и критерии приёмки без изменения реализации."
+      ],
+      "notRepeated": [
+        "Старые Git fixtures и worktree не изменялись",
+        "Новые модели/providers/live run не вызывались",
+        "Crash-тесты и широкие тестовые наборы повторно не запускались",
+        "Отчёты соседних исследователей не читались"
+      ],
+      "historicalEvidenceLimit": "retained-actions содержит команды, но не полные tool-response/exit-коды. Основой вывода служат отдельно сохранившиеся логи с итоговыми assertion-результатами и проверенный frozen source. Не заявляется новый прогон 50 тестов в continuation.",
+      "historicalEnvironmentLimit": "Точные версии Node/Git наблюдались заново в continuation. В сохранённых первичных логах нет отдельной строки версий исторического executable; нынешние версии не выдаются за независимо зафиксированную историческую среду."
+    },
+    "executionBoundary": "E00–E05 и формулировки теперь/новая операция в перенесённом теле относятся к предыдущему run, а не к этой финализации. Предыдущий failed turn не объявляется успешным submit.",
+    "modelProvenance": "Историческая коллекция сохраняет имя astra-max; исторические max-исследования не переименованы. Для будущих pi-вызовов continuation задан openai-codex/gpt-6-astra thinking=low. В этой финализации pi/providers не запускались."
+  },
+  "coverage": {
+    "inspected": [
+      {
+        "area": "Чистота источника/назначения, индекс и игнорируемые файлы",
+        "sources": [
+          "src/workspaces.ts:28-55",
+          "src/workspaces.ts:152-203",
+          "src/workspaces.ts:250-285",
+          "tests/workspaces.test.ts:65-119",
+          "tests/workspaces.test.ts:313-372"
+        ],
+        "evidence": [
+          "E01",
+          "E02"
+        ]
+      },
+      {
+        "area": "Владение, фактический HEAD, источник одного run",
+        "sources": [
+          "src/workspaces.ts:157-175",
+          "src/workspaces.ts:205-245",
+          "src/run-runtime.ts:337-345",
+          "src/run-controller.ts:327-352"
+        ],
+        "evidence": [
+          "E01",
+          "E03"
+        ]
+      },
+      {
+        "area": "Порядок интеграции, частичный конфликт и SIGKILL",
+        "sources": [
+          "src/workspaces.ts:177-201",
+          "tests/workspaces.test.ts:169-192",
+          "tests/git-recovery-crash.test.ts:81-175",
+          "tests/fixtures/git-recovery-crash.ts:5-37"
+        ],
+        "evidence": [
+          "E01"
+        ]
+      },
+      {
+        "area": "Allocation gaps, потерянный child workspace, архив регистрации",
+        "sources": [
+          "src/workspaces.ts:69-150",
+          "tests/allocation-recovery.test.ts:29-120"
+        ],
+        "evidence": [
+          "E01"
+        ]
+      },
+      {
+        "area": "Вердикт, reuse и происхождение результата",
+        "sources": [
+          "src/run-runtime.ts:359-372",
+          "src/reconciliation.ts:32-46",
+          "src/lineage.ts:316-381",
+          "src/run-store.ts:459-486",
+          "src/run-store.ts:803-847"
+        ],
+        "evidence": [
+          "E01",
+          "E03"
+        ]
+      },
+      {
+        "area": "git-tree и рецепты S/P/C",
+        "sources": [
+          "skills/dynamic-workflows/recipes/implementation-review/snapshot.mjs:16-30",
+          "skills/dynamic-workflows/recipes/implementation-review/verify-command.mjs:13-22",
+          "tests/implementation-recipes.test.ts:47-162"
+        ],
+        "evidence": [
+          "E01",
+          "E02"
+        ]
+      },
+      {
+        "area": "История и post-study изменения",
+        "sources": [
+          "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+          "3d8ba65ee84402c0e3b0587f70095b7847824a9f"
+        ],
+        "evidence": [
+          "E05"
+        ]
+      }
+    ],
+    "notCovered": [
+      "Live providers и качество модельного ревью",
+      "Другие ОС/версии Git/файловые системы",
+      "Полный npm test и его устойчивость под нагрузкой",
+      "Эмпирическое воспроизведение внешних конкурентных записей после snapshot",
+      "Исчерпывающая матрица sparse-checkout, gitlinks, clean/smudge filters и нестандартных merge drivers",
+      "Полный аудит recovery-files/всей безопасности процессов"
+    ]
+  },
+  "findings": [
+    {
+      "id": "r06-B01",
+      "classification": "bug",
+      "severity": "high",
+      "title": "Игнорируемый вложенный Git-репозиторий обходит защиту коллизий; integrate перезаписывает незафиксированные байты",
+      "revisionScope": "study-source",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "locations": [
+        "src/workspaces.ts:250-267",
+        "src/workspaces.ts:176-179",
+        "PROJECT_INFO/workspaces.md:87-104"
+      ],
+      "trigger": "В чистом для внешнего Git назначении .gitignore содержит cache/. В cache находится отдельный Git repository и изменённый, не закоммиченный cache/value.txt. Собственный завершённый source worktree принудительно отслеживает cache/value.txt с другим содержимым.",
+      "expected": "Отказать до merge из-за коллизии с игнорируемыми локальными данными; сохранить bytes, HEAD назначения и вложенную историю.",
+      "observed": "В сохранённой fixture Git ls-files --others --ignored --exclude-standard -z вернул cache/ одной записью. integrate завершился успешно; HEAD внешнего repo изменился, cache/value.txt стал WORKER вместо UNCOMMITTED USER DATA. Во вложенной истории осталось LOCAL COMMITTED BASE, а не потерянные незакоммиченные bytes.",
+      "rootCause": "NFC/lowercase-нормализация сохраняет конечный slash cache/. Проверка tracked cache/value.txt ищет ignored.has('cache/value.txt') и префикс ignored.has('cache'), но множество содержит только 'cache/'. ignoredParents содержит 'cache', однако его проверяют лишь против полного tracked path. Защита не видит вложенность. Передаваемый --no-overwrite-ignore в сохранённом локальном прогоне также не остановил merge.",
+      "evidence": [
+        "E02",
+        "E03",
+        "E04"
+      ],
+      "reproduction": {
+        "fixture": "reproduction.script, первый цикл, mode=ignored-nested",
+        "historicalCommand": "cd /tmp/r06-frozen-baseline-LLFhzs/source && TMPDIR=/tmp/r06-frozen-baseline-LLFhzs/tmp node --import tsx /tmp/r06-frozen-baseline-LLFhzs/probes/reproduce.mts /tmp/r06-frozen-baseline-LLFhzs/source /tmp/r06-frozen-baseline-LLFhzs/probes",
+        "freshCommand": "См. reproduction.freshCommand; старые каталоги для нового запуска не использовать."
+      },
+      "counterEvidence": [
+        "Та же коллизия без .gitignore (unignored-nested) отвергнута, bytes и HEAD сохранены.",
+        "Обычный игнорируемый каталог без вложенного .git (ignored-regular) дал запись cache/value.txt и был отвергнут; bytes и HEAD сохранены.",
+        "Штатные tests/workspaces.test.ts:313-334,357-372 проходят для обычного ignored-файла и варианта регистра. Они не проверяют collapsed directory entry cache/.",
+        "Это не отсутствие всей защиты ignored и не общий эффект любого merge: нужны конкретная структура directory entry и source collision."
+      ],
+      "limits": "Доказано прямым вызовом настоящего GitWorkspaces с его собственными allocations/commits, без модели и без пользовательских данных. owned передан напрямую; слой журнала не обходится гипотезой — runtime сам собирает owned из succeeded worktree. Другие Git/platforms не испытывались. Точный исторический номер версии Git отдельно в логе не записан; нынешняя версия Git приведена лишь как observation новой операции.",
+      "publicationAssessment": "Причинная реализация GitWorkspaces побайтно не изменена в 3d8ba65; отдельный runtime-прогон publication не выполнялся.",
+      "recommendation": {
+        "minimalChange": "Канонизировать directory entries ignored так, чтобы конечный '/' не мешал сравнению префиксов; сохранять NUL-разбор, NFC/casefold и обе стороны file/directory collision. Добавить вложенный ignored Git repository в профильный regression test. Не обходить проблему force/reset/удалением файлов.",
+        "risk": "Консервативный отказ может затронуть намеренную замену локальных ignored-каталогов; это безопаснее перезаписи. Нельзя потерять уже существующую защиту имён с пробелами/переводами строк, casefold и parent-path collisions.",
+        "acceptance": [
+          "ignored-nested отказывает до первой мутации merge, HEAD назначения и незакоммиченные bytes побайтно сохранены",
+          "unignored-nested и ignored-regular по-прежнему отказывают без потери данных",
+          "Непересекающийся source продолжает интегрироваться",
+          "Для directory/file и case/Unicode вариантов сохранена консервативная защита"
+        ]
+      }
+    },
+    {
+      "id": "r06-B02",
+      "classification": "bug",
+      "severity": "medium",
+      "title": "assume-unchanged/skip-worktree превращают изменённые tracked-файлы в ложное clean и скрывают их из коммита артефакта",
+      "revisionScope": "study-source",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "locations": [
+        "src/workspaces.ts:28-38",
+        "src/workspaces.ts:42-54",
+        "src/workspaces.ts:282-285",
+        "src/workspaces.ts:161-173",
+        "skills/dynamic-workflows/recipes/implementation-review/snapshot.mjs:21-27",
+        "PROJECT_INFO/workspaces.md:24-26",
+        "PROJECT_INFO/workspaces.md:52-56"
+      ],
+      "trigger": "Для существующего tracked-файла явно задан git update-index --assume-unchanged либо --skip-worktree, затем bytes изменены на диске. Отдельно флаг установлен в source и в выделенном child worktree; runtime сам эти флаги не устанавливает и перенос между индексами не предполагается.",
+      "expected": "Не выдавать такой каталог за чистый и не завершать worktree с артефактом, молча пропустившим его неигнорируемые правки. При неподдерживаемой семантике индекса безопасно отказать до side effect с конкретной причиной.",
+      "observed": "Для обоих флагов status пуст. allocate принял source с UNCOMMITTED SOURCE, но child получил старое base. В child изменённый other.txt остался UNCOMMITTED CHILD, а commit вернул прежний head==base и git show HEAD:other.txt показал old other. snapshot выдал прежнее git-tree:HEAD^{tree}. integrate непересекающегося new.txt в скрыто грязное назначение тоже успешен. После снятия флага source allocation правильно отказывает must be clean.",
+      "rootCause": "clean полностью доверяет status. commit ещё и условно вызывает add только при непустом status. snapshot копирует индекс вместе со специальными flags и использует обычный add --all; последний также не включает скрытую правку. Корректный хеш Git-дерева тем самым не является доказательством всех прочитанных ревьюером bytes.",
+      "evidence": [
+        "E02",
+        "E03",
+        "E04"
+      ],
+      "reproduction": {
+        "fixture": "reproduction.script, второй цикл, flag=assume-unchanged и flag=skip-worktree",
+        "historicalCommand": "cd /tmp/r06-frozen-baseline-LLFhzs/source && TMPDIR=/tmp/r06-frozen-baseline-LLFhzs/tmp node --import tsx /tmp/r06-frozen-baseline-LLFhzs/probes/reproduce.mts /tmp/r06-frozen-baseline-LLFhzs/source /tmp/r06-frozen-baseline-LLFhzs/probes",
+        "freshCommand": "См. reproduction.freshCommand."
+      },
+      "counterEvidence": [
+        "Снятие каждого флага возвращает обнаружение dirty source — это не обычный отказ status для всех изменений.",
+        "snapshot честно совпадает с результатом стандартного staging; криптографической ошибки или несуществующего commit hash нет. Недостаточен более сильный вывод о чистоте рабочих bytes.",
+        "Git намеренно доверяет assume-unchanged; skip-worktree используется sparse-checkout. Это специальные состояния, требующие явного включения, а не дефект любого обычного checkout.",
+        "Игнорируемые зависимости по контракту не копируются; здесь проверялись уже tracked-файлы без правила .gitignore.",
+        "Tests implementation-recipes:95-123 подтверждают staged/unstaged/deleted/forced-ignored/missing-index, но флаги update-index не покрывают."
+      ],
+      "limits": "Воспроизведено пропускание правки в коммите/выделенном дереве и допуск скрыто грязного назначения, не перезапись этого файла при конфликтующем merge. Данные скрытого tracked-файла на диске сохранились. Влияние общего clean на recovery — вывод по коду, отдельный recovery fixture с флагами не запускался.",
+      "publicationAssessment": "Причинные ветки GitWorkspaces и snapshot не изменились до publication; повторный прогон на publication не заявляется.",
+      "recommendation": {
+        "minimalChange": "Явно определить поддержку index flags. Минимально безопасно обнаруживать assume-unchanged/skip-worktree и отклонять неподдерживаемое состояние до allocation/integration/commit, а snapshot давать тот же отказ. Если sparse-checkout должен поддерживаться, нужна проверка реально присутствующих bytes через временный индекс без изменения пользовательского индекса; автоматически снимать флаги в реальном индексе нельзя.",
+        "risk": "Безусловный запрет flags ограничит легитимный sparse checkout и пользовательские настройки производительности. Более точная проверка должна учитывать absent sparse paths и Git filters, иначе получатся ложные отказы или иной Git-артефакт.",
+        "acceptance": [
+          "Для обоих флагов изменённый присутствующий tracked-файл не приводит к ложному clean/успешному пропуску правки",
+          "Индекс пользователя, его flags и рабочие bytes сохраняются при отказе",
+          "Нормальные staged/unstaged/forced-ignored/missing-index сценарии сохраняют согласованность snapshot и commit",
+          "Политика для неизменённого flagged-файла и отсутствующего sparse path явно документирована и проверена",
+          "Регрессию восстановления через общий clean добавить отдельно; сейчас это предложенная проверка"
+        ]
+      }
+    },
+    {
+      "id": "r06-A01",
+      "classification": "already-fixed",
+      "title": "Привязка вердикта, проверка текущего source HEAD и provenance reuse уже существуют",
+      "revisionScope": "study-source",
+      "locations": [
+        "src/run-runtime.ts:337-345",
+        "src/run-runtime.ts:359-372",
+        "src/workspaces.ts:157-175",
+        "src/reconciliation.ts:32-46",
+        "src/lineage.ts:316-381",
+        "tests/workspaces.test.ts:85-90",
+        "tests/reconciliation.test.ts:141-153",
+        "tests/lineage.test.ts:72-90"
+      ],
+      "facts": [
+        "reviewer со schema.required artifactRevision требует непустую верхнеуровневую input.artifactRevision до worker; результат обязан повторить её и переданную criteria revision",
+        "integrate проверяет полную запись path/branch/base/head из succeeded worktree текущего run и фактический HEAD/ветку/общий repo",
+        "reconcile не принимает иной childResult или иные artifact/criteria revisions",
+        "reuse сохраняет producer/source attempt, plan/output/schema digests и не позволяет удалить обязательную ревизию вердикта"
+      ],
+      "refutedClaim": "Не нужно заново внедрять базовую привязку ревью/HEAD или считать старое approve автоматическим одобрением новой версии.",
+      "limits": "Runtime сравнивает переданные строки ревизий, а не автоматически устанавливает истинность произвольного input.artifactRevision. Допуск integrate по approve задаёт автор графа, не GitWorkspaces. Истинный workspace.head и git-tree:<tree> — разные виды идентичности. Никакой тест не доказывает качество/чтение live reviewer.",
+      "evidence": [
+        "E01",
+        "E03"
+      ],
+      "recommendation": {
+        "minimalChange": "Не менять реализацию ради повторного введения этих защит; сохранять точную передачу workspace.head либо содержательного digest в графе.",
+        "risk": "Смешение хеша отчёта критика, Git tree и Git commit ломает привязку, даже если строки сами по себе корректны.",
+        "acceptance": [
+          "Существующие негативные тесты stale HEAD/artifact/criteria продолжают отказывать",
+          "Источники версии видны в графе; интеграция не выдаётся за принятие задачи"
+        ]
+      }
+    },
+    {
+      "id": "r06-A02",
+      "classification": "already-fixed",
+      "title": "Crash recovery уже сохраняет frontier, точный complete HEAD и историю; частичная интеграция не обещает общего rollback",
+      "revisionScope": "study-source",
+      "locations": [
+        "src/workspaces.ts:177-227",
+        "src/workspaces.ts:69-150",
+        "src/run-controller.ts:327-352",
+        "src/run-runtime.ts:92-101",
+        "src/run-store.ts:459-486",
+        "src/run-store.ts:803-847",
+        "tests/git-recovery-crash.test.ts:81-175",
+        "tests/allocation-recovery.test.ts:29-120"
+      ],
+      "facts": [
+        "Первая успешная ветка остаётся при конфликте второй; abort проверяет принадлежность только текущего merge",
+        "После SIGKILL обычный resume не разрешает неопределённый повтор",
+        "complete HEAD перепроверяется для accept и retry; новый внешний commit не принимается даже после свежей инспекции",
+        "После первого merge нельзя принять все источники: требуется включение каждого source.head в ancestry; retry дополняет frontier",
+        "При partial retry base/originalHead новой попытки — фактический HEAD перед ней, исходный originalHead сохранён в archived attempt",
+        "Исчезнувшую регистрацию allocation восстанавливают с архивом только без admitted child; потерянные child files не воссоздают из одного JSON результата",
+        "accept помечает происхождение reconciliation и не придумывает новый модельный вызов"
+      ],
+      "evidence": [
+        "E01",
+        "E03"
+      ],
+      "limits": "50/50 — профильный исторический offline-прогон, не гарантия каждого аварийного окна. В shared clean остаётся B02. Блокировки одного GitWorkspaces не координируют людей/другие run. Точное complete HEAD сильнее раннего committing/merging, где финальный hash ещё не записан.",
+      "recommendation": {
+        "minimalChange": "Сохранить существующую политику и provenance; не вводить общий reset/скрытый retry вместо инспекции.",
+        "risk": "Попытка откатить всю интеграцию стирает уже зафиксированные успешные ветви и может затронуть чужие изменения.",
+        "acceptance": [
+          "Crash matrix сохраняет child invocation count и число commit/merge",
+          "Изменённый complete HEAD отвергается без Git-мутации",
+          "Archive различает старую и новую границу интеграции"
+        ]
+      }
+    },
+    {
+      "id": "r06-A03",
+      "classification": "already-fixed",
+      "title": "Ранняя authoring-валидация параллельной записи добавлена после study-source",
+      "revisionScope": "post-study",
+      "fixedIn": "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+      "locations": [
+        "86f5e0756e67fa7a18e925d77b7d2728db2f0627:src/parallel-isolation.ts:5-35",
+        "86f5e0756e67fa7a18e925d77b7d2728db2f0627:src/graph.ts:195-201",
+        "86f5e0756e67fa7a18e925d77b7d2728db2f0627:tests/parallel-authoring.test.ts:48-60"
+      ],
+      "facts": [
+        "На e15bc407 prepare/проверка frozen plan уже запрещали неисправную изоляцию writers",
+        "После 86f5e07 общий валидатор вызывается в authoring/compile, до каталога моделей; разрешения frozen plan учитываются отдельно"
+      ],
+      "evidence": [
+        "E05"
+      ],
+      "limits": "Проверено чтением commit/diff и тестовых assertions, post-study тесты заново не запускались. Не выдаётся за свой новый баг/исправление базовой ревизии.",
+      "recommendation": {
+        "minimalChange": "Не предлагать внедрение повторно.",
+        "risk": "Смешение двух базисов создаст ложный backlog.",
+        "acceptance": [
+          "При публикации сохранить существующие authoring-тесты и различать study-source/post-study"
+        ]
+      }
+    },
+    {
+      "id": "r06-A04",
+      "classification": "already-fixed",
+      "title": "Документация reviewer binding уточнена после study-source",
+      "revisionScope": "post-study",
+      "fixedIn": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "locations": [
+        "3d8ba65ee84402c0e3b0587f70095b7847824a9f:skills/dynamic-workflows/references/authoring.md:128-156",
+        "3d8ba65ee84402c0e3b0587f70095b7847824a9f:skills/dynamic-workflows/SKILL.md:109-114"
+      ],
+      "facts": [
+        "Описаны верхнеуровневое input.artifactRevision, точное копирование, пример ref на workspace.head и распаковка collect/worktree",
+        "Версия проверяемого входа отделена от reportRevision нового отчёта критика"
+      ],
+      "evidence": [
+        "E05"
+      ],
+      "limits": "Это документационное исправление, не новая проверка Git bytes и не исправление B01/B02.",
+      "recommendation": {
+        "minimalChange": "Не внедрять то же уточнение повторно.",
+        "risk": "Назвать digest отчёта критика artifactRevision проверяемого входа — снова нарушить существующий контракт.",
+        "acceptance": [
+          "При публикации опираться на уже уточнённую форму входа reviewer"
+        ]
+      }
+    },
+    {
+      "id": "r06-U01",
+      "classification": "unknown",
+      "title": "Не проверено end-to-end расхождение после snapshot/review из-за посторонней конкурентной записи",
+      "revisionScope": "study-source",
+      "locations": [
+        "src/run-runtime.ts:325-334",
+        "src/run-runtime.ts:359-372",
+        "src/workspaces.ts:296-303",
+        "skills/dynamic-workflows/recipes/implementation-review/S/patch.json:1263-1284",
+        "skills/dynamic-workflows/recipes/implementation-review/README.md:95-106"
+      ],
+      "observedFacts": [
+        "snapshot даёт git-tree до review; после child result родитель делает commit",
+        "Runtime не выполняет общего сравнения произвольного child result.artifactRevision с HEAD^{tree}",
+        "README прямо исключает изоляцию внешней записи между snapshot, review и commit; locks локальны экземпляру GitWorkspaces"
+      ],
+      "hypothesis": "Внешняя запись после проверенного snapshot может сделать финальный artifact отличным от одобренного. Сверх документированной границы это не исследовано и не объявляется новым bug.",
+      "notExecuted": "Ни live reviewers, ни специальная race fixture для этого окна не запускались в continuation; сохранённые probes B01/B02 не доказывают этот сценарий.",
+      "evidence": [
+        "E03"
+      ],
+      "recommendation": {
+        "minimalChange": "Сначала отдельная детерминированная offline fixture на новом /tmp repo: остановить после snapshot, внести одну внешнюю правку, продолжить child/parent и сопоставить snapshot с HEAD^{tree}. До результата не менять runtime и не вводить обязательное одобрение/повторы.",
+        "risk": "Без детерминированного барьера легко спутать задокументированную границу с гонкой внутри одного run; нельзя напрямую сравнивать commit hash и tree hash.",
+        "acceptance": [
+          "Fixture фиксирует точный момент записи и оба вида digest",
+          "Отдельный неизменённый контроль сохраняет принимаемый артефакт",
+          "Любая последующая рекомендация ограничена воспроизведённым окном, без обещания OS isolation"
+        ]
+      }
+    }
+  ],
+  "experiments": [
+    {
+      "id": "E00",
+      "phase": "continuation",
+      "kind": "read-only-provenance-check",
+      "command": "pwd; git rev-parse HEAD; test -f <oldWorkspace>/research/2026-09-20-astra-max/r06-worktrees-artifacts.{md,json}; python3: read/hash retained r06-actions.json; read /tmp/r06-frozen-baseline-latest-path",
+      "outcome": "Новый cwd на e15bc407; старых файлов нет. Retained actions прочитан, хеш проверен; его последний frozen snapshot существует.",
+      "limits": "Проверены только свои материалы; отсутствие отчётов не интерпретировано как ранее успешная публикация."
+    },
+    {
+      "id": "E01",
+      "phase": "retained-original-operation",
+      "kind": "targeted-offline-tests",
+      "cwd": "/tmp/r06-frozen-baseline-LLFhzs/source",
+      "command": "TMPDIR=/tmp/r06-frozen-baseline-LLFhzs/tmp node --import tsx --test --test-concurrency=1 tests/workspaces.test.ts tests/git-recovery-crash.test.ts tests/allocation-recovery.test.ts tests/lineage.test.ts tests/reconciliation.test.ts tests/implementation-recipes.test.ts",
+      "outcome": "Сохранённый лог: tests=50 pass=50 fail=0 skipped=0; duration_ms=160586.417583. По наборам: workspaces 12, crash 10, allocation 5, lineage 7, reconciliation 8, recipes 8.",
+      "limits": "Настоящие временные Git/process/SQLite fixtures, но без model/provider. В новой операции не запускались. Source зафиксирован архивом e15bc407; node_modules заимствован без установки. Лог не доказывает устойчивость полного npm test; known-issues описывает историческую нестабильность процессных тестов под общей нагрузкой."
+    },
+    {
+      "id": "E02",
+      "phase": "retained-original-operation",
+      "kind": "real-git-counterexamples",
+      "cwd": "/tmp/r06-frozen-baseline-LLFhzs/source",
+      "command": "TMPDIR=/tmp/r06-frozen-baseline-LLFhzs/tmp node --import tsx /tmp/r06-frozen-baseline-LLFhzs/probes/reproduce.mts /tmp/r06-frozen-baseline-LLFhzs/source /tmp/r06-frozen-baseline-LLFhzs/probes",
+      "outcome": "Пять assert-backed сценариев: ignored-nested перезаписан; unignored-nested и ignored-regular защищены; assume-unchanged и skip-worktree отдельно скрыли dirty source/child/target.",
+      "limits": "Прямой GitWorkspaces, собственные allocations и коммиты в /tmp. Слой provider отсутствует. Не новый прогон и не проверка всех версий Git."
+    },
+    {
+      "id": "E03",
+      "phase": "continuation",
+      "kind": "source-identity-and-code-review",
+      "command": "python3: git ls-tree -r --name-only e15bc407da8753fd6b683c0aa4a68634e3c458a7; для src/, tests/, implementation-review/, package.json и package-lock.json сравнить read_bytes() сохранённого source и текущего cwd с git show <rev>:<path>; nl -ba профильных файлов",
+      "outcome": "199 файлов проверены; missing=0, frozen differences=0, cwd differences=0. Причинные строки и отрицательные тесты независимо инспектированы.",
+      "limits": "Побайтная идентичность текущего содержимого snapshot подтверждена; это не новый runtime test и не независимая подпись исторического журнала."
+    },
+    {
+      "id": "E04",
+      "phase": "continuation",
+      "kind": "retained-results-and-hash-validation",
+      "command": "shasum -a 256 <retained actions/test log/probe script/results>; python3: JSON-parse пять result rows, assert B01 controls/B02 booleans; assert 50 строк ^✔ и fail/skipped 0 в targeted.tap",
+      "outcome": "Все четыре SHA256 зафиксированы в continuationProvenance. Пять result rows и 50 test rows согласованы с script/tests. Ранние незамороженные dev-логи также показывают 50/50, но не используются вместо frozen-baseline.",
+      "limits": "Полные сырые логи не включены в отчёты. Проверены наблюдаемые результаты, не выдуман отсутствующий tool-exit record."
+    },
+    {
+      "id": "E05",
+      "phase": "continuation",
+      "kind": "post-study-diff-review",
+      "command": "git log -14 --oneline; git log -- src/workspaces.ts src/reconciliation.ts src/recovery-inspection.ts tests/git-recovery-crash.test.ts; git show 86f5e07; git show 3d8ba65; git diff e15bc407 3d8ba65 -- профильные runtime/helper/test файлы; python3 assert равенства GitWorkspaces/parser без перенесённого authoring validator; git -C <publication-dev> rev-parse HEAD",
+      "outcome": "Dev HEAD=publicationRevision. Из проверяемых runtime/helper/test файлов изменены workspaces imports/перенос authoring policy и связанные writer-policy assertions; причинная реализация B01/B02 сохранена. A03/A04 подтверждены по commit/diff.",
+      "limits": "Post-study тесты не запускались, базовые line references не заменены publication line numbers. Skill delivery/UI исправления не переоткрывались."
+    }
+  ],
+  "alreadyFixedRefutations": {
+    "studySource": [
+      "r06-A01",
+      "r06-A02"
+    ],
+    "postStudy": [
+      "r06-A03",
+      "r06-A04"
+    ],
+    "additionalBoundaries": [
+      "succeeded и accepted различаются; успешный merge не является approve",
+      "После конфликта второй ветви первая остаётся: это прямо документированное отсутствие общей Git-транзакции, не новый bug",
+      "План/sourceRevision не замораживает живые bytes cwd; конечная версия отчёта r06 определяется SHA256 его JSON, не git HEAD исследуемого кода",
+      "Известные исправления skill delivery, async dashboard ownership и wait editor state вне фокуса и не переоткрываются"
+    ]
+  },
+  "provenanceModel": [
+    {
+      "identity": "sourceRevision",
+      "meaning": "Версия исследуемого кода, здесь e15bc407; не версия нового отчёта."
+    },
+    {
+      "identity": "workspace.base/head",
+      "meaning": "Реальные Git commit IDs; branch/path/base/head сверяются с owned records и текущим Git."
+    },
+    {
+      "identity": "git-tree:<hash>",
+      "meaning": "Дерево стандартного staging по snapshot, не Git commit ID и не полный образ файловой системы; B02 показывает ограничение flags."
+    },
+    {
+      "identity": "review.artifactRevision",
+      "meaning": "Точная переданная версия проверяемого входа; не автоматически заново вычисленный runtime digest."
+    },
+    {
+      "identity": "reconciliation / reuse",
+      "meaning": "Архив попытки и producer/source identities отличают принятый/повторно использованный результат от новой invocation."
+    },
+    {
+      "identity": "r06 artifactRevision",
+      "meaning": "sha256 окончательного r06 JSON; возвращается вместе с SHA256 Markdown внешнему управляющему."
+    }
+  ],
+  "unknowns": [
+    {
+      "id": "r06-U01",
+      "question": "Последствия внешней конкурентной записи после snapshot и до commit/merge",
+      "status": "Не воспроизводилось; документированная граница, не подтверждённый новый bug."
+    },
+    {
+      "question": "Переносимость B01 на другие версии Git и типы файловых систем",
+      "status": "Не проверено; подтверждён только сохранённый локальный offline fixture."
+    },
+    {
+      "question": "Точная безопасная политика sparse-checkout/index flags для B02",
+      "status": "Нужен выбор контракта и отдельная матрица tests; автоматическое снятие flags не рекомендовано."
+    },
+    {
+      "question": "Качество и фактическое чтение артефакта live reviewer",
+      "status": "Вне offline evidence; успешные schema/routing fixtures этого не доказывают."
+    }
+  ],
+  "sources": [
+    {
+      "id": "S01",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "AGENTS.md",
+      "sha256": "0a52e7d576739e2d14fd5973e08aa06bacfb94261321488dc69bd8b24353f458"
+    },
+    {
+      "id": "S02",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "PROJECT_INFO/architecture.md",
+      "sha256": "c0208fb807772b830a7cd493dc7da3429210c600611225e67237d614ed273bc2"
+    },
+    {
+      "id": "S03",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "PROJECT_INFO/development.md",
+      "sha256": "4b63509019c66dc939ef19323e91727175bdd9a6fbb8553bb93bbb3d3c5dff60"
+    },
+    {
+      "id": "S04",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "PROJECT_INFO/known-issues.md",
+      "sha256": "ddfdee27ee22d0f8bd0a767498533680b162ef9afb7ea43cd29bd96e391b97c5"
+    },
+    {
+      "id": "S05",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "PROJECT_INFO/README.md",
+      "sha256": "b7c7616f8e9ff09cb8c6bc00e9a992fe89e4f392f8b1760488ed9606599cb319"
+    },
+    {
+      "id": "S06",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "PROJECT_INFO/workspaces.md",
+      "sha256": "37120456ce4184b6042acc37d26f844bfa5db12c9fb704e2386df9bda261aaff",
+      "inspectedOrCitedLines": "20-65,80-145"
+    },
+    {
+      "id": "S07",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "PROJECT_INFO/reconciliation.md",
+      "sha256": "46da6724fbcc8e3f8fd85b25fafdc05018e75d8deed2bb3cc0b4c4ec622e403a",
+      "inspectedOrCitedLines": "211-229,284-313"
+    },
+    {
+      "id": "S08",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "PROJECT_INFO/graph-contract.md",
+      "sha256": "043af7b7ba96db8f83bbce4ba9bd30b029bcb02050013e66464812730f012c4e",
+      "inspectedOrCitedLines": "145-156"
+    },
+    {
+      "id": "S09",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "src/workspaces.ts",
+      "sha256": "597f6dd4dcf6c4b6d4b6de3ba8705c6b345773bc438d3f8e25391d9b40d559ca",
+      "inspectedOrCitedLines": "28-315"
+    },
+    {
+      "id": "S10",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "src/run-runtime.ts",
+      "sha256": "ecd19b48b0a5dd147f5606442334e14de973bca8a85668fb99954a7cffe19ec7",
+      "inspectedOrCitedLines": "92-101,273-345,359-372"
+    },
+    {
+      "id": "S11",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "src/run-controller.ts",
+      "sha256": "168b56381256c578232a3f4da41337be25b3acf19757210663263ed27a9799a4",
+      "inspectedOrCitedLines": "312-354"
+    },
+    {
+      "id": "S12",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "src/reconciliation.ts",
+      "sha256": "fe5590143ee3ae7fefa66dbc38abecd7f948d36cf20389e0058c87fdc769c7de",
+      "inspectedOrCitedLines": "32-46"
+    },
+    {
+      "id": "S13",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "src/lineage.ts",
+      "sha256": "c721ed0e02b9c9340ff2973f8a80e10cec24000bf9d8f1209285b87318a0ba37",
+      "inspectedOrCitedLines": "316-381"
+    },
+    {
+      "id": "S14",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "src/recovery-inspection.ts",
+      "sha256": "f165642d5170c01a05d958d6b6eb62b099e1518eaf3a975454166f4ed7b5013b",
+      "inspectedOrCitedLines": "1-114"
+    },
+    {
+      "id": "S15",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "src/run-store.ts",
+      "sha256": "7c6fcc16707391e322634ef898dff0743d1c84b90a3d192f14ffd207eac5365e",
+      "inspectedOrCitedLines": "459-486,803-847"
+    },
+    {
+      "id": "S16",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "src/operation-record.ts",
+      "sha256": "c348fc027cea5ab17a10f56ab1b7d1e17294f9c3049c7b125f9d0db151b74eef",
+      "inspectedOrCitedLines": "6-30"
+    },
+    {
+      "id": "S17",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "skills/dynamic-workflows/recipes/implementation-review/README.md",
+      "sha256": "97b221c6406a19c6eb7a4d4c12f18a6fc6cbc99b38ca1dd657cc1639b6a6d899",
+      "inspectedOrCitedLines": "78-113"
+    },
+    {
+      "id": "S18",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "skills/dynamic-workflows/recipes/implementation-review/snapshot.mjs",
+      "sha256": "fb25490976cf906da2d0888a3b35b895701b40252439fcf84863d490693891b7",
+      "inspectedOrCitedLines": "1-30"
+    },
+    {
+      "id": "S19",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "skills/dynamic-workflows/recipes/implementation-review/verify-command.mjs",
+      "sha256": "a30b24a81763d98c35e193ef5af6b9cfce512c71051fc9d5edba488b001cdc8f",
+      "inspectedOrCitedLines": "1-22"
+    },
+    {
+      "id": "S20",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "skills/dynamic-workflows/recipes/implementation-review/S/patch.json",
+      "sha256": "420dfa269e3bdc9ae72104d912d246005d54bb1d44cf098609e09161d54ed9b5",
+      "inspectedOrCitedLines": "874-983,1263-1311"
+    },
+    {
+      "id": "S21",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "tests/workspaces.test.ts",
+      "sha256": "a3ad163a669ff1e02d9bd459f951710cc6b3943f9a1b112a1fa6a8e1cc4689b8",
+      "inspectedOrCitedLines": "65-192,313-372"
+    },
+    {
+      "id": "S22",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "tests/git-recovery-crash.test.ts",
+      "sha256": "d87643015aa8b97382f0c280ff3341c04ea443e21c2e9a81b913cf40c3d85df2",
+      "inspectedOrCitedLines": "36-175"
+    },
+    {
+      "id": "S23",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "tests/fixtures/git-recovery-crash.ts",
+      "sha256": "e012e32eb927a6313e604cfea908dec7ff273c521dc9c1df47e515009a9e1622",
+      "inspectedOrCitedLines": "5-37"
+    },
+    {
+      "id": "S24",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "tests/allocation-recovery.test.ts",
+      "sha256": "d0b7a8ca2499123218943ac1ddb43e1738a7768ec9544ecfb69957746837b558",
+      "inspectedOrCitedLines": "29-120"
+    },
+    {
+      "id": "S25",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "tests/reconciliation.test.ts",
+      "sha256": "06800d5374b919cc2cdf556c90373aed60f6923f3a4c46b348957c50f3ff8184",
+      "inspectedOrCitedLines": "127-153,180-203"
+    },
+    {
+      "id": "S26",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "tests/lineage.test.ts",
+      "sha256": "fe4e26ab6af630e850007effbde297e433459feda243e58feb44e80390b2c5bc",
+      "inspectedOrCitedLines": "72-90"
+    },
+    {
+      "id": "S27",
+      "type": "repository",
+      "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "path": "tests/implementation-recipes.test.ts",
+      "sha256": "b35c6ddd14a790562dac310feba7f2ae2b67ec05c7eb423ac23616b7a7d18cfb",
+      "inspectedOrCitedLines": "47-162"
+    },
+    {
+      "id": "P01",
+      "type": "repository-post-study",
+      "revision": "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+      "path": "src/parallel-isolation.ts",
+      "sha256": "38afbd5c52b6a656c32b45a560802f3c25a4949aeca8cd56b69402f434c5b3e5",
+      "inspectedOrCitedLines": "5-35"
+    },
+    {
+      "id": "P02",
+      "type": "repository-post-study",
+      "revision": "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+      "path": "src/graph.ts",
+      "sha256": "a8127298decf4eb6154fc32e8876876a5337cc3fc66933c1a96b10823bd664dc",
+      "inspectedOrCitedLines": "195-201"
+    },
+    {
+      "id": "P03",
+      "type": "repository-post-study",
+      "revision": "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+      "path": "tests/parallel-authoring.test.ts",
+      "sha256": "aab667ff83469db44203208e6c2b11e3c1df867c68bcd7445c4673d7dda82ca2",
+      "inspectedOrCitedLines": "48-60"
+    },
+    {
+      "id": "P04",
+      "type": "repository-post-study",
+      "revision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "path": "skills/dynamic-workflows/references/authoring.md",
+      "sha256": "e2b2126f64ab30d2c84bafc6308e6d7b22258c26213487e1c571f800a1191719",
+      "inspectedOrCitedLines": "128-156"
+    },
+    {
+      "id": "P05",
+      "type": "repository-post-study",
+      "revision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "path": "skills/dynamic-workflows/SKILL.md",
+      "sha256": "68b6007f55d7007a32d04cb9ec6e58aab4a56328985ba83ac8fa748885a93726",
+      "inspectedOrCitedLines": "109-114"
+    }
+  ],
+  "reproduction": {
+    "status": "Инспектированный исторический script перенесён побайтно; приведённая freshCommand не запускалась в continuation.",
+    "scriptSha256": "be7918a89442d31553d4a02704bbfb97faefa0493b650e6c1a3cb1b387d7eded",
+    "scriptLanguage": "TypeScript/ESM (.mts), node --import tsx",
+    "script": "import assert from 'node:assert/strict';\nimport {execFileSync} from 'node:child_process';\nimport {mkdir, writeFile, readFile, realpath} from 'node:fs/promises';\nimport {join} from 'node:path';\nimport {pathToFileURL} from 'node:url';\nconst [dev, temporary] = process.argv.slice(2), root = await realpath(temporary);\nconst {GitWorkspaces} = await import(pathToFileURL(join(dev, 'src/workspaces.ts')).href);\nconst git = (cwd, ...args) => execFileSync('git', [\n  '-c', 'user.name=R06 Fixture', '-c', 'user.email=fixture@localhost',\n  '-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', ...args\n], {cwd, encoding:'utf8', stdio:['ignore','pipe','pipe']}).trim();\nasync function fixture(name, ignored = false) {\n  const dir = join(root, name), repo = join(dir, 'repo');\n  await mkdir(repo, {recursive:true}); git(repo, 'init', '-b', 'main');\n  await writeFile(join(repo, 'base.txt'), 'base\\n');\n  await writeFile(join(repo, 'other.txt'), 'other\\n');\n  if (ignored) await writeFile(join(repo, '.gitignore'), 'cache/\\n');\n  git(repo, 'add', '.'); git(repo, 'commit', '-m', 'base');\n  return {repo, manager:new GitWorkspaces('run-'+name, join(dir, 'run'))};\n}\nfor (const mode of ['ignored-nested','unignored-nested','ignored-regular']) {\n  const {repo, manager} = await fixture(mode, mode !== 'unignored-nested');\n  const initial = git(repo, 'rev-parse', 'HEAD');\n  const a = await manager.allocate(repo, 'candidate');\n  await mkdir(join(a.path, 'cache'));\n  await writeFile(join(a.path, 'cache/value.txt'), 'WORKER\\n');\n  git(a.path, 'add', '-f', 'cache/value.txt'); const source = await manager.commit(a);\n  const cache = join(repo, 'cache'); await mkdir(cache);\n  if (mode !== 'ignored-regular') {\n    git(cache, 'init', '-b', 'local');\n    await writeFile(join(cache, 'value.txt'), 'LOCAL COMMITTED BASE\\n');\n    git(cache, 'add', '.'); git(cache, 'commit', '-m', 'local base');\n  }\n  await writeFile(join(cache, 'value.txt'), 'UNCOMMITTED USER DATA\\n');\n  const ignored = git(repo, 'ls-files', '--others', '--ignored', '--exclude-standard', '-z')\n    .split('\\0').filter(Boolean);\n  let result, error;\n  try { result = await manager.integrate(repo, [source], [source]); }\n  catch (e) { error = e.message; }\n  const disk = await readFile(join(cache, 'value.txt'), 'utf8');\n  if (mode === 'ignored-nested') {\n    assert.ok(result); assert.equal(disk, 'WORKER\\n');\n    assert.notEqual(git(repo, 'rev-parse', 'HEAD'), initial);\n    assert.equal(git(cache, 'show', 'HEAD:value.txt'), 'LOCAL COMMITTED BASE');\n  } else {\n    assert.ok(error); assert.equal(disk, 'UNCOMMITTED USER DATA\\n');\n    assert.equal(git(repo, 'rev-parse', 'HEAD'), initial);\n  }\n  console.log(JSON.stringify({id:'r06-B01', mode, ignored,\n    success:!!result, uncommittedUserDataLost:disk !== 'UNCOMMITTED USER DATA\\n'}));\n}\nfor (const flag of ['assume-unchanged','skip-worktree']) {\n  const {repo, manager} = await fixture(flag);\n  git(repo, 'update-index', '--'+flag, 'base.txt');\n  await writeFile(join(repo, 'base.txt'), 'UNCOMMITTED SOURCE\\n');\n  assert.equal(git(repo, 'status', '--porcelain=v1', '--untracked-files=all'), '');\n  const a = await manager.allocate(repo, 'child');\n  assert.equal(await readFile(join(a.path, 'base.txt'), 'utf8'), 'base\\n');\n  git(a.path, 'update-index', '--'+flag, 'other.txt');\n  await writeFile(join(a.path, 'other.txt'), 'UNCOMMITTED CHILD\\n');\n  const snapshot = execFileSync(process.execPath,\n    [join(dev, 'skills/dynamic-workflows/recipes/implementation-review/snapshot.mjs')],\n    {cwd:a.path, encoding:'utf8'});\n  const output = await manager.commit(a);\n  assert.equal(output.head, a.base);\n  assert.equal(snapshot, 'git-tree:'+git(a.path, 'rev-parse', 'HEAD^{tree}'));\n  assert.equal(git(a.path, 'show', 'HEAD:other.txt'), 'other');\n  assert.equal(await readFile(join(a.path, 'other.txt'), 'utf8'), 'UNCOMMITTED CHILD\\n');\n  git(a.path, 'update-index', '--no-'+flag, 'other.txt');\n  await writeFile(join(a.path, 'other.txt'), 'other\\n');\n  await writeFile(join(a.path, 'new.txt'), 'NEW\\n');\n  const source = await manager.commit(a);\n  await manager.integrate(repo, [source], [source]);\n  assert.equal(await readFile(join(repo, 'base.txt'), 'utf8'), 'UNCOMMITTED SOURCE\\n');\n  assert.equal(git(repo, 'show', 'HEAD:base.txt'), 'base');\n  git(repo, 'update-index', '--no-'+flag, 'base.txt');\n  await assert.rejects(manager.allocate(repo, 'negative-control'), /must be clean/);\n  console.log(JSON.stringify({id:'r06-B02', flag, hiddenDirtyAllocationAccepted:true,\n    childCommitOmittedChange:true, snapshotOmittedChange:true,\n    hiddenDirtyIntegrationAccepted:true, visibleDirtyRejected:true}));\n}\n",
+    "freshCommand": "CWD=\"$PWD\"\nDEPS=/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev/node_modules\nROOT=$(mktemp -d /tmp/r06-reproduce-XXXXXX)\nmkdir \"$ROOT/source\" \"$ROOT/tmp\" \"$ROOT/fixtures\"\ngit archive e15bc407da8753fd6b683c0aa4a68634e3c458a7 | tar -x -C \"$ROOT/source\"\nln -s \"$DEPS\" \"$ROOT/source/node_modules\"\npython3 - \"$CWD/research/2026-09-20-astra-max/r06-worktrees-artifacts.json\" \"$ROOT/reproduce.mts\" <<'PY'\nimport hashlib, json, pathlib, sys\nr = json.loads(pathlib.Path(sys.argv[1]).read_text())['reproduction']\nb = r['script'].encode()\nassert hashlib.sha256(b).hexdigest() == r['scriptSha256']\npathlib.Path(sys.argv[2]).write_bytes(b)\nPY\n(cd \"$ROOT/source\" && TMPDIR=\"$ROOT/tmp\" node --import tsx \\\n  \"$ROOT/reproduce.mts\" \"$ROOT/source\" \"$ROOT/fixtures\")",
+    "safety": "Только новый /tmp/r06-reproduce-* и новые Git repositories; исходный/старый worktree и его index не меняются. Без npm install/ci, providers, пользовательских run и повторного запуска старых fixtures. Существующие node_modules используются через symlink только в новой временной копии.",
+    "proposedNotExecuted": [
+      "Regression tests по acceptance criteria B01/B02",
+      "Детерминированная snapshot-to-commit race fixture U01",
+      "Матрица sparse checkout/других Git и файловых систем"
+    ]
+  },
+  "webAccess": {
+    "used": false,
+    "reason": "Достаточно первичных локальных исходников, документации, Git history и сохранённых offline fixtures. Ссылки Git в документации не выдаются за прочитанные веб-источники."
+  },
+  "blockers": []
+}

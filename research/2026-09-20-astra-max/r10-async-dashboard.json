@@ -1,0 +1,915 @@
+{
+  "metadata": {
+    "researchId": "r10",
+    "topic": "Асинхронная браузерная панель",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "date": "2026-09-20",
+    "language": "ru",
+    "researchOnly": true,
+    "status": "complete",
+    "findingCount": 3,
+    "findingCountDefinition": "Число новых воспроизведённых bug в findings; alreadyFixedRefutations и unknowns перечислены отдельно.",
+    "environment": {
+      "node": "v26.8.1",
+      "chrome": "153.0.8010.52",
+      "os": "macOS",
+      "dependencies": "Существующие node_modules разрешённого integration-dev; установки не было."
+    },
+    "isolation": "Production browser functions + isolated fake fetch; отдельный loopback resource server и временный Chrome profile; только fixture process group завершалась. Контроллер над живой БД не открывался.",
+    "sourceVerification": {
+      "worktreeHeadMatches": true,
+      "integrationDevHeadMatches": true,
+      "matchingSha256": {
+        "src/graph-view/app.js": "4c9a99d44fa98cc39ff058a8da2868255d77d18c6b4b24ed03abd17ab5a33548",
+        "src/graph-view/task-scope.js": "1aee9e5c444e84510734eb936c9c8b81d110d6e640d2384eac371e3a8f2bd73b",
+        "src/graph-view/usage-pages.js": "a6a6b2777e92a859c38e5bd0bea6ee8a4b9c7366653fd5109f9d4e6a1453ce7c",
+        "src/graph-view/model.ts": "1c8ee2ed29c30c5815f831a141e60a67d09f72d4bc74989b9a6248dba71abd2c",
+        "src/graph-view/server.ts": "ab3a0619c3bb378b4e1142345066534b986f3e0a2e141fbb7bb0ad0ee271cb43",
+        "tests/graph-view-observation.test.ts": "a6b1f4335bff5fa29cb8011694fe73013cf344fd4dfc81093b5fd8cecca3494b"
+      }
+    },
+    "constraintsObserved": [
+      "Прочитаны AGENTS, architecture, development, known-issues, профильные документы и git log до проверок.",
+      "Исходники, tests, dependencies, PROJECT_INFO и установленный runtime не изменялись.",
+      "Отчёты коллег не читались.",
+      "Реальные run, пользовательские процессы и провайдеры не управлялись.",
+      "Веб, модели, pi/dynamicwf/subagents, install, commit, push, checkout, reset не использовались."
+    ]
+  },
+  "summary": "Три воспроизведённых клиентских bug: ordering списка runs, starvation task usage под polling, stale GET reconciliation history после POST. 33/33 regression tests и native fixture controls подтверждают уже исправленное visit ownership и await editor persistence.",
+  "coverage": [
+    {
+      "area": "Snapshot/polling",
+      "sources": [
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1448,
+          "endLine": 1540
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1630,
+          "endLine": 1648
+        }
+      ],
+      "checks": [
+        "R10-E01",
+        "R10-E02"
+      ],
+      "boundary": "Пользовательская сеть/БД не подключались."
+    },
+    {
+      "area": "Selection/history Back/control/await",
+      "sources": [
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 270,
+          "endLine": 293
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1162,
+          "endLine": 1174
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1514,
+          "endLine": 1576
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1621,
+          "endLine": 1628
+        }
+      ],
+      "checks": [
+        "R10-E01",
+        "R10-E06"
+      ],
+      "boundary": "Native Back выполнен, реальный cookie restart не выполнялся."
+    },
+    {
+      "area": "Forms/focus/selection/scroll/disclosure",
+      "sources": [
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 483,
+          "endLine": 509
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1144,
+          "endLine": 1147
+        }
+      ],
+      "checks": [
+        "R10-E01",
+        "R10-E06"
+      ],
+      "boundary": "Не заявляется persistence после full reload или для всех inspector details."
+    },
+    {
+      "area": "Task totals",
+      "sources": [
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 294,
+          "endLine": 310
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1319,
+          "endLine": 1344
+        },
+        {
+          "path": "src/graph-view/task-scope.js",
+          "startLine": 43,
+          "endLine": 136
+        }
+      ],
+      "checks": [
+        "R10-E01",
+        "R10-E03",
+        "R10-E04"
+      ],
+      "boundary": "Latency синтетическая."
+    },
+    {
+      "area": "Trace/usage/attempts/collections/retries caches",
+      "sources": [
+        {
+          "path": "src/graph-view/usage-pages.js",
+          "startLine": 1,
+          "endLine": 72
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 790,
+          "endLine": 868
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1284,
+          "endLine": 1317
+        }
+      ],
+      "checks": [
+        "R10-E01"
+      ],
+      "boundary": "Все пути прочитаны, не все комбинации страниц исполнены."
+    },
+    {
+      "area": "Recovery/error rendering",
+      "sources": [
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 667,
+          "endLine": 750
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 848,
+          "endLine": 868
+        },
+        {
+          "path": "src/graph-view/server.ts",
+          "startLine": 139,
+          "endLine": 286
+        }
+      ],
+      "checks": [
+        "R10-E01",
+        "R10-E05"
+      ],
+      "boundary": "Нет реального восстановления; server guards только inspected."
+    },
+    {
+      "area": "Graph/history navigation and accessibility",
+      "sources": [
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 922,
+          "endLine": 1115
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1224,
+          "endLine": 1317
+        }
+      ],
+      "checks": [
+        "R10-E01"
+      ],
+      "boundary": "Не полный UI/geometry/cross-browser аудит."
+    }
+  ],
+  "findings": [
+    {
+      "id": "R10-B01",
+      "classification": "bug",
+      "title": "Старый runs откатывает новый список после control follow-up",
+      "priority": "medium",
+      "evidenceLevel": "reproduced-native-Chrome-fake-API",
+      "locations": [
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1485,
+          "endLine": 1495
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1508,
+          "endLine": 1511
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1531,
+          "endLine": 1531
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1643,
+          "endLine": 1643
+        }
+      ],
+      "trigger": "Незавершённый polling refreshRuns; затем pause POST, актуальный snapshot и control refreshRuns заканчиваются раньше исходного GET.",
+      "expected": "После нового списка более ранний запрос не заменяет status/usage/lineage и не перекрывает успешное обновление старой ошибкой связи.",
+      "observed": {
+        "before": {
+          "list": "paused",
+          "detail": "paused"
+        },
+        "afterOldGet": {
+          "list": "waiting",
+          "detail": "paused",
+          "sidebarLabel": "Ждёт ответа"
+        },
+        "afterFreshGet": {
+          "list": "paused"
+        },
+        "afterOlderErrorFollowingNewListAndSnapshot": {
+          "notice": "OLDER_LIST_FAILURE",
+          "connection": "Нет связи"
+        },
+        "controlPosts": 1
+      },
+      "cause": "У refreshRuns нет собственного поколения чтения. Внешний isCurrent различает посещения для control, но оба чтения одного посещения проходят. listSignature — только сравнение данных, не порядок.",
+      "experimentIds": [
+        "R10-E02"
+      ],
+      "reproductionCase": "list",
+      "reproductionCommand": "node \"$R10_TMP/browser.mjs\" \"$PWD\" \"$R10_TMP/list.js\"",
+      "counterEvidence": [
+        "Snapshot сохранил paused: исправление 1451–1455 работает.",
+        "21 observation regression прошёл; 532–613 проверяют уход с посещения и актуальный unscoped refresh, а не два reordered списка одного посещения.",
+        "Сам poll последовательный; нужен другой источник чтения (control follow-up).",
+        "Следующий успешный список восстанавливает UI; потеря серверной команды не наблюдалась."
+      ],
+      "counterEvidenceSources": [
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1451,
+          "endLine": 1455
+        },
+        {
+          "path": "tests/graph-view-observation.test.ts",
+          "startLine": 532,
+          "endLine": 613
+        }
+      ],
+      "recommendation": {
+        "minimalChange": "Собственное поколение list request, объединённое с имеющимся isCurrent; guard до reload 401, после JSON и в catch.",
+        "risk": "Не подавить глобальный sidebar refresh после навигации, initial selection и актуальный 401; не заменить visit guard одним run ID.",
+        "acceptance": [
+          "Новый list success → старые success/body decode/error/401 не меняют принятую проекцию/feedback.",
+          "Текущий success/401 и A→B→A/control tests работают."
+        ],
+        "implemented": false,
+        "additionalTestsNotExecuted": [
+          "Body-decoding и 401 варианты именно нового list-order guard."
+        ]
+      },
+      "limits": [
+        "Реальная частота доставки в таком порядке не измерена.",
+        "Не утверждается откат SQLite или изменение разрешений команд."
+      ]
+    },
+    {
+      "id": "R10-B02",
+      "classification": "bug",
+      "title": "Polling инвалидирует медленную загрузку всей задачи до её применения",
+      "priority": "medium",
+      "evidenceLevel": "reproduced-native-Chrome-production-poll-fake-API",
+      "locations": [
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 294,
+          "endLine": 306
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1470,
+          "endLine": 1474
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1632,
+          "endLine": 1648
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1322,
+          "endLine": 1339
+        },
+        {
+          "path": "src/graph-view/task-scope.js",
+          "startLine": 116,
+          "endLine": 122
+        }
+      ],
+      "trigger": "Task mode; snapshot/list быстрые, task-usage 1600 мс при примерно секундном polling. Каждый refresh начинает новую загрузку и увеличивает taskFetch.",
+      "expected": "Успешная загрузка того же task/visit завершается при продолжающемся polling; loading/stale task data обозначены, сумма run не выдается за task total.",
+      "observed": {
+        "slow": {
+          "latencyMs": 1600,
+          "observationMs": 4400,
+          "taskUsageCalls": 5,
+          "taskCalls": 0,
+          "pollingSnapshotCalls": 4,
+          "runListCalls": 1,
+          "taskUsage": null,
+          "selectedTask": true,
+          "displayedTotal": 0,
+          "expectedTaskTotal": 30
+        },
+        "afterStoppingOnlyFixturePoll": {
+          "taskCalls": 1,
+          "displayedTotal": 30
+        },
+        "fastControl": {
+          "latencyMs": 20,
+          "observationMs": 4400,
+          "taskUsageCalls": 5,
+          "taskCalls": 5,
+          "displayedTotal": 30
+        }
+      },
+      "cause": "void loadTaskScope на каждом snapshot запускает следующий seq до завершения предыдущего; проверка seq на 299 отбрасывает успешный ответ. Task total применяется только после всех запросов. Пока taskUsage null, renderer выбирает state.run.usage при кнопке «Вся задача».",
+      "inference": "При сохранении того же порядка задержек отбрасывание повторяется неограниченно. Измерены четыре polling-цикла, не бесконечный live прогон.",
+      "experimentIds": [
+        "R10-E03",
+        "R10-E04"
+      ],
+      "reproductionCase": "task",
+      "reproductionCommand": "node \"$R10_TMP/browser.mjs\" \"$PWD\" \"$R10_TMP/task.js\"",
+      "counterEvidence": [
+        "При 20 мс тот же polling применяет task total 30.",
+        "Последний медленный in-flight запрос завершается после остановки только timer, без изменения API.",
+        "7 task-scope tests успешно проверяют identity и producer navigation; они не моделируют периодическую инвалидацию медленного ответа."
+      ],
+      "counterEvidenceSources": [
+        {
+          "path": "tests/graph-view-task-scope.test.ts",
+          "startLine": 38,
+          "endLine": 145
+        }
+      ],
+      "recommendation": {
+        "minimalChange": "Переиспользовать незаконченный task Promise в текущем task/visit; не начинать эквивалентный load каждым poll. Сохранять generation при настоящей смене scope/visit. Обозначать task loading/stale и не маркировать run totals как task totals.",
+        "risk": "Не перенести данные старого посещения через A→B→A и не заморозить новые totals после первого успеха.",
+        "acceptance": [
+          "При API 1600 мс и продолжающемся production poll task total появляется.",
+          "Рост total затем появляется без смены вкладки; нет очереди взаимно инвалидирующих запросов.",
+          "Смена task/visit во время каждого await безопасна; подпись суммы соответствует scope."
+        ],
+        "implemented": false,
+        "additionalTestsNotExecuted": [
+          "Рост total после предлагаемого исправления.",
+          "Смена task/visit на каждой стадии изменённого загрузчика."
+        ]
+      },
+      "limits": [
+        "Latency искусственная, распределение задержек пользовательской панели неизвестно.",
+        "Порог зависит от длительности snapshot/list, не универсально равен 1000 мс.",
+        "Это не лимит графа, не провайдерская квота и не предложение скрытых retries."
+      ]
+    },
+    {
+      "id": "R10-B03",
+      "classification": "bug",
+      "title": "Старое чтение recovery history скрывает известную сохранённую запись",
+      "priority": "low",
+      "evidenceLevel": "reproduced-native-Chrome-fake-API",
+      "locations": [
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 848,
+          "endLine": 860
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 744,
+          "endLine": 748
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 674,
+          "endLine": 676
+        }
+      ],
+      "trigger": "Инспекция уже загружена. GET reconciliations начат до POST reconcile, POST receipt доставлен первым, затем старый GET [] завершает чтение.",
+      "expected": "Более ранний GET не стирает подтверждённую запись и saved flag; история не заявляет отсутствие решений одновременно с receipt той же формы.",
+      "observed": {
+        "afterPost": {
+          "historyRecords": 1,
+          "saved": true,
+          "draftReceipt": true
+        },
+        "afterOldGet": {
+          "historyRecords": 0,
+          "saved": false,
+          "draftReceipt": true,
+          "claimsNoRecords": true,
+          "claimsSaved": true
+        },
+        "afterExplicitRefresh": {
+          "historyRecords": 1
+        },
+        "reconcilePosts": 1,
+        "historyGets": 2
+      },
+      "cause": "History GET и POST независимо и безусловно заменяют reconciliationRecords под одним run/key; cached захвачен до await. Время GET ставится при доставке. Inspection также пишет эти кэши, но отдельная её гонка не воспроизводилась.",
+      "experimentIds": [
+        "R10-E05"
+      ],
+      "reproductionCase": "recovery",
+      "reproductionCommand": "node \"$R10_TMP/browser.mjs\" \"$PWD\" \"$R10_TMP/recovery.js\"",
+      "counterEvidence": [
+        "draft.request/decisionId/receipt сохраняются; автоматического второго POST нет. Это не регрессия visit ownership позднего receipt.",
+        "Тесты receipt 221–283 прошли.",
+        "Явный свежий GET восстанавливает историю.",
+        "Прочитанный сервер проверяет identity решения, checkpoint/attempt/workspace и explicit supersedes; повреждение БД или обход guard не показаны."
+      ],
+      "counterEvidenceSources": [
+        {
+          "path": "tests/graph-view-observation.test.ts",
+          "startLine": 221,
+          "endLine": 283
+        },
+        {
+          "path": "src/run-controller.ts",
+          "startLine": 312,
+          "endLine": 324
+        },
+        {
+          "path": "src/run-store.ts",
+          "startLine": 804,
+          "endLine": 820
+        }
+      ],
+      "recommendation": {
+        "minimalChange": "Поколение reconciliation cache по run/key с инвалидацией чтений, начатых до успешного POST; согласовать отдельный history loader и inspection writer. Свежему GET разрешить уточнять application/superseded status.",
+        "risk": "Вечный merge по decisionId заморозит статус применения; общая блокировка ухудшит независимые формы.",
+        "acceptance": [
+          "GET-before-POST → receipt → старый GET не убирает запись.",
+          "GET-after-POST обновляет application/superseded.",
+          "То же при old error, inspection writer и независимых ключах."
+        ],
+        "implemented": false,
+        "additionalTestsNotExecuted": [
+          "Late-error и inspection-writer перестановки.",
+          "Изменение application/superseded в следующем свежем GET."
+        ]
+      },
+      "limits": [
+        "Только браузерное отображение/кэш: fake receipt не доказывает реальную запись журнала.",
+        "Другие кэши не объявляются сломанными."
+      ]
+    }
+  ],
+  "experiments": [
+    {
+      "id": "R10-E01",
+      "performed": true,
+      "kind": "offline-regression-tests",
+      "cwd": "Разрешённый integration-dev той же ревизии",
+      "command": "R10_TMP=$(mktemp -d /tmp/r10-async-tests.XXXXXX); TMPDIR=\"$R10_TMP\" node --import tsx --test --test-concurrency=1 tests/graph-view-observation.test.ts tests/graph-view-task-scope.test.ts tests/usage-pages.test.ts tests/graph-transition-scope.test.ts tests/graph-node-accessibility.test.ts",
+      "outcome": {
+        "pass": 33,
+        "fail": 0,
+        "skipped": 0,
+        "nativeChromeTests": 2
+      },
+      "limits": [
+        "Полный npm test не выполнялся.",
+        "Не доказательство live API/provider."
+      ]
+    },
+    {
+      "id": "R10-E02",
+      "performed": true,
+      "kind": "isolated-native-Chrome-fake-API",
+      "command": "node \"$R10_TMP/browser.mjs\" \"$PWD\" \"$R10_TMP/list.js\"",
+      "reproductionCase": "list",
+      "outcome": {
+        "status": "passed",
+        "summary": "Список paused→waiting при detail paused; fresh GET восстановил paused; old error после нового списка установил Нет связи."
+      },
+      "limits": [
+        "Production UI functions, fake responses, temporary profile; не живой сервер Dynamicwf.",
+        "Все assertions описывают наблюдаемую ревизию, не проверяют внедрённое исправление."
+      ]
+    },
+    {
+      "id": "R10-E03",
+      "performed": true,
+      "kind": "isolated-native-Chrome-fake-API",
+      "command": "node \"$R10_TMP/browser.mjs\" \"$PWD\" \"$R10_TMP/task.js\"",
+      "reproductionCase": "task",
+      "outcome": {
+        "status": "passed",
+        "summary": "1600 мс API: 5 usage, 0 task, total 0. После остановки только polling последний load завершился, total 30."
+      },
+      "limits": [
+        "Production UI functions, fake responses, temporary profile; не живой сервер Dynamicwf.",
+        "Все assertions описывают наблюдаемую ревизию, не проверяют внедрённое исправление."
+      ]
+    },
+    {
+      "id": "R10-E04",
+      "performed": true,
+      "kind": "isolated-native-Chrome-fake-API",
+      "command": "node \"$R10_TMP/browser.mjs\" \"$PWD\" \"$R10_TMP/task-fast.js\"",
+      "reproductionCase": "task-fast",
+      "outcome": {
+        "status": "passed",
+        "summary": "20 мс API: 5 usage и 5 task, total 30 при работающем polling."
+      },
+      "limits": [
+        "Production UI functions, fake responses, temporary profile; не живой сервер Dynamicwf.",
+        "Все assertions описывают наблюдаемую ревизию, не проверяют внедрённое исправление."
+      ]
+    },
+    {
+      "id": "R10-E05",
+      "performed": true,
+      "kind": "isolated-native-Chrome-fake-API",
+      "command": "node \"$R10_TMP/browser.mjs\" \"$PWD\" \"$R10_TMP/recovery.js\"",
+      "reproductionCase": "recovery",
+      "outcome": {
+        "status": "passed",
+        "summary": "Records 1→0, receipt сохранился, contradictory labels true; явный GET вернул 1, POST один."
+      },
+      "limits": [
+        "Production UI functions, fake responses, temporary profile; не живой сервер Dynamicwf.",
+        "Все assertions описывают наблюдаемую ревизию, не проверяют внедрённое исправление."
+      ]
+    },
+    {
+      "id": "R10-E06",
+      "performed": true,
+      "kind": "isolated-native-Chrome-fake-API",
+      "command": "node \"$R10_TMP/browser.mjs\" \"$PWD\" \"$R10_TMP/current-fixes.js\"",
+      "reproductionCase": "current-fixes",
+      "outcome": {
+        "status": "passed",
+        "summary": "Native update сохранил backward selection и scrollTop 300→300; Back восстановил run/URL/draft/disclosure. Old cancel 0 POST; late resolve 0 extra snapshot и 1 POST."
+      },
+      "limits": [
+        "Production UI functions, fake responses, temporary profile; не живой сервер Dynamicwf.",
+        "Все assertions описывают наблюдаемую ревизию, не проверяют внедрённое исправление."
+      ]
+    },
+    {
+      "id": "R10-E07",
+      "performed": true,
+      "kind": "harness-diagnostic",
+      "command": "Первый node browser.mjs \"$PWD\" task.js, затем node --check task.js и повторный запуск",
+      "outcome": {
+        "status": "harness-error-corrected",
+        "summary": "25-секундный watchdog: генератор по повторному await refreshRuns ошибочно обрезал tail и создал синтаксически неполную fixture. Исправлен только /tmp генератор; финальные R10-E03/E04 прошли."
+      },
+      "limits": [
+        "Не ошибка Dynamicwf.",
+        "Финальная fixture в reproduction содержит исправленный tail."
+      ]
+    },
+    {
+      "id": "R10-E08",
+      "performed": true,
+      "kind": "report-fixture-extraction-check",
+      "command": "Извлечение reproduction.runner/common/cases из готового JSON в /tmp/r10-async-replay.XXXXXX; node --check и node browser.mjs для list, task, task-fast, recovery, current-fixes.",
+      "outcome": {
+        "status": "passed",
+        "cases": 5,
+        "summary": "Все включённые в отчёт fixtures повторно исполнились с теми же наблюдениями. Проверка endpoint citations обнаружила и исправила описку server.ts:327 на фактическую последнюю строку 324."
+      },
+      "limits": [
+        "Повторная проверка тех же пяти сценариев, не пять новых видов покрытия."
+      ]
+    }
+  ],
+  "alreadyFixedRefutations": [
+    {
+      "id": "R10-AF01",
+      "classification": "already-fixed",
+      "title": "Snapshot/latest-request и delayed success/error/401/body decode",
+      "sources": [
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 165,
+          "endLine": 182
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1448,
+          "endLine": 1483
+        },
+        {
+          "path": "tests/graph-view-observation.test.ts",
+          "startLine": 286,
+          "endLine": 369
+        }
+      ],
+      "evidence": [
+        "R10-E01"
+      ],
+      "result": "Поздние ответы и A→B→A не откатывают snapshot; B01 относится к runs."
+    },
+    {
+      "id": "R10-AF02",
+      "classification": "already-fixed",
+      "title": "Control/cancel/await visit ownership",
+      "sources": [
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 270,
+          "endLine": 293
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1162,
+          "endLine": 1174
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1514,
+          "endLine": 1576
+        },
+        {
+          "path": "tests/graph-view-observation.test.ts",
+          "startLine": 414,
+          "endLine": 613
+        }
+      ],
+      "evidence": [
+        "R10-E01",
+        "R10-E06"
+      ],
+      "result": "Native Back закрывает старый cancel, старый confirm не отправляет POST; late await не читает новое посещение, draft/notice сохранены."
+    },
+    {
+      "id": "R10-AF03",
+      "classification": "already-fixed",
+      "title": "Wait disclosure/editor position (fea2136)",
+      "sources": [
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 483,
+          "endLine": 509
+        },
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1144,
+          "endLine": 1147
+        },
+        {
+          "path": "tests/graph-view-observation.test.ts",
+          "startLine": 96,
+          "endLine": 133
+        },
+        {
+          "path": "PROJECT_INFO/known-issues.md",
+          "startLine": 64,
+          "endLine": 67
+        }
+      ],
+      "evidence": [
+        "R10-E01",
+        "R10-E06"
+      ],
+      "result": "Native focus, backward direction и scrollTop 300→300 сохранены; details/draft остаются после Back. Иные inspector details — документированная граница e15bc40."
+    },
+    {
+      "id": "R10-AF04",
+      "classification": "already-fixed",
+      "title": "Original cache settlement и recovery receipt после навигации",
+      "sources": [
+        {
+          "path": "src/graph-view/usage-pages.js",
+          "startLine": 8,
+          "endLine": 35
+        },
+        {
+          "path": "tests/graph-view-observation.test.ts",
+          "startLine": 135,
+          "endLine": 283
+        },
+        {
+          "path": "tests/usage-pages.test.ts",
+          "startLine": 6,
+          "endLine": 31
+        }
+      ],
+      "evidence": [
+        "R10-E01",
+        "R10-E05"
+      ],
+      "result": "Usage данные/ошибки остаются под исходным ключом, receipt/decisionId сохраняются без повтора POST; B03 — same-key GET/POST ordering."
+    }
+  ],
+  "unknowns": [
+    {
+      "id": "R10-U01",
+      "classification": "unknown",
+      "question": "Частота reorder/latency на реальной локальной базе, зависимость от размера/нагрузки/throttling",
+      "reason": "Использован только isolated fake API; пользовательская база не наблюдалась.",
+      "proposedCheck": "Отдельно разрешённая synthetic large-DB latency study без реальных run."
+    },
+    {
+      "id": "R10-U02",
+      "classification": "unknown",
+      "question": "Все сочетания inspection writer, application/superseded и навигации между попытками",
+      "reason": "Факт второго writer прочитан; воспроизведён именно separate history GET до POST.",
+      "proposedCheck": "Детерминированная матрица deferred responses по run/key/attempt, не live recovery."
+    },
+    {
+      "id": "R10-U03",
+      "classification": "unknown",
+      "question": "Safari/Firefox, multi-tab session restart, queryless Back с ошибкой initial list, hidden-tab lifecycle",
+      "reason": "Не выполнялись. Чтение ветвей не равно подтверждённому дефекту.",
+      "proposedCheck": "Изолированные браузерные сценарии после согласования покрытия."
+    }
+  ],
+  "sources": [
+    {
+      "id": "R10-S01",
+      "type": "repository-document",
+      "paths": [
+        "AGENTS.md",
+        "PROJECT_INFO/architecture.md",
+        "PROJECT_INFO/development.md",
+        "PROJECT_INFO/known-issues.md"
+      ],
+      "use": "Обязательное первое чтение, инварианты и границы."
+    },
+    {
+      "id": "R10-S02",
+      "type": "repository-document",
+      "locations": [
+        {
+          "path": "PROJECT_INFO/observation.md",
+          "startLine": 50,
+          "endLine": 54
+        },
+        {
+          "path": "PROJECT_INFO/observation.md",
+          "startLine": 108,
+          "endLine": 171
+        },
+        {
+          "path": "PROJECT_INFO/reconciliation.md",
+          "startLine": 261,
+          "endLine": 278
+        }
+      ],
+      "use": "Контракты polling, identity, forms и receipts."
+    },
+    {
+      "id": "R10-S03",
+      "type": "current-code",
+      "locations": [
+        {
+          "path": "src/graph-view/app.js",
+          "startLine": 1,
+          "endLine": 1648
+        },
+        {
+          "path": "src/graph-view/task-scope.js",
+          "startLine": 1,
+          "endLine": 166
+        },
+        {
+          "path": "src/graph-view/usage-pages.js",
+          "startLine": 1,
+          "endLine": 72
+        }
+      ],
+      "use": "Прочитаны полностью, основные причины и существующие guards."
+    },
+    {
+      "id": "R10-S04",
+      "type": "current-code",
+      "locations": [
+        {
+          "path": "src/graph-view/model.ts",
+          "startLine": 11,
+          "endLine": 123
+        },
+        {
+          "path": "src/graph-view/server.ts",
+          "startLine": 1,
+          "endLine": 324
+        }
+      ],
+      "use": "Проекция и реальные HTTP-контракты; production server не запускался."
+    },
+    {
+      "id": "R10-S05",
+      "type": "current-code",
+      "locations": [
+        {
+          "path": "src/run-controller.ts",
+          "startLine": 282,
+          "endLine": 324
+        },
+        {
+          "path": "src/reconciliation.ts",
+          "startLine": 18,
+          "endLine": 50
+        },
+        {
+          "path": "src/run-store.ts",
+          "startLine": 783,
+          "endLine": 823
+        }
+      ],
+      "use": "Контрдоказательства серверной потере/обходу recovery guard."
+    },
+    {
+      "id": "R10-S06",
+      "type": "executed-regressions",
+      "locations": [
+        {
+          "path": "tests/graph-view-observation.test.ts",
+          "startLine": 15,
+          "endLine": 663
+        },
+        {
+          "path": "tests/graph-view-task-scope.test.ts",
+          "startLine": 38,
+          "endLine": 160
+        },
+        {
+          "path": "tests/usage-pages.test.ts",
+          "startLine": 6,
+          "endLine": 31
+        },
+        {
+          "path": "tests/graph-transition-scope.test.ts",
+          "startLine": 89,
+          "endLine": 189
+        },
+        {
+          "path": "tests/graph-node-accessibility.test.ts",
+          "startLine": 185,
+          "endLine": 329
+        }
+      ],
+      "use": "R10-E01: 33/33; native Chrome cases не пропущены."
+    },
+    {
+      "id": "R10-S07",
+      "type": "git-history",
+      "commands": [
+        "git log -16 --oneline",
+        "git show --stat e15bc40",
+        "git show fea2136 -- src/graph-view/app.js",
+        "git show d72df5d -- src/graph-view/app.js",
+        "git log -10 --oneline -- src/graph-view/usage-pages.js src/graph-view/task-scope.js"
+      ],
+      "use": "e15bc40 только документирует оставшийся inspector disclosure boundary; исправления fea2136/d72df5d не переоткрыты."
+    }
+  ],
+  "reproduction": {
+    "description": "Извлечь runner/common/cases в новый /tmp/r10-async-replay.XXXXXX и запускать каждый case через node browser.mjs \"$PWD\" case.js. Полная extraction-команда в Markdown. Код fixtures, не сырые логи.",
+    "requirements": [
+      "Node.js",
+      "Python 3 для extraction",
+      "Chrome в стандартном пути macOS; иначе адаптировать только fixture executable path"
+    ],
+    "appSha256": "4c9a99d44fa98cc39ff058a8da2868255d77d18c6b4b24ed03abd17ab5a33548",
+    "fixtureBoundary": "app.js automatic initial refresh/poll удалён у известной boundary, остальные production UI функции и imports неизменны. В task cases production poll tail восстановлен без изменений. Native DOM/history, fake fetch, temporary Chrome profile.",
+    "fixtureBase": "Чистый graphSnapshot из tests/graph-view-observation.test.ts:15–31; без открытия контроллера/БД.",
+    "runner": "import assert from 'node:assert/strict';\nimport { createServer } from 'node:http';\nimport { readFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';\nimport { join } from 'node:path';\nimport { spawn } from 'node:child_process';\nconst [root, scenarioFile] = process.argv.slice(2);\nconst scenario = readFileSync(scenarioFile, 'utf8');\nconst app = readFileSync(join(root,'src/graph-view/app.js'),'utf8').split('await refreshRuns();\\nlet tick = 0;')[0];\nlet resolve, reject; const result = new Promise((a,b)=>{resolve=a;reject=b;});\nconst requests=[];\nconst server=createServer((req,res)=>{\n  if(req.method==='POST'&&req.url==='/r10-result'){\n    let body='';req.setEncoding('utf8');req.on('data',s=>body+=s);req.on('end',()=>{res.writeHead(204).end();resolve(JSON.parse(body));});return;\n  }\n  const name=req.url?.split('?')[0].slice(1)||'index.html';\n  requests.push(name);\n  if(!['index.html','app.js','layout.js','usage-pages.js','task-scope.js','style.css'].includes(name)){res.writeHead(404).end();return;}\n  res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html');\n  res.setHeader('Cache-Control','no-store');\n  if(name==='app.js')res.end(app+`\\nconst nativeFetch=globalThis.fetch.bind(globalThis);\\ntry {\\n${scenario}\\n} catch(error) { await nativeFetch('/r10-result',{method:'POST',body:JSON.stringify({error:String(error.stack)})}); }`);\n  else res.end(readFileSync(join(root,'src/graph-view',name)));\n});\nawait new Promise(r=>server.listen(0,'127.0.0.1',r));\nconst profile=mkdtempSync('/tmp/r10-async-chrome.');mkdirSync(join(profile,'home'));\nconst browser=spawn('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',[\n  '--headless','--no-sandbox','--enable-automation','--no-default-browser-check','--disable-component-update','--disable-default-apps','--no-service-autorun','--password-store=basic','--use-mock-keychain','--disable-gpu','--disable-background-networking','--no-proxy-server','--disable-background-timer-throttling','--disable-renderer-backgrounding','--no-first-run',`--user-data-dir=${profile}`,`http://127.0.0.1:${server.address().port}/`\n],{env:{...process.env,HOME:join(profile,'home')},stdio:['ignore','ignore','pipe'],detached:true});\nbrowser.stderr.on('data',()=>{});browser.on('error',reject);\nconst deadline=setTimeout(()=>reject(Error('r10 fixture did not report in 25s')),25000);\ntry { const observed=await result;assert.ok(!observed.error,observed.error);console.log(JSON.stringify(observed,null,2)); }\nfinally {\n  clearTimeout(deadline);\n  try{process.kill(-browser.pid,'SIGKILL');}catch(e){if(e.code!=='ESRCH')throw e;}\n  browser.stderr.destroy();browser.unref();server.closeAllConnections();await new Promise(r=>server.close(r));\n  rmSync(profile,{recursive:true,force:true,maxRetries:3,retryDelay:100});\n}\n",
+    "common": "const base={\"cwd\":\"/fixture\",\"id\":\"run-observation\",\"name\":\"Observation\",\"planHash\":\"\",\"workflowRevision\":1,\"preparedId\":null,\"lineage\":null,\"status\":\"waiting\",\"desired\":\"running\",\"createdAt\":1,\"updatedAt\":2,\"heartbeatAt\":null,\"taskOutcome\":null,\"presentation\":{\"status\":\"waiting\",\"desired\":\"running\",\"statusLabel\":\"Ждёт ответа\",\"taskOutcome\":null,\"outcomeLabel\":null,\"accepted\":null,\"activeKeys\":[],\"waitingKeys\":[\"key-correctness\"],\"retryingKeys\":[],\"terminal\":false,\"liveness\":{\"state\":\"unknown\",\"label\":\"Состояние процессов не проверено\",\"supervisorAlive\":null,\"unresolvedGroupProcesses\":null,\"workersAlive\":null,\"observedAt\":null}},\"trace\":{\"supported\":false,\"count\":0,\"failed\":0,\"lastSeq\":0,\"edges\":[]},\"waits\":[{\"id\":\"wait-correctness\",\"runId\":\"run-observation\",\"key\":\"key-correctness\",\"reason\":\"Нужны данные\",\"input\":{\"same\":\"input\"},\"responseSchema\":{\"type\":\"object\",\"properties\":{\"answer\":{\"type\":\"string\"}},\"required\":[\"answer\"],\"additionalProperties\":false},\"status\":\"open\",\"createdAt\":1,\"resolvedAt\":null,\"resolvedBy\":null}],\"accepted\":null,\"activeKeys\":[],\"retryingKeys\":[],\"error\":null,\"failure\":null,\"usage\":{\"input\":0,\"output\":0,\"totalTokens\":0,\"cost\":0,\"reported\":0,\"costReported\":0,\"missing\":0,\"pending\":0,\"earlierAttempts\":0,\"cacheRead\":0,\"cacheWrite\":0,\"reasoning\":0,\"cacheReported\":0,\"reasoningReported\":0,\"incomplete\":0,\"responses\":0,\"cacheReadReported\":0,\"cacheWriteReported\":0,\"cacheReadPartial\":false,\"cacheWritePartial\":false,\"reasoningPartial\":false,\"costPartial\":false,\"partial\":false},\"entryGraph\":\"main\",\"graphs\":[{\"id\":\"main\",\"entry\":\"answer\",\"nodes\":[{\"branches\":1,\"id\":\"answer\",\"kind\":\"await\",\"failurePolicy\":null,\"retryPolicy\":null,\"role\":null,\"bindingId\":null,\"status\":\"waiting\",\"model\":null,\"thinking\":null,\"children\":[],\"usage\":{\"input\":0,\"output\":0,\"totalTokens\":0,\"cost\":0,\"reported\":0,\"costReported\":0,\"missing\":0,\"pending\":0,\"earlierAttempts\":0,\"cacheRead\":0,\"cacheWrite\":0,\"reasoning\":0,\"cacheReported\":0,\"reasoningReported\":0,\"incomplete\":0,\"responses\":0,\"cacheReadReported\":0,\"cacheWriteReported\":0,\"cacheReadPartial\":false,\"cacheWritePartial\":false,\"reasoningPartial\":false,\"costPartial\":false,\"partial\":false},\"activations\":[{\"scope\":\"[\\\"graph\\\",\\\"main\\\",\\\"node\\\",\\\"council\\\",\\\"visit\\\",\\\"0\\\",\\\"parallel\\\",\\\"correctness\\\",\\\"graph\\\",\\\"main\\\"]\",\"key\":\"key-correctness\",\"path\":\"council #1 / correctness / answer · проход 1\",\"status\":\"waiting\",\"visit\":1,\"attempt\":1,\"startedAt\":1,\"finishedAt\":null,\"usage\":null,\"usageComplete\":false,\"usageRecordedAttempts\":1,\"activity\":null,\"error\":null,\"failure\":null,\"failureCauses\":null,\"outputRepair\":null,\"collectionSummary\":null,\"retry\":null,\"reused\":null,\"result\":null,\"findings\":[]}]}],\"edges\":[]}]};\n\nconst check=(v,m)=>{if(!v)throw Error(m);};\nconst deferred=()=>{let resolve,reject;const promise=new Promise((a,b)=>{resolve=a;reject=b;});return {promise,resolve,reject};};\nconst response=value=>({ok:true,status:200,json:async()=>value});\nconst drain=async()=>{for(let i=0;i<20;i++)await Promise.resolve();};\nconst findButton=text=>[...document.querySelectorAll('button')].find(b=>b.textContent===text);\nconst initialize=run=>{state.id=run.id;state.run=run;state.graph=run.entryGraph;state.tab='now';state.runs=[run];renderRuns();renderHeader();renderPanel();};\n",
+    "cases": {
+      "list": "const current={...base,status:'paused',desired:'paused',presentation:{...base.presentation,status:'paused',desired:'paused',statusLabel:'Пауза'}};\ninitialize(base);\nconst oldReply=deferred(); let count=0,posts=0;\nglobalThis.fetch=async(path,options)=>{\n  if(path==='runs')return ++count===1?oldReply.promise:response({runs:[current]});\n  if(path==='control'){posts++;return response({ok:true});}\n  if(path.startsWith('snapshot?'))return response(current);\n  throw Error('Unexpected '+path);\n};\nconst old=refreshRuns(); await control('pause');\ncheck(state.runs[0].status==='paused','fresh control follow-up must arrive first');\nconst before={list:state.runs[0].status,detail:state.run.status};\noldReply.resolve(response({runs:[base]}));await old;\nconst after={list:state.runs[0].status,detail:state.run.status,sidebar:$('runs').textContent};\ncheck(after.list==='waiting'&&after.detail==='paused','expected current list rollback reproduction');\nawait refreshRuns();check(state.runs[0].status==='paused','fresh reload recovers');\nconst pending=deferred();let n=0;globalThis.fetch=path=>path==='runs'?(++n===1?pending.promise:Promise.resolve(response({runs:[current]}))):Promise.resolve(response(current));\nconst failed=refreshRuns();await refreshSnapshot();await refreshRuns();pending.reject(Error('OLDER_LIST_FAILURE'));await failed;\ncheck($('notice').textContent==='OLDER_LIST_FAILURE','old list failure should currently overwrite current notice');\nawait nativeFetch('/r10-result',{method:'POST',body:JSON.stringify({probe:'R10-B01',before,after,recoveredList:state.runs[0].status,afterStaleError:{notice:$('notice').textContent,connection:$('connection').textContent},posts})});\n",
+      "task": "const run={...base,lineage:{taskId:'fixture-task',role:'root',launchedWithTask:true}};\nconst other={...run,id:'fixture-other',usage:{...base.usage,totalTokens:30,input:10,output:20,reported:1}};\nconst usage={taskId:'fixture-task',summary:other.usage,runs:[{id:run.id,summary:run.usage},{id:other.id,summary:other.usage}],reusedOutputs:0};\nconst nativeSetTimeout=globalThis.setTimeout.bind(globalThis),pollTimers=[];\nglobalThis.setTimeout=(fn,ms,...args)=>{const handle=nativeSetTimeout(fn,ms,...args);if(fn.name==='poll')pollTimers.push(handle);return handle;};\nconst sleep=ms=>new Promise(r=>nativeSetTimeout(r,ms));\nlet usageCalls=0,taskCalls=0,snapshotCalls=0,runCalls=0;\nglobalThis.fetch=async(path)=>{\n  if(path.startsWith('task-usage?')){usageCalls++;await sleep(1600);return response(usage);}\n  if(path.startsWith('task?')){taskCalls++;return response({members:[{runId:run.id},{runId:other.id}]});}\n  if(path.startsWith('snapshot?')){snapshotCalls++;return response(path.endsWith(other.id)?other:run);}\n  if(path==='runs'){runCalls++;return response({runs:[run,other]});}\n  throw Error('Unexpected '+path);\n};\ninitialize(run);setTab('tokens');findButton('Вся задача').click();\n\n// Unchanged production polling, including 1000ms schedule.\nlet tick = 0;\nasync function poll() {\n  await refreshSnapshot();\n  for (const node of document.querySelectorAll(\"[data-started-at]\"))\n    node.textContent =\n      node.dataset.prefix +\n      duration(\n        (node.dataset.finishedAt\n          ? Number(node.dataset.finishedAt)\n          : Date.now()) - Number(node.dataset.startedAt),\n      ) +\n      node.dataset.suffix;\n  if (++tick % 3 === 0) await refreshRuns();\n  if (state.run && !finished.has(state.run.status) && $(\"elapsed\"))\n    $(\"elapsed\").textContent = duration(Date.now() - state.run.createdAt);\n  setTimeout(poll, 1000);\n}\nsetTimeout(poll, 1000);\n\nawait sleep(4400);\nconst stalled={usageCalls,taskCalls,snapshotCalls,runCalls,taskUsage:state.taskUsage?.taskId??null,selectedTask:state.usageScope==='task',total:$('content-panel').querySelector('.token-breakdown strong')?.textContent};\ncheck(stalled.usageCalls>=5&&stalled.taskCalls===0&&stalled.taskUsage===null,'expected task request starvation during unchanged poll');\nfor(const id of pollTimers)clearTimeout(id);\nawait sleep(1800);\nconst recovered={usageCalls,taskCalls,taskId:state.taskUsage?.taskId,total:$('content-panel').querySelector('.token-breakdown strong')?.textContent};\ncheck(recovered.taskId==='fixture-task'&&recovered.total==='30','the same slow API must work with polling stopped');\nawait nativeFetch('/r10-result',{method:'POST',body:JSON.stringify({probe:'R10-B02',latencyMs:1600,observationMs:4400,stalled,recovered})});\n",
+      "task-fast": "const run={...base,lineage:{taskId:'fixture-task',role:'root',launchedWithTask:true}};\nconst other={...run,id:'fixture-other',usage:{...base.usage,totalTokens:30,input:10,output:20,reported:1}};\nconst usage={taskId:'fixture-task',summary:other.usage,runs:[{id:run.id,summary:run.usage},{id:other.id,summary:other.usage}],reusedOutputs:0};\nconst nativeSetTimeout=globalThis.setTimeout.bind(globalThis),pollTimers=[];\nglobalThis.setTimeout=(fn,ms,...args)=>{const handle=nativeSetTimeout(fn,ms,...args);if(fn.name==='poll')pollTimers.push(handle);return handle;};\nconst sleep=ms=>new Promise(r=>nativeSetTimeout(r,ms));\nlet usageCalls=0,taskCalls=0,snapshotCalls=0,runCalls=0;\nglobalThis.fetch=async(path)=>{\n  if(path.startsWith('task-usage?')){usageCalls++;await sleep(20);return response(usage);}\n  if(path.startsWith('task?')){taskCalls++;return response({members:[{runId:run.id},{runId:other.id}]});}\n  if(path.startsWith('snapshot?')){snapshotCalls++;return response(path.endsWith(other.id)?other:run);}\n  if(path==='runs'){runCalls++;return response({runs:[run,other]});}\n  throw Error('Unexpected '+path);\n};\ninitialize(run);setTab('tokens');findButton('Вся задача').click();\n\n// Unchanged production polling, including 1000ms schedule.\nlet tick = 0;\nasync function poll() {\n  await refreshSnapshot();\n  for (const node of document.querySelectorAll(\"[data-started-at]\"))\n    node.textContent =\n      node.dataset.prefix +\n      duration(\n        (node.dataset.finishedAt\n          ? Number(node.dataset.finishedAt)\n          : Date.now()) - Number(node.dataset.startedAt),\n      ) +\n      node.dataset.suffix;\n  if (++tick % 3 === 0) await refreshRuns();\n  if (state.run && !finished.has(state.run.status) && $(\"elapsed\"))\n    $(\"elapsed\").textContent = duration(Date.now() - state.run.createdAt);\n  setTimeout(poll, 1000);\n}\nsetTimeout(poll, 1000);\n\nawait sleep(4400);\nconst stalled={usageCalls,taskCalls,snapshotCalls,runCalls,taskUsage:state.taskUsage?.taskId??null,selectedTask:state.usageScope==='task',total:$('content-panel').querySelector('.token-breakdown strong')?.textContent};\ncheck(stalled.usageCalls>=5&&stalled.taskCalls>=5&&stalled.taskUsage==='fixture-task'&&stalled.total==='30','fast task API should not starve');\nfor(const id of pollTimers)clearTimeout(id);\nawait sleep(1800);\nconst recovered={usageCalls,taskCalls,taskId:state.taskUsage?.taskId,total:$('content-panel').querySelector('.token-breakdown strong')?.textContent};\ncheck(recovered.taskId==='fixture-task'&&recovered.total==='30','the same slow API must work with polling stopped');\nawait nativeFetch('/r10-result',{method:'POST',body:JSON.stringify({probe:'R10-B02-fast-control',latencyMs:20,observationMs:4400,stalled,recovered})});\n",
+      "recovery": "const run=structuredClone(base);run.status='paused';run.desired='paused';run.waits=[];\nrun.presentation.status='paused';run.presentation.statusLabel='Пауза';run.presentation.desired='paused';\nconst node=run.graphs[0].nodes[0],activation=node.activations[0];\nnode.kind='check';node.status='failed';activation.status='failed';activation.finishedAt=2;\nconst id=JSON.stringify([run.id,activation.key]),draftId=JSON.stringify([run.id,activation.key,1]);\nconst inspection={value:{attempt:1,checkpoint:'1'.repeat(64),observedAt:2,blockers:[],workspace:{digest:'2'.repeat(64),roots:[],entries:0,bytes:0}},records:[]};\nrecoveryInspections.set(id,inspection);initialize(run);state.node=node.id;renderPanel();\nconst oldReply=deferred();let receipts=[],reads=0,posts=0;\nglobalThis.fetch=async(path,options)=>{\n  if(path.startsWith('reconciliations?'))return ++reads===1?oldReply.promise:response(receipts);\n  if(path==='reconcile'){posts++;const receipt={request:JSON.parse(options.body),createdAt:3,application:null,supersededBy:null,planHash:'3'.repeat(64),workspace:inspection.value.workspace};receipts=[receipt];return response(receipt);}\n  if(path.startsWith('snapshot?'))return response(run);\n  throw Error('Unexpected '+path);\n};\nfindButton('Решения о восстановлении').click();\nconst fill=(name,value,event='input')=>{const field=document.getElementById(`recovery-${encodeURIComponent(draftId)}-${name}`);field.value=value;field.dispatchEvent(new Event(event));};\nfill('action','retry','change');fill('actor','Fixture');fill('reason','Reviewed fixture');fill('evidence','No outside effects');\nfindButton('Сохранить решение').click();await drain();\nconst draft=recoveryDrafts.get(draftId);\ncheck(!!draft.receipt&&!draft.busy,'POST should be settled');\nconst before={records:reconciliationRecords.get(id).value.length,saved:reconciliationRecords.get(id).saved,receipt:!!draft.receipt};\noldReply.resolve(response([]));await drain();\nconst after={records:reconciliationRecords.get(id).value.length,saved:!!reconciliationRecords.get(id).saved,receipt:!!draft.receipt,claimsNoRecords:$('inspector').textContent.includes('Сохранённых решений нет.'),claimsSaved:$('inspector').textContent.includes('Решение сохранено.')};\ncheck(before.records===1&&after.records===0&&after.receipt&&after.claimsNoRecords&&after.claimsSaved,'expected stale list contradiction');\nfindButton('Обновить решения о восстановлении').click();await drain();\ncheck(reconciliationRecords.get(id).value.length===1,'fresh explicit read recovers');\nawait nativeFetch('/r10-result',{method:'POST',body:JSON.stringify({probe:'R10-B03',before,after,recoveredRecords:reconciliationRecords.get(id).value.length,posts,reads})});\n",
+      "current-fixes": "const other=structuredClone(base);other.id='fixture-other';other.waits[0].id='wait-other';other.waits[0].runId=other.id;\nlet currentBase=base;const post=deferred();let posts=0,snapshots=0,controlPosts=0;\nglobalThis.fetch=async(path,options)=>{\n  if(path==='resolve'){posts++;return post.promise;}\n  if(path==='control'){controlPosts++;throw Error('Unexpected control POST');}\n  if(path.startsWith('snapshot?')){snapshots++;return response(path.endsWith(other.id)?other:currentBase);}\n  if(path==='runs')return response({runs:[base,other]});\n  throw Error('Unexpected '+path);\n};\ninitialize(base);window.history.replaceState({},'',`?run=${base.id}`);\nconst fieldId=`wait-response-${base.waits[0].id}`;\nconst field=document.getElementById(fieldId);field.value=Array.from({length:100},(_,i)=>`line-${i} long sample`).join('\\n');field.dispatchEvent(new Event('input'));field.focus();field.setSelectionRange(2,12,'backward');field.scrollTop=300;\ndocument.querySelector('details[data-wait-details]').open=true;\nconst scrollBefore=field.scrollTop;currentBase={...base,usage:{...base.usage,totalTokens:1}};await refreshSnapshot();\nconst updated=document.getElementById(fieldId);\ncheck(updated!==field&&document.activeElement===updated&&updated.selectionStart===2&&updated.selectionEnd===12&&updated.selectionDirection==='backward'&&updated.scrollTop===scrollBefore&&document.querySelector('details[data-wait-details]').open,'fixed wait persistence');\nconst persisted={focus:document.activeElement===updated,direction:updated.selectionDirection,scrollBefore,scrollAfter:updated.scrollTop,disclosure:document.querySelector('details[data-wait-details]').open};\nupdated.value='{\"answer\":\"original\"}';updated.dispatchEvent(new Event('input'));findButton('Сохранить ответ').click();\n$('cancel').click();check($('cancel-dialog').open,'cancel modal opens');\nawait selectRun(other.id);check(!$('cancel-dialog').open&&state.id===other.id,'navigation closes cancel');\nconst popped=new Promise(resolve=>window.addEventListener('popstate',resolve,{once:true}));window.history.back();await popped;await drain();\ncheck(state.id===base.id&&state.run.id===base.id&&new URL(window.location.href).searchParams.get('run')===base.id,'real Back restored A');\nconst backField=document.getElementById(fieldId);check(backField.value==='{\"answer\":\"original\"}'&&document.querySelector('details[data-wait-details]').open,'draft and disclosure restored after Back');\nbackField.value='CURRENT_DRAFT';backField.dispatchEvent(new Event('input'));notice('CURRENT_NOTICE');const before=snapshots;\npost.resolve(response({ok:true}));await drain();\ncheck(snapshots===before&&posts===1&&document.getElementById(fieldId).value==='CURRENT_DRAFT'&&$('notice').textContent==='CURRENT_NOTICE','late await reply isolated to original visit');\n$('cancel-confirm').click();await drain();check(posts===1&&controlPosts===0,'old cancel confirmation inert');\nawait nativeFetch('/r10-result',{method:'POST',body:JSON.stringify({probe:'R10-AF-native',wait:persisted,historyBack:{run:state.id,urlRun:new URL(window.location.href).searchParams.get('run'),dialogClosed:!$('cancel-dialog').open,controlPosts},delayedWait:{posts,extraSnapshots:snapshots-before,draft:document.getElementById(fieldId).value,notice:$('notice').textContent}})});\n"
+    }
+  },
+  "blockers": []
+}

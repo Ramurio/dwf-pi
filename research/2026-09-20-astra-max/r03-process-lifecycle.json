@@ -1,0 +1,948 @@
+{
+  "metadata": {
+    "researchId": "r03",
+    "topic": "Идентичность и жизненный цикл процессов",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "date": "2026-09-20",
+    "generatedAt": "2026-09-20T13:11:06.906761+00:00",
+    "language": "ru",
+    "actualCwd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/997f1a4e97442278d27defcb44e62736b625fd4981f9a87a3c05db8a3737c7e6",
+    "status": "complete",
+    "artifacts": [
+      "research/2026-09-20-astra-max/r03-process-lifecycle.md",
+      "research/2026-09-20-astra-max/r03-process-lifecycle.json"
+    ],
+    "environment": {
+      "node": "v26.8.1",
+      "platform": "Darwin arm64"
+    },
+    "finalizedAt": "2026-09-20T13:17:28.771830+00:00"
+  },
+  "summary": "Два дефекта study-source независимо подтверждены свежими offline fixtures: locale-C/Unicode ps ложно прерывает живой await-supervisor; stdin chunk decoding повреждает UTF-8 у обоих worker entrypoints. 57 исторических проверок подтверждены по сохранённым файлам результатов, не перезапускались. Три действующие защиты отмечены already-fixed, две гипотезы остаются unknown. Реализации нет.",
+  "continuationProvenance": {
+    "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+    "newRunId": "run-9dbb044c-664f-4dd8-96c0-57192dc4ed89",
+    "oldWorkspace": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/997f1a4e97442278d27defcb44e62736b625fd4981f9a87a3c05db8a3737c7e6",
+    "oldOperationStatus": "failed",
+    "failureFromInput": {
+      "code": "provider",
+      "message": "Pi assistant turn failed: terminated",
+      "effects": "unknown",
+      "interpretation": "Не считается доказательством process race в Dynamicwf."
+    },
+    "oldReports": [
+      {
+        "path": "research/2026-09-20-astra-max/r03-process-lifecycle.md",
+        "exists": false,
+        "sha256": null,
+        "verification": "Отсутствие независимо проверено в старом worktree; хеш отсутствующего файла невозможен."
+      },
+      {
+        "path": "research/2026-09-20-astra-max/r03-process-lifecycle.json",
+        "exists": false,
+        "sha256": null,
+        "verification": "Отсутствие независимо проверено в старом worktree; хеш отсутствующего файла невозможен."
+      }
+    ],
+    "retainedActionEvidence": {
+      "path": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r03-actions.json",
+      "sha256": "a5224f507de80cb3df3c4edeb8bf92e4b66a1f0742b1ed7441938b88c030cc3c",
+      "bytes": 78364,
+      "records": 17,
+      "format": "Только команды, без их tool outputs. Последняя содержит частичный draft writer и обрывается на print(json. В continuation этот writer не запускался."
+    },
+    "carriedFacts": [
+      "R03-001..R03-007 и структура доказательств взяты из неполного черновика, не выданы за ранее успешную публикацию.",
+      "Исторические E01/E02: результаты 27+30 подтверждены сохранившимися файлами; shell exit code отдельно не сохранён.",
+      "Сохранённые locale/utf8 fixtures использованы как evidence, их SHA256 и совпадение с heredoc проверены."
+    ],
+    "recheckedFacts": [
+      "Профильные file:line по точной базе; current/old/dev bytes для процессных модулей и тестов.",
+      "R03-001 и R03-002: только новые fixtures/БД в новом /tmp/r03-cont-v1-*; результаты E08/E09.",
+      "OS-механизм locale E10; остановка только новых собственных supervisor подтверждена read-only журналами и ps stat."
+    ],
+    "addedFacts": [
+      "Разделение study-source и publicationRevision; E07 diff и postStudyAlreadyFixed.",
+      "Явная неполнота retained command-only evidence, происхождение/хеши логов, новый пакет с финальными хешами."
+    ],
+    "notRepeated": [
+      "E01/E02 tests, полный npm test, git-recovery-crash, skill-handoff, provider/model calls, старый writer/старые run/старые tmp fixtures"
+    ],
+    "independence": "Отчёты соседних исследователей не читались."
+  },
+  "coverage": [
+    {
+      "area": "Ownership/reserve/spawn/attach/observe/control",
+      "files": [
+        "src/run-controller.ts",
+        "src/supervisor.ts",
+        "src/run-store.ts"
+      ],
+      "method": "Чтение механизмов и тестов; E01/E02 исторические логи; E08/E10 новые процессы.",
+      "result": "R03-001 bug; R03-003 already-fixed."
+    },
+    {
+      "area": "Worker identity/reserved/started/ready/EOF/disconnect/exit/close",
+      "files": [
+        "src/process-client.ts",
+        "src/pi-worker-process.ts",
+        "src/check-worker-process.ts",
+        "src/run-runtime.ts",
+        "src/pi-worker.ts"
+      ],
+      "method": "Полные entrypoint/client; профильные runtime функции; E01/E02 логи; E09.",
+      "result": "R03-002 bug; R03-004 already-fixed."
+    },
+    {
+      "area": "Stale workers/groups/PID reuse",
+      "files": [
+        "src/process-groups.ts",
+        "src/run-controller.ts",
+        "src/run-runtime.ts",
+        "src/run-store.ts"
+      ],
+      "method": "Чтение кода и tests; E01 реальные own fixtures по сохранённым логам.",
+      "result": "R03-005 already-fixed; R03-006 unknown; kernel reuse не создавался."
+    },
+    {
+      "area": "Документы/история/границы flakes",
+      "files": [
+        "AGENTS.md",
+        "PROJECT_INFO/architecture.md",
+        "PROJECT_INFO/development.md",
+        "PROJECT_INFO/known-issues.md",
+        "PROJECT_INFO/run-journal.md",
+        "PROJECT_INFO/reconciliation.md",
+        "PROJECT_INFO/execution-plan.md"
+      ],
+      "method": "Независимое чтение до новых probes; git log и профильный diff.",
+      "result": "R03-007 unknown. Post-study изменения отдельно."
+    }
+  ],
+  "findingCounts": {
+    "bug": 2,
+    "already-fixed": 3,
+    "unknown": 2,
+    "idea": 0,
+    "total": 7
+  },
+  "findings": [
+    {
+      "id": "R03-001",
+      "classification": "bug",
+      "severity": "medium",
+      "confidence": "high",
+      "title": "LC_ALL=C у наблюдателя превращает живой supervisor с Unicode-путём журнала в interrupted на macOS",
+      "evidence": [
+        "src/run-controller.ts:29-34",
+        "src/run-controller.ts:43-63",
+        "src/run-controller.ts:66-67",
+        "src/run-controller.ts:229-264",
+        "src/supervisor.ts:31-37"
+      ],
+      "trigger": "Darwin/macOS; Unicode в пути журнала (в fixture — каталог «журнал»); workerless supervisor в await; LC_ALL=C только у наблюдателя. Supervisor запущен и наблюдается живым в UTF-8 locale.",
+      "expected": "Смена locale представления ps не должна менять идентичность OS-процесса. observe должен сохранить supervisorAlive=true, owner и waiting; неверный owner/run/store/script по-прежнему должен отвергаться.",
+      "observed": "E08: ASCII-каталог — liveBefore=true, utf8Alive=true, cAlive=true, status=waiting, ownerRetained=true, interruptedEvents=0. Unicode-каталог — liveBefore=true, utf8Alive=true, cAlive=false, status=interrupted, ownerRetained=false, interruptedEvents=1; supervisor сам остановился после fencing. E10: C скрывает буквальный Unicode argv через M- notation, en_US.UTF-8 сохраняет его.",
+      "cause": "ps вызывается с унаследованной locale. На проверенной macOS при C Unicode argv представляются через M- notation, а matchesCommand сравнивает их с буквальными Unicode script/store. Несовпадение принимается за отсутствие нужного процесса, затем observe записывает markInterrupted при отсутствии workers/groups.",
+      "experiments": [
+        "E04",
+        "E08",
+        "E10"
+      ],
+      "reproduction": {
+        "fixture": "locale.mjs",
+        "fixtureSha256": "8878ebb3f32314796129b6841a3cbdd89323006dede328dfd724d820c3460f90",
+        "markdownSection": "Приложение A",
+        "command": "TMPDIR=\"$ROOT\" node --import \"$ROOT/study-source/node_modules/tsx/dist/loader.mjs\" \"$ROOT/locale.mjs\" \"$ROOT/study-source\" \"$ROOT\"",
+        "setup": "Новый mktemp -d /tmp/r03-repro-XXXXXX; скопировать src и package.json из study-source cwd, symlink на существующие node_modules разрешённого dev; сохранить приложение под указанным именем в новом ROOT. Полная подготовка в Markdown, раздел 5. Никаких старых fixtures/живых БД."
+      },
+      "counterEvidence": [
+        "E01: текущая защита другой установки с пробелами в пути и legacy/pre-attach проходит; это не переоткрытие 37ff399.",
+        "E08: тот же Unicode-run перед сменой locale жив; ASCII-run при C также жив.",
+        "При живом распознанном worker или pending непустой группе guard не разрешает markInterrupted; не доказан запуск двух writers.",
+        "На Linux/Node 22.19 не выполнялось; не заявляется одинаковый формат ps на всех платформах."
+      ],
+      "recommendation": {
+        "minimalChange": "Стабилизировать кодировку argv-представления обоих вызовов ps в общем адаптере: для macOS передавать проверенную UTF-8 locale только дочернему ps, не менять locale запуска/задания. При невозможности получить достоверное представление вернуть ошибку/unknown, а не доказательство смерти.",
+        "risk": "Locale и формат ps платформозависимы; нельзя без проверки предполагать наличие C.UTF-8 на macOS или ослаблять точные owner/run/store/script сравнения.",
+        "acceptance": [
+          "Сохранённый Unicode store и Unicode script распознаются наблюдателями с C и UTF-8 locale, с attached PID и в pre-attach окне.",
+          "Контрольный ASCII-case и wrong owner/run/store/script остаются корректными; observe не пишет run.interrupted для живого waiting supervisor.",
+          "Проверка работает на macOS и выбранной поддерживаемой POSIX-платформе; ошибки ps не очищают owner."
+        ],
+        "implemented": false
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "provenance": {
+        "carriedFrom": "Последняя частичная команда-черновик retained r03-actions.json; не ранее опубликованный отчёт",
+        "rechecked": "Ссылки и механизм по исходникам текущего cwd на study-source; свежий полный locale fixture E08, OS-контроль E10",
+        "newFinding": false
+      },
+      "publicationStatus": "Профильные process/ownership файлы побайтно не изменены на publicationRevision; исправление не найдено в проверенном diff."
+    },
+    {
+      "id": "R03-002",
+      "classification": "bug",
+      "severity": "medium",
+      "confidence": "high",
+      "title": "Поблочное декодирование stdin повреждает UTF-8 task/input и check args на границе pipe chunks",
+      "evidence": [
+        "src/pi-worker-process.ts:22-29",
+        "src/check-worker-process.ts:22-29",
+        "src/process-client.ts:90-94",
+        "src/process-client.ts:159-163",
+        "src/pi-worker.ts:312"
+      ],
+      "trigger": "UTF-8 многобайтный символ пересекает границу chunk stdin. JSON остаётся синтаксически допустимым, если разрез внутри строкового значения. Это возможно при одном штатном stdin.end(JSON.stringify(request)), не только при нескольких write.",
+      "expected": "Обёртка должна получить те же строки, которые сериализовал клиент, независимо от фрагментации pipe; check должен исполнить точные args, pi — получить точные task/input/cwd/config.",
+      "observed": "У настоящего check wrapper после split внутри «А»: exitCode=0 и stdout «��Б» вместо «АБ». У настоящего pi wrapper перехват результата JSON.parse зафиксировал task «��Б»; version=999 завершил вызов configuration до auth/model. Штатный runCheckProcess с аргументом из 70000 «А» вернул exitCode=0, 70002 символа и 4 U+FFFD вместо исходных 70000; SHA отличался. ASCII-префикс x сдвинул выравнивание: 70001 символ, 0 замен, SHA совпал.",
+      "cause": "Buffer.toString()/String(Buffer) декодируют каждый chunk независимо и заменяют оборванные последовательности. Последующее сложение строк не восстанавливает байты; JSON.parse принимает U+FFFD внутри JSON-строки. У stdout в process-client уже используется setEncoding(\"utf8\"), у stdin двух entrypoints нет потокового decoder.",
+      "experiments": [
+        "E05",
+        "E09"
+      ],
+      "reproduction": {
+        "fixture": "utf8.mjs",
+        "fixtureSha256": "a278a8d8a7e75201b37318c3a82bb04fb834f7f677f0c400ac728484d577c16a",
+        "markdownSection": "Приложение B",
+        "command": "TMPDIR=\"$ROOT\" node --import \"$ROOT/study-source/node_modules/tsx/dist/loader.mjs\" \"$ROOT/utf8.mjs\" \"$ROOT/study-source\" \"$ROOT\"",
+        "setup": "Новый mktemp -d /tmp/r03-repro-XXXXXX; скопировать src и package.json из study-source cwd, symlink на существующие node_modules разрешённого dev; сохранить приложение под указанным именем в новом ROOT. Полная подготовка в Markdown, раздел 5. Никаких старых fixtures/живых БД."
+      },
+      "counterEvidence": [
+        "E01 подтверждает literal args/отсутствие shell expansion: причина не shell quoting.",
+        "Контроль с x перед Unicode не повреждается: ошибка зависит от границ байтов, а не от любого русского текста.",
+        "В pi-проверке намеренно нет модели: доказана порча разобранного request, но не live provider prompt. Перенос в prompt при валидном запросе — вывод из src/pi-worker.ts:312.",
+        "ready/result NDJSON тесты и ошибки malformed JSON проходят, но не проверяют UTF-8, пересекающий границу stdin."
+      ],
+      "recommendation": {
+        "minimalChange": "Декодировать stdin потоково в обоих entrypoints (StringDecoder/setEncoding UTF-8) либо собрать Buffer до EOF и декодировать один раз. Сохранить abort/destroy, EOF admission и отказ до исполнения при незавершённом вводе; не вводить новые лимиты запроса.",
+        "risk": "Общий reader не должен сломать отмену до EOF, обработку закрытой трубы или строгую семантику JSON. Если вводится fatal UTF-8 decoding, его отказ должен оставаться setup/not-started.",
+        "acceptance": [
+          "Разрезать 2-, 3- и 4-байтные символы во всех внутренних позициях; оба wrapper должны сохранить точные строки.",
+          "Штатный runCheckProcess с большим Unicode-аргументом должен дать исходный SHA; ASCII-префиксы не меняют смысл.",
+          "Тесты SIGTERM/disconnect на незавершённом stdin и PID-checkpoint-before-send остаются зелёными.",
+          "Проверить task/input/cwd без вызова модели; успешный offline тест не объявлять проверкой провайдера."
+        ],
+        "implemented": false
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "provenance": {
+        "carriedFrom": "Последняя частичная команда-черновик retained r03-actions.json; не ранее опубликованный отчёт",
+        "rechecked": "Ссылки и механизм по исходникам текущего cwd на study-source; свежий split stdin + обычный runCheckProcess E09",
+        "newFinding": false
+      },
+      "publicationStatus": "Оба entrypoint и process-client побайтно одинаковы на study-source и publicationRevision."
+    },
+    {
+      "id": "R03-003",
+      "classification": "already-fixed",
+      "title": "Сохранённая launch provenance и CAS уже защищают от другой установки и обычного PID mismatch",
+      "evidence": [
+        "src/run-controller.ts:52-63",
+        "src/run-controller.ts:193-227",
+        "src/run-controller.ts:245-263",
+        "src/run-store.ts:319-342",
+        "tests/run-controller.test.ts:133-217",
+        "tests/run-store.test.ts:278-303"
+      ],
+      "facts": [
+        "Supervisor сверяется по сохранённым script/store/owner/run; legacy — по роли supervisor.ts и остальным аргументам.",
+        "Отсутствие PID после reserve не является разрешением второго reserve. В pre-attach окне ищется совпадающий процесс; новые владельцы получаются транзакционно.",
+        "Все проверенные stale-owner записи отвергаются. start не является неявным resume прерванной работы."
+      ],
+      "experiments": [
+        "E01",
+        "E02"
+      ],
+      "refutation": "Старое утверждение «панель из другой копии использует собственный путь supervisor и прерывает живой await» неприменимо к этой ревизии. R03-001 — отдельная ошибка представления argv при C locale, а не отсутствие provenance.",
+      "limits": [
+        "Нет фактического принудительного kernel PID reuse в этих тестах. Wrong PID/owner и legacy-case — проверенные контрпримеры, не защита от произвольного локального spoofing argv."
+      ],
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "provenance": {
+        "carriedFrom": "Последняя частичная команда-черновик retained r03-actions.json; не ранее опубликованный отчёт",
+        "rechecked": "Ссылки и механизм по исходникам текущего cwd на study-source",
+        "newFinding": false
+      }
+    },
+    {
+      "id": "R03-004",
+      "classification": "already-fixed",
+      "title": "Резервация до spawn, запись PID до stdin и ожидание exit+drained pipes реализованы",
+      "evidence": [
+        "src/process-client.ts:54-66",
+        "src/process-client.ts:71-140",
+        "src/process-client.ts:144-185",
+        "src/run-runtime.ts:33-40",
+        "src/run-runtime.ts:240-242",
+        "src/run-runtime.ts:281-285",
+        "src/pi-worker-process.ts:9-19",
+        "src/pi-worker-process.ts:38-43"
+      ],
+      "facts": [
+        "onStarting синхронно резервирует worker-token до spawn; onStarted синхронно сохраняет PID/group до stdin.end. Отказ обоих checkpoint предотвращает dispatch.",
+        "ready не является условием dispatch: parent отправляет после spawn+onStarted. ready в pi означает установленный bootstrap cancellation, не готовую модель/сессию.",
+        "settled требует exit и end/close обоих output pipes, а не обязательный ChildProcess.close. Итог до завершения/дренирования не публикуется.",
+        "Malformed/duplicate/post-result frames отвергаются; первое error сохраняется; nonzero exit не скрывается валидным result.",
+        "Effect finalizer ждёт process promise при отмене; incomplete stdin/SIGTERM/disconnect/EPIPE имеют проверенный cleanup."
+      ],
+      "experiments": [
+        "E01",
+        "E02"
+      ],
+      "limits": [
+        "Успех изолированных тестов не устанавливает причину известных flaky tests (R03-007).",
+        "Удерживаемая потомком труба может отложить drained condition: отсутствие close не эквивалентно разрешению принять незавершённые эффекты.",
+        "Синхронность callback — явный внутренний контракт ProcessOptions; текущий JournalRuntime ему соответствует."
+      ],
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "provenance": {
+        "carriedFrom": "Последняя частичная команда-черновик retained r03-actions.json; не ранее опубликованный отчёт",
+        "rechecked": "Ссылки и механизм по исходникам текущего cwd на study-source",
+        "newFinding": false
+      }
+    },
+    {
+      "id": "R03-005",
+      "classification": "already-fixed",
+      "title": "Неопределённые process groups блокируют освобождение owner; PGID не считается доказанным ownership",
+      "evidence": [
+        "src/process-groups.ts:5-23",
+        "src/run-controller.ts:238-263",
+        "src/run-controller.ts:270-274",
+        "src/run-runtime.ts:348-356",
+        "src/run-store.ts:325",
+        "src/run-store.ts:414",
+        "src/run-store.ts:435",
+        "src/run-store.ts:466",
+        "src/run-store.ts:739-767",
+        "src/supervisor.ts:54-64"
+      ],
+      "facts": [
+        "После wrapper result/exit runtime проверяет сохранённую группу; живые члены дают uncertain-effect/cleanup вместо успеха.",
+        "Controller показывает ownership=unverified и не сигналит только по оставшемуся номеру группы.",
+        "Пустая группа очищается по workerToken/groupPid/key checkpoint; неверный token не очищает новую запись. Zombies исключены, ?Es остаётся потенциально активным.",
+        "Обычные и TERM-resistant descendants own fixture завершаются после cancel/disconnect с предусмотренной TERM→KILL escalation."
+      ],
+      "experiments": [
+        "E01"
+      ],
+      "refutation": "Не подтверждено старое обобщение «result/close всегда означает cleanup всех процессов» или «cancel убивает чужую группу по одному сохранённому PGID». Текущий код имеет явные guards.",
+      "limits": [
+        "Тест reused group сеет номер реально посторонней fixture-группы в журнал, а не добивается настоящего kernel reuse.",
+        "Покинувшие группу процессы/внешние сервисы вне этого наблюдения, что прямо описано в PROJECT_INFO/reconciliation.md. Это не новая обнаруженная гонка.",
+        "SIGKILL SDK-процесса и detached bash из эксперимента общего пула не тестировались здесь заново."
+      ],
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "provenance": {
+        "carriedFrom": "Последняя частичная команда-черновик retained r03-actions.json; не ранее опубликованный отчёт",
+        "rechecked": "Ссылки и механизм по исходникам текущего cwd на study-source",
+        "newFinding": false
+      }
+    },
+    {
+      "id": "R03-006",
+      "classification": "unknown",
+      "title": "Атомарность проверки идентичности и последующего сигнала при настоящем PID/PGID reuse не доказана",
+      "evidence": [
+        "src/run-controller.ts:74-86",
+        "src/run-controller.ts:270-274",
+        "src/process-client.ts:21-49"
+      ],
+      "facts": [
+        "matchesProcess/ps и process.kill(-pid) — разные операции.",
+        "В process-client возможны последующие SIGKILL по числу группы: по cancellation timer и dispose; Unix birth identity/OS handle не хранится."
+      ],
+      "hypothesis": "Если номер группы действительно переиспользован между проверкой и kill, числовой сигнал потенциально может относиться к иной группе.",
+      "whyNotBug": "Не выполнено воспроизведение kernel PID/PGID reuse в таком окне. Нет наблюдения ошибочного сигнала, нет основания заявлять достижимость и частоту на этой macOS. Принадлежащие fixture группы были единственными целями сигналов.",
+      "counterEvidence": [
+        "Pending group guards и exact worker-token matching существенно сужают окна, а проверенный seeded reused-group вообще не сигналится (E01).",
+        "Ослабление cleanup до требования живого лидера потеряет TERM-resistant descendants после его выхода."
+      ],
+      "proposedCheck": "В полностью изолированной ОС/namespace воспроизвести смену birth identity группы между ps/exit/drain/escalation; сохранить только время, PID/PGID, birth identity и факт сигнала. Не делать стресс PID reuse среди пользовательских процессов.",
+      "recommendation": {
+        "minimalChange": "Сначала добавить такую fixture-проверку и наблюдаемость фаз; не менять production signalling без доказанного сценария. Повторная проверка argv перед сигналом может сузить, но не устраняет атомарный разрыв.",
+        "risk": "Переносимый OS identity adapter/handle затрагивает cleanup после смерти лидера и платформенные API; поспешное ограничение может оставлять потомков.",
+        "acceptance": [
+          "Эксперимент однозначно различает старую группу и новую, проверяя отсутствие сигнала новой.",
+          "Ordinary/TERM-resistant descendant cleanup и отсутствие скрытого повторного запуска сохраняются."
+        ],
+        "implemented": false
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "provenance": {
+        "carriedFrom": "Последняя частичная команда-черновик retained r03-actions.json; не ранее опубликованный отчёт",
+        "rechecked": "Ссылки и механизм по исходникам текущего cwd на study-source",
+        "newFinding": false
+      }
+    },
+    {
+      "id": "R03-007",
+      "classification": "unknown",
+      "title": "Причина документированных macOS process-test flakes остаётся неизвестной",
+      "evidence": [
+        "PROJECT_INFO/known-issues.md#Открытое наблюдение: нестабильные процессные тесты",
+        "tests/pi-worker.test.ts:362-370",
+        "tests/run-controller.test.ts:421-470"
+      ],
+      "facts": [
+        "Из сохранённых файлов результатов E01/E02 подтверждены 27/27 и 30/30 (включая 19 subtests) исторической операции на заявленной Node 26.8.1/Darwin arm64; в continuation эти наборы не перезапускались.",
+        "Новая среда также Node 26.8.1/Darwin arm64; дополнены только E08/E09/E10.",
+        "Полный npm test, git-recovery-crash, skill-handoff и сравнение Node 22.19 здесь не выполнялись."
+      ],
+      "whyNotBug": "Старое сообщение о таймауте не устанавливает новую race на этой ревизии; отдельный зелёный запуск также не является исправлением или доказательством стабильности под нагрузкой.",
+      "proposedCheck": "На собственных fixture процессах фиксировать монотонные времена spawn, checkpoint, ready, EOF, disconnect, exit, pipe end/close и signal; сравнить минимальную Node 22.19 и Node 26 при контролируемой нагрузке. Не писать argv, env, prompts или stdout SDK.",
+      "recommendation": {
+        "minimalChange": "Тестовая наблюдаемость фаз без увеличения production/test timeout по предположению и без изменения retry/approval policy.",
+        "risk": "Сам tracer может менять timing; сравнить с контрольным прогоном и не делать causal claim из корреляции нагрузки.",
+        "acceptance": [
+          "Локализована первая не наступившая фаза failing fixture, записаны код/сигнал и состояние только её детей.",
+          "Причина подтверждена контрпримером и проверкой на контроле, не общим зелёным mock."
+        ],
+        "implemented": false
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "provenance": {
+        "carriedFrom": "Последняя частичная команда-черновик retained r03-actions.json; не ранее опубликованный отчёт",
+        "rechecked": "Ссылки и механизм по исходникам текущего cwd на study-source",
+        "newFinding": false
+      }
+    }
+  ],
+  "experiments": [
+    {
+      "id": "E01",
+      "status": "historical-results-rechecked",
+      "name": "Process-client/process-groups/run-controller",
+      "command": "ROOT=$(mktemp -d /tmp/r03-baseline-XXXXXX); printf '%s\\n' \"$ROOT\"; cd /Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev && TMPDIR=\"$ROOT\" node --import tsx --test --test-concurrency=1 tests/process-client.test.ts tests/process-groups.test.ts tests/run-controller.test.ts >\"$ROOT/results.tap\" 2>&1; result=$?; tail -n 22 \"$ROOT/results.tap\"; printf 'EXIT=%s\\n' \"$result\"",
+      "resultArtifact": "S27",
+      "outcome": {
+        "pass": 27,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "durationMs": 74315.433875,
+        "shellExitCodeIndependentlyAvailable": false,
+        "draftClaimsExitCode": 0
+      },
+      "limits": [
+        "Команда не повторялась. 12+4+11 top-level тестов; полный сохранённый файл прочитан и хеширован.",
+        "Это собственные offline процессы/БД; seeded unrelated PGID, не настоящее kernel reuse.",
+        "Сохранённая команда указывает dev; его состояние на момент старого теста заявлено в черновике, не воспроизводится из одного лога. Текущие профильные файлы и старая ветвь сверены побайтно с базой."
+      ]
+    },
+    {
+      "id": "E02",
+      "status": "historical-results-rechecked",
+      "name": "Выбранные bootstrap/IPC/RunStore lifecycle",
+      "command": "ROOT=$(mktemp -d /tmp/r03-focused-XXXXXX); printf '%s\\n' \"$ROOT\"; cd /Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev && TMPDIR=\"$ROOT\" node --import tsx --test --test-concurrency=1 --test-name-pattern='worker child|closed supervisor output pipe|worker IPC|legacy journals migrate launch provenance|launch CAS fences|pause drains leaves|control cancellation is monotonic|concurrent processes initialize journal' tests/pi-worker.test.ts tests/execution-failure.test.ts tests/run-store.test.ts >\"$ROOT/results.tap\" 2>&1; result=$?; tail -n 27 \"$ROOT/results.tap\"; printf 'EXIT=%s\\n' \"$result\"",
+      "resultArtifact": "S28",
+      "outcome": {
+        "pass": 30,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "topLevel": 11,
+        "subtests": 19,
+        "durationMs": 8827.763667,
+        "shellExitCodeIndependentlyAvailable": false,
+        "draftClaimsExitCode": 0
+      },
+      "limits": [
+        "Команда не повторялась. Остальные тесты трёх файлов исключены фильтром; число 30 не означает полный набор.",
+        "Protocol fixtures не вызывают живую модель. Зелёный результат не устанавливает причину документированных flakes."
+      ]
+    },
+    {
+      "id": "E03",
+      "status": "historical-command-and-draft-only",
+      "name": "Locale OS probe старой операции",
+      "commandReference": "retained command index 12 (zero-based)",
+      "outcome": "Черновик заявляет inherited/UTF-8 exact path=true, C=false. Отдельный raw output не обнаруживался; механизм независимо перепроверен E10.",
+      "limits": [
+        "Не выдаётся за новый запуск или за независимо сохранённый stdout."
+      ]
+    },
+    {
+      "id": "E04",
+      "status": "historical-fixture-verified-result-rechecked-in-E08",
+      "name": "Locale await supervisor старой операции",
+      "fixture": "S29",
+      "commandReference": "retained command index 13",
+      "outcome": "Исторический черновик сообщает ASCII waiting / Unicode interrupted; полный fixture сохранён, сырого stdout в retained actions нет. E08 независимо подтверждает.",
+      "limits": [
+        "Никакой записи в старый fixture/journal и повторного запуска над ним не было."
+      ]
+    },
+    {
+      "id": "E05",
+      "status": "historical-fixture-verified-result-rechecked-in-E09",
+      "name": "UTF-8 stdin старой операции",
+      "fixture": "S30",
+      "commandReference": "retained command index 11",
+      "outcome": "Исторический черновик: split check 110/37 bytes, pi 55/5 bytes; большой аргумент 4 U+FFFD, x-control 0. E09 подтвердил смысл, размеры chunks немного изменились из-за нового пути.",
+      "limits": [
+        "Из старого черновика не делается live-provider claim; фактический новый результат отдельно."
+      ]
+    },
+    {
+      "id": "E06",
+      "status": "historical-command-and-draft-only",
+      "name": "Историческая проверка ревизии/окружения",
+      "commandReference": "retained commands 0,1,6,8,15",
+      "outcome": "Черновик заявлял обе копии на e15bc407 и пустой профильный diff; исходные stdout в command-only evidence отсутствуют. Новая проверка E07 различает базу и publication.",
+      "limits": [
+        "Не утверждается, что dev сейчас равен e15bc407: сейчас dev=3d8ba65."
+      ]
+    },
+    {
+      "id": "E07",
+      "status": "executed-in-continuation",
+      "name": "Provenance, ревизии, источники и подготовка изолированной копии",
+      "command": "pwd; git rev-parse HEAD; git log -16 --oneline; git log -15 --oneline -- src/run-controller.ts src/supervisor.ts src/process-client.ts src/process-groups.ts src/pi-worker-process.ts; git diff e15bc407da8753fd6b683c0aa4a68634e3c458a7 3d8ba65ee84402c0e3b0587f70095b7847824a9f -- <профильные файлы>; Python: SHA256 retained evidence/fixtures/logs, сравнение байтов cwd/dev/oldWorkspace/git show HEAD; mktemp /tmp/r03-cont-v1-XXXXXX + копия src/package.json и symlink на существующие node_modules",
+      "outcome": {
+        "worktreeRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "devRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+        "node": "v26.8.1",
+        "platform": "Darwin arm64",
+        "localDependencies": false,
+        "oldReportsPresent": false,
+        "profileRuntimeFilesEqualAcrossThreeCopies": true,
+        "packageAndLockEqual": true,
+        "graphCompilerExecutionPlanWorkspaceDifferAfterStudy": true,
+        "newFixtureRoot": "/tmp/r03-cont-v1-HvdYCw",
+        "copiedSourceBytesVerifiedAgainstGit": true
+      },
+      "limits": [
+        "Новый запуск E08/E09 импортировал только копию точной study-source в /tmp, а не изменённый authoring dev. Зависимости использованы существующие, установки не было.",
+        "Пакет зависимостей заново не аудитировался; Git/lock равны — это не доказательство всех установленных байтов node_modules."
+      ]
+    },
+    {
+      "id": "E08",
+      "status": "executed-in-continuation",
+      "name": "Свежий full-stack locale fixture",
+      "command": "TMPDIR=/tmp/r03-cont-v1-HvdYCw node --import /tmp/r03-cont-v1-HvdYCw/study-source/node_modules/tsx/dist/loader.mjs /tmp/r03-cont-v1-HvdYCw/locale.mjs /tmp/r03-cont-v1-HvdYCw/study-source /tmp/r03-cont-v1-HvdYCw",
+      "fixtureSha256": "8878ebb3f32314796129b6841a3cbdd89323006dede328dfd724d820c3460f90",
+      "resultSha256": "f6610a91a577f8fb8c26d38819a71cfbd21ad5e3b4989e52ec0b3cf94288171c",
+      "outcome": {
+        "exitCode": 0,
+        "cases": [
+          {
+            "case": "locale-C-ascii",
+            "liveBefore": true,
+            "utf8Alive": true,
+            "cAlive": true,
+            "status": "waiting",
+            "ownerRetained": true,
+            "interruptedEvents": 0
+          },
+          {
+            "case": "locale-C-non-ascii",
+            "liveBefore": true,
+            "utf8Alive": true,
+            "cAlive": false,
+            "status": "interrupted",
+            "ownerRetained": false,
+            "interruptedEvents": 1,
+            "selfStoppedAfterFence": true
+          }
+        ],
+        "postCheck": {
+          "asciiStatus": "cancelled",
+          "unicodeStatus": "interrupted",
+          "bothOwnersNull": true,
+          "bothSupervisorsNotExecuting": true
+        }
+      },
+      "limits": [
+        "Настоящие RunController/RunStore/generated await и отдельные supervisor, только свежие /tmp fixtures, availableModels=[].",
+        "Проверка существования только этих supervisor PID после cleanup; чужие процессы не сигналились.",
+        "Технический polling guard fixture, не production workflow budget."
+      ]
+    },
+    {
+      "id": "E09",
+      "status": "executed-in-continuation",
+      "name": "Свежий split UTF-8 и обычный runCheckProcess",
+      "command": "TMPDIR=/tmp/r03-cont-v1-HvdYCw node --import /tmp/r03-cont-v1-HvdYCw/study-source/node_modules/tsx/dist/loader.mjs /tmp/r03-cont-v1-HvdYCw/utf8.mjs /tmp/r03-cont-v1-HvdYCw/study-source /tmp/r03-cont-v1-HvdYCw",
+      "fixtureSha256": "a278a8d8a7e75201b37318c3a82bb04fb834f7f677f0c400ac728484d577c16a",
+      "resultSha256": "c48ee45a418db2b8d4e144550500a8714e76b0f1067f8bef834120caff02e89b",
+      "outcome": {
+        "exitCode": 0,
+        "cases": [
+          {
+            "case": "split-utf8-check",
+            "code": 0,
+            "signal": null,
+            "expected": "АБ",
+            "actual": "��Б",
+            "chunks": [
+              110,
+              38
+            ]
+          },
+          {
+            "case": "split-utf8-pi",
+            "code": 1,
+            "signal": null,
+            "expected": "АБ",
+            "actual": "��Б",
+            "chunks": [
+              56,
+              5
+            ],
+            "terminal": "configuration"
+          },
+          {
+            "case": "ordinary-runCheckProcess-0",
+            "exitCode": 0,
+            "equal": false,
+            "expectedLength": 70000,
+            "actualLength": 70002,
+            "replacements": 4
+          },
+          {
+            "case": "ordinary-runCheckProcess-1",
+            "exitCode": 0,
+            "equal": true,
+            "expectedLength": 70001,
+            "actualLength": 70001,
+            "replacements": 0
+          }
+        ]
+      },
+      "limits": [
+        "Preload только наблюдает фактический stdin iterator/JSON.parse; не изменяет данные конвертации.",
+        "У pi version=999 прекращает выполнение до model runtime/auth; проверен request parse, не live prompt.",
+        "Большой обычный check без preload; размеры chunks платформозависимы, forced split надёжнее.",
+        "Forced split assertions проверяют наличие дефекта, не исправление."
+      ]
+    },
+    {
+      "id": "E10",
+      "status": "executed-in-continuation",
+      "name": "Точечная OS-проверка ps locale на собственном child",
+      "command": "node --input-type=module: spawn(process.execPath,[\"-e\",\"setInterval(()=>{},1000)\",\"--\",\"/tmp/r03-cont-v1-HvdYCw/процесс\"],{stdio:\"ignore\"}); await spawn; execFileSync(\"ps\",[\"-p\",String(child.pid),\"-o\",\"args=\"],{encoding:\"utf8\",env:{...process.env,LC_ALL:locale}}) для C/en_US.UTF-8; finally child.kill(\"SIGKILL\"), await exit",
+      "outcome": {
+        "exitCode": 0,
+        "C": {
+          "exactUnicodeArgument": false,
+          "macMetaNotation": true
+        },
+        "en_US.UTF-8": {
+          "exactUnicodeArgument": true,
+          "macMetaNotation": false
+        }
+      },
+      "limits": [
+        "Команда выше — описание выполненного Node-скрипта; полностью runnable интеграционный контрпример E08 в приложении A.",
+        "Читалась командная строка только созданного child, env/чужие argv не выводились."
+      ]
+    },
+    {
+      "id": "E11",
+      "status": "executed-in-continuation",
+      "name": "Структура и непротиворечивость итогового пакета",
+      "command": "python3: json.loads обоих структурных входов, проверка metadata/7 уникальных ID/counts/ссылок на experiments, границ file:line, существования источников и SHA256 сохранённых evidence, побайтное сравнение встроенных js fixtures; node --check /tmp/r03-cont-v1-HvdYCw/locale.mjs; node --check /tmp/r03-cont-v1-HvdYCw/utf8.mjs; git diff --exit-code -- src tests PROJECT_INFO package.json package-lock.json AGENTS.md; git ls-files --others --exclude-standard -- research/2026-09-20-astra-max",
+      "outcome": "Проверки прошли; встроенные fixtures не изменены, tracked files не изменены, новые repository files только два назначенных r03 отчёта. SHA256 обоих финальных файлов вычисляется после последней записи и передаётся в tool result.",
+      "limits": [
+        "Не полный typecheck/test и не автоматическая доказательность всех текстовых утверждений.",
+        "Хеш самого JSON не встраивается в JSON во избежание самоссылки; artifactRevision результата равен sha256 его конечных байтов."
+      ]
+    }
+  ],
+  "alreadyFixedAndRefutations": [
+    {
+      "findingId": "R03-003",
+      "refutedClaim": "Другая установка сама по себе лишает живой supervisor владения.",
+      "evidence": [
+        "S08",
+        "S15",
+        "E01",
+        "E02"
+      ],
+      "boundary": "R03-001 отдельная locale-ошибка представления argv."
+    },
+    {
+      "findingId": "R03-004",
+      "refutedClaim": "Task уходит до durable PID или settlement зависит только от close.",
+      "evidence": [
+        "S10",
+        "S12",
+        "S14",
+        "E01",
+        "E02"
+      ]
+    },
+    {
+      "findingId": "R03-005",
+      "refutedClaim": "Wrapper result доказывает пустую группу или cancel доверяет только сохранённому PGID.",
+      "evidence": [
+        "S11",
+        "S14",
+        "S15",
+        "E01"
+      ]
+    }
+  ],
+  "postStudyAlreadyFixed": {
+    "separateFromStudyFindings": true,
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "entries": [
+      {
+        "classification": "already-fixed",
+        "commit": "86f5e07",
+        "topic": "Ранняя authoring parallel-isolation validation",
+        "evidence": "Просмотрен git diff в graph/compiler/execution-plan/parallel-isolation/workspaces.",
+        "action": "Не предлагать внедрение повторно; вне предмета R03."
+      },
+      {
+        "classification": "already-fixed",
+        "commit": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+        "topic": "Документация reviewer artifactRevision binding",
+        "evidence": "git show для SKILL.md и references/authoring.md.",
+        "action": "Не предлагать повторно; не подменяет исследовательский artifactRevision хеша JSON."
+      }
+    ],
+    "processCodeStatus": "Девять процессных/ownership модулей, шесть профильных тестовых файлов, package/lock совпадают с базой; два bug не закрыты этим diff."
+  },
+  "sources": [
+    {
+      "id": "S01",
+      "path": "AGENTS.md",
+      "lines": "1-43",
+      "use": "Ограничения, инвариант идентичности процессов и карта модулей.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S02",
+      "path": "PROJECT_INFO/architecture.md",
+      "section": "Путь задачи; Почему так",
+      "use": "Отдельные supervisor/workers, токены владения, границы внешних эффектов.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S03",
+      "path": "PROJECT_INFO/development.md",
+      "section": "Проверки; Эксперименты",
+      "use": "Узкие offline tests, Node, известная граница SDK bash и SIGKILL.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S04",
+      "path": "PROJECT_INFO/known-issues.md",
+      "section": "Ошибки и защитные контракты; Открытое наблюдение: нестабильные процессные тесты",
+      "use": "Не переоткрывать исправленную идентичность другой установки; причины flaky не установлены.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S05",
+      "path": "PROJECT_INFO/run-journal.md",
+      "section": "Владение запуском и управление; Изолированный исполнитель pi",
+      "use": "Контракты owner/PID/heartbeat, EOF/NDJSON/disconnect/exit.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S06",
+      "path": "PROJECT_INFO/reconciliation.md",
+      "section": "Допуск исполнителя до отправки задания; Оставшиеся группы процессов",
+      "use": "reserved/started/settled, неподтверждённые группы и запрет сигналов по одному PGID.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S07",
+      "path": "PROJECT_INFO/execution-plan.md",
+      "section": "Аварийные окна и намерение управления",
+      "use": "create/reserve/spawn/attach и отказ от неявного перезапуска.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S08",
+      "path": "src/run-controller.ts",
+      "lines": "28-87,193-279,282-310",
+      "use": "ps-представление идентичности, сохранённый launch, обнаружение/сигналы/освобождение owner.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S09",
+      "path": "src/supervisor.ts",
+      "lines": "9-72",
+      "use": "attach до исполнения; polling/fencing; удержание ownership при cleanup uncertainty.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S10",
+      "path": "src/process-client.ts",
+      "lines": "11-187",
+      "use": "onStarting/onStarted, stdin, cancellation/escalation, exit+drained pipes, terminal protocol.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S11",
+      "path": "src/process-groups.ts",
+      "lines": "1-23",
+      "use": "Члены групп, zombies, неизвестные OS states.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S12",
+      "path": "src/pi-worker-process.ts",
+      "lines": "6-43",
+      "use": "ready, cancellation/bootstrap, chunk decoding, EOF/terminal output/disconnect.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S13",
+      "path": "src/check-worker-process.ts",
+      "lines": "4-56",
+      "use": "chunk decoding, command admission, TERM/KILL группы и disconnect.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S14",
+      "path": "src/run-runtime.ts",
+      "lines": "33-54,82-117,173-215,218-286,296-357",
+      "use": "Effect cleanup waits, admission, durable worker checkpoints, clearPid/group gate.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S15",
+      "path": "src/run-store.ts",
+      "lines": "319-342,349-419,431-481,739-767",
+      "use": "Транзакционная защита owner/PID, pending groups, stale group observation.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S16",
+      "path": "src/pi-worker.ts",
+      "lines": "107-145,302-325,347-368",
+      "use": "Отказ version=999 до runtime/auth, task/input в prompt, abort/waitForIdle/dispose.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S17",
+      "path": "tests/process-client.test.ts",
+      "lines": "1-293",
+      "use": "Полный файл прочитан; исторический E01 содержит 12 top-level тестов этого набора. Сохранённый лог перепроверен, новый запуск не выполнялся.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S18",
+      "path": "tests/process-groups.test.ts",
+      "lines": "1-98",
+      "use": "Полный файл прочитан; исторический E01 содержит 4 top-level тестов этого набора. Сохранённый лог перепроверен, новый запуск не выполнялся.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S19",
+      "path": "tests/run-controller.test.ts",
+      "lines": "1-470",
+      "use": "Полный файл прочитан; исторический E01 содержит 11 top-level тестов этого набора. Сохранённый лог перепроверен, новый запуск не выполнялся.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S20",
+      "path": "tests/pi-worker.test.ts",
+      "lines": "352-383",
+      "use": "Четыре child bootstrap/EOF/disconnect/EPIPE теста прочитаны; исторический результат подтверждён по E02, заново не запускались.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S21",
+      "path": "tests/run-store.test.ts",
+      "lines": "22-47,251-379,414-439",
+      "use": "Прочитаны ownership/migration/control/concurrent reserve; исторические пять выбранных lifecycle tests подтверждены E02.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S22",
+      "path": "tests/execution-failure.test.ts",
+      "lines": "1-end",
+      "use": "Прочитан весь файл; два worker IPC теста исторически исполнены (E02), включая 19 вложенных сценариев; логи перепроверены.",
+      "inspection": "continuation: прочитано/сверено с sourceRevision"
+    },
+    {
+      "id": "S25",
+      "kind": "git",
+      "commits": [
+        "37ff399eefe0ce430e8a413aec43f495996378a7",
+        "20b9758f9d70a01eeedb409183726b8408759ba7",
+        "095413ff8654ed5091cbb0e64be5a29e2f56319b"
+      ],
+      "use": "git log текущей ветви и профильных файлов, git show --stat исправлений. Код выводился из текущей ревизии, не из исторического main.",
+      "inspection": "continuation: git log и git show --stat"
+    },
+    {
+      "id": "S26",
+      "path": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r03-actions.json",
+      "sha256": "a5224f507de80cb3df3c4edeb8bf92e4b66a1f0742b1ed7441938b88c030cc3c",
+      "use": "17 записей command-only. Последняя — незавершённый writer; не доказательство успешной публикации."
+    },
+    {
+      "id": "S27",
+      "path": "/tmp/r03-baseline-I9DDKK/results.tap",
+      "sha256": "a59bfbb4be328d34d752564374f920493f002997bbfbb63335c94a3bab63a0b7",
+      "use": "Сохранённый полный файл результатов E01 прочитан; сырые логи не публикуются."
+    },
+    {
+      "id": "S28",
+      "path": "/tmp/r03-focused-8nckiV/results.tap",
+      "sha256": "5d3caee8b404f03429863a74d42f5aad87b605814afa312e022a00beceb5cd51",
+      "use": "Сохранённый полный файл результатов E02 прочитан; сырые логи не публикуются."
+    },
+    {
+      "id": "S29",
+      "path": "/tmp/r03-probes-QXUlUq/locale.mjs",
+      "sha256": "8878ebb3f32314796129b6841a3cbdd89323006dede328dfd724d820c3460f90",
+      "use": "Прочитан, байты совпали с heredoc в retained command index 13 и новой копией; в continuation исходный файл не запускался/не изменялся."
+    },
+    {
+      "id": "S30",
+      "path": "/tmp/r03-probes-QXUlUq/utf8.mjs",
+      "sha256": "a278a8d8a7e75201b37318c3a82bb04fb834f7f677f0c400ac728484d577c16a",
+      "use": "Прочитан, байты совпали с heredoc в retained command index 11 и новой копией; в continuation исходный файл не запускался/не изменялся."
+    },
+    {
+      "id": "S31",
+      "kind": "git",
+      "commits": [
+        "86f5e07",
+        "3d8ba65ee84402c0e3b0587f70095b7847824a9f"
+      ],
+      "use": "Просмотрен профильный diff study-source..publicationRevision; ранняя parallel-isolation validation и reviewer binding documentation отдельно от study findings."
+    }
+  ],
+  "unknowns": [
+    {
+      "findingId": "R03-006",
+      "question": "Достижимость и последствия настоящего PID/PGID reuse между identity observation и signal."
+    },
+    {
+      "findingId": "R03-007",
+      "question": "Причина macOS process-test flakes; сравнительная Node 22.19/26 и контролируемая нагрузка."
+    },
+    {
+      "question": "Locale-defect на других POSIX/ps не проверен; live prompt/provider у UTF-8 дефекта не вызывался."
+    },
+    {
+      "question": "Исторический shell exit code E01/E02 и полный stdout старых E03..E06 не сохранены в command-only evidence; их нельзя восстанавливать из предположения."
+    }
+  ],
+  "boundaries": {
+    "implementationPerformed": false,
+    "fullNpmTestRun": false,
+    "webAccessUsed": false,
+    "liveProviderCalls": false,
+    "userRunsOrProcessesManaged": false,
+    "packagesInstalled": false,
+    "otherResearchReportsRead": false,
+    "secretFilesOpened": false,
+    "rawLogsPublished": false,
+    "gitMutationsPerformed": false,
+    "oldWorkspaceOrFixturesWritten": false,
+    "newRepositoryWrites": "Только два назначенных r03 отчёта."
+  },
+  "blockers": []
+}

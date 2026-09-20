@@ -1,0 +1,1481 @@
+{
+  "metadata": {
+    "id": "00-manifest",
+    "date": "2026-09-20",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f"
+  },
+  "status": "blocked",
+  "decision": "inconclusive",
+  "manifestComplete": false,
+  "expected": {
+    "research": 16,
+    "critics": 8
+  },
+  "actualComplete": {
+    "research": 15,
+    "critics": 6
+  },
+  "lineage": {
+    "sourceRun": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+    "continuations": [
+      "run-9dbb044c-664f-4dd8-96c0-57192dc4ed89",
+      "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c"
+    ],
+    "history": "13 research исторически max; r06/r09 финализированы V2 low; V3 планировал r14/c02/c07 low, но все три current wrapper failed до успешного результата. 15 research + 6 critics reuse без модельного перезапуска. Агрегатор low. run-9dbb044c официально cancel после paused/0workers, старые max agents не возобновлялись (вход пользователя).",
+    "previousAggregator": "terminated/HTTP200; 44 primary files сохранены; отсутствовавшие summary/manifest не считаются исполненным shell. Старый c07 blocked не заменяет current failed.",
+    "reuseBindings": [
+      {
+        "bindingId": "retained_r01",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"research\",\"visit\",\"0\",\"parallel\",\"r01\",\"graph\",\"r01_branch\"],\"r01_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "5dd6258ef8562f889ebf4cf1e2b0adc844d35b4fad84bc3c0bb5284076e28794",
+        "sourceSchemaDigest": "d28e77ddd4d1d236f9a05b3d895709999e3f7b3552e423397721cedc51b8862e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_r02",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"research\",\"visit\",\"0\",\"parallel\",\"r02\",\"graph\",\"r02_branch\"],\"r02_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "eb920714911bcee189e3469bf5bc6279bb1fb66a03ae908c41aefba86dec41c2",
+        "sourceSchemaDigest": "d28e77ddd4d1d236f9a05b3d895709999e3f7b3552e423397721cedc51b8862e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_r03",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"research\",\"visit\",\"0\",\"parallel\",\"r03\",\"graph\",\"r03_branch\"],\"r03_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "f240d7adabf900debdc25a01866ae58447ac641d048017d691451ff96cdafc76",
+        "sourceSchemaDigest": "d28e77ddd4d1d236f9a05b3d895709999e3f7b3552e423397721cedc51b8862e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_r04",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"research\",\"visit\",\"0\",\"parallel\",\"r04\",\"graph\",\"r04_branch\"],\"r04_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "ab72ee349f696cd8cf8d26b04d32680a87abf2af044256955a1aeee74a915239",
+        "sourceSchemaDigest": "d28e77ddd4d1d236f9a05b3d895709999e3f7b3552e423397721cedc51b8862e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_r05",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"research\",\"visit\",\"0\",\"parallel\",\"r05\",\"graph\",\"r05_branch\"],\"r05_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "fd58c22cc934d82fdbe0ace053191484ff8a525b85888e1989baa51d51a0800f",
+        "sourceSchemaDigest": "d28e77ddd4d1d236f9a05b3d895709999e3f7b3552e423397721cedc51b8862e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_r06",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"research\",\"visit\",\"0\",\"parallel\",\"r06\",\"graph\",\"r06_branch\"],\"r06_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "2e033783c04687a7d8c3c7e87fe6181388c9aeee5b0cdb98259964ad31b37d30",
+        "sourceSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_r07",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"research\",\"visit\",\"0\",\"parallel\",\"r07\",\"graph\",\"r07_branch\"],\"r07_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "6e5247c8f623d120580edd9d0a8cdaca4287097d60b6088e9ecfeb234dc9342a",
+        "sourceSchemaDigest": "d28e77ddd4d1d236f9a05b3d895709999e3f7b3552e423397721cedc51b8862e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_r08",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"research\",\"visit\",\"0\",\"parallel\",\"r08\",\"graph\",\"r08_branch\"],\"r08_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "fd363abf3409304b45e4da77e4006fca238fa89925efd2d81ef43b13ee8d118b",
+        "sourceSchemaDigest": "d28e77ddd4d1d236f9a05b3d895709999e3f7b3552e423397721cedc51b8862e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_r09",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"research\",\"visit\",\"0\",\"parallel\",\"r09\",\"graph\",\"r09_branch\"],\"r09_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "7350db5995f9cceffedca0eb1022560c0780d7f95c040349545bd012ba37c68c",
+        "sourceSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_r10",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"research\",\"visit\",\"0\",\"parallel\",\"r10\",\"graph\",\"r10_branch\"],\"r10_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "dae44912b3b57bfe687680478f27b5f3f1adba1145c86bd600b759181db224a4",
+        "sourceSchemaDigest": "d28e77ddd4d1d236f9a05b3d895709999e3f7b3552e423397721cedc51b8862e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_r11",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"research\",\"visit\",\"0\",\"parallel\",\"r11\",\"graph\",\"r11_branch\"],\"r11_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "00bbb01abaf20059cc13e8cbbcbf2da9c9ff69937bf87ea5d3feb7f46a028075",
+        "sourceSchemaDigest": "d28e77ddd4d1d236f9a05b3d895709999e3f7b3552e423397721cedc51b8862e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_r12",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"research\",\"visit\",\"0\",\"parallel\",\"r12\",\"graph\",\"r12_branch\"],\"r12_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "a8099f8df0f5755ef12252d56e820a914a15b09d0c4c37a78acd0491fb07d30e",
+        "sourceSchemaDigest": "d28e77ddd4d1d236f9a05b3d895709999e3f7b3552e423397721cedc51b8862e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_r13",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"research\",\"visit\",\"0\",\"parallel\",\"r13\",\"graph\",\"r13_branch\"],\"r13_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "2c47ac3cb46803c7916eef95a5cdef3ea023839c6aa0c92b8f0acb4b19562e9f",
+        "sourceSchemaDigest": "d28e77ddd4d1d236f9a05b3d895709999e3f7b3552e423397721cedc51b8862e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_r15",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"research\",\"visit\",\"0\",\"parallel\",\"r15\",\"graph\",\"r15_branch\"],\"r15_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "e6f8444bc93193a9593f0e056a29c04feb62d2e883bf619a6e282794dbb555fa",
+        "sourceSchemaDigest": "d28e77ddd4d1d236f9a05b3d895709999e3f7b3552e423397721cedc51b8862e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_r16",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"research\",\"visit\",\"0\",\"parallel\",\"r16\",\"graph\",\"r16_branch\"],\"r16_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "baf3c32be6b32a637cc07338197f6cc3df777576225f6063f95a59ad8c366168",
+        "sourceSchemaDigest": "d28e77ddd4d1d236f9a05b3d895709999e3f7b3552e423397721cedc51b8862e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_c01",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"critics\",\"visit\",\"0\",\"parallel\",\"c01\",\"graph\",\"c01_branch\"],\"c01_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "dc09dab013cdc5fa107cc7b98c3d213ae454ba1077d0f3759c15bda20bce39f1",
+        "sourceSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_c03",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"critics\",\"visit\",\"0\",\"parallel\",\"c03\",\"graph\",\"c03_branch\"],\"c03_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "7cb86f8a8da86431f6d0fe89721b0fb82461b4bd298b4d66f9d11848d6580979",
+        "sourceSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_c04",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"critics\",\"visit\",\"0\",\"parallel\",\"c04\",\"graph\",\"c04_branch\"],\"c04_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "cf5b2bc6955801de839479c50097dd2735c61c88d079b4bc265075bf3d587c7e",
+        "sourceSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_c05",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"critics\",\"visit\",\"0\",\"parallel\",\"c05\",\"graph\",\"c05_branch\"],\"c05_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "e695439004e97caa8e46398ea7ed637aae75d0ee6bd32b1018e4d3c1fe00746b",
+        "sourceSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_c06",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"critics\",\"visit\",\"0\",\"parallel\",\"c06\",\"graph\",\"c06_branch\"],\"c06_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "36ea29dade938b92da05420ec37aa3c5bdbecd313b7058c436bda3db6ed6d56f",
+        "sourceSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      },
+      {
+        "bindingId": "retained_c08",
+        "sourceRunId": "run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c",
+        "activationKey": "[[\"graph\",\"main\",\"node\",\"critics\",\"visit\",\"0\",\"parallel\",\"c08\",\"graph\",\"c08_branch\"],\"c08_branch\",\"isolated\",0]",
+        "attempt": 1,
+        "sourceOutputDigest": "9e43bc6fc3ab720c78d7ccfb22729ceef71be207a12a3dfa41b755ce1815b446",
+        "sourceSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e",
+        "producerSchemaDigest": "91cfb4a9963c8d21baec8a9981418fa767a48df6f38930b7d93f710e87c0872e"
+      }
+    ]
+  },
+  "entries": [
+    {
+      "id": "r01",
+      "topic": "Корректность графа, выражений и компилятора",
+      "markdown": "research/2026-09-20-astra-max/r01-graph-compiler.md",
+      "json": "research/2026-09-20-astra-max/r01-graph-compiler.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/bdbc8f9f0e0714e5fc160a485f0845516735ec68dd17f8e91bedca170edb4d10",
+        "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/bdbc8f9f0e0714e5fc160a485f0845516735ec68dd17f8e91bedca170edb4d10",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "5b1ac700fad9e6855624b98233d8b4be1e740194"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/bdbc8f9f0e0714e5fc160a485f0845516735ec68dd17f8e91bedca170edb4d10/research/2026-09-20-astra-max/r01-graph-compiler.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/bdbc8f9f0e0714e5fc160a485f0845516735ec68dd17f8e91bedca170edb4d10/research/2026-09-20-astra-max/r01-graph-compiler.json"
+      },
+      "reportSha256": {
+        "markdown": "d8de0f86cd4df6662fbc83c33b4830828ac7eced5fb563c14ab592188b5cbb38",
+        "json": "bcd5065cd25107d07a6356aa18603eac1c13397ff2f45970603ed6dfaa24facf"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "max"
+      },
+      "artifactRevision": "sha256:bcd5065cd25107d07a6356aa18603eac1c13397ff2f45970603ed6dfaa24facf"
+    },
+    {
+      "id": "r02",
+      "topic": "Effect execution и распространение ошибок",
+      "markdown": "research/2026-09-20-astra-max/r02-effect-execution.md",
+      "json": "research/2026-09-20-astra-max/r02-effect-execution.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/1ba689599a7d25b37d97e1074c9b9456e535b7f0e51c0cc292f2e5064653b9b6",
+        "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/1ba689599a7d25b37d97e1074c9b9456e535b7f0e51c0cc292f2e5064653b9b6",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "9523c9137dbc6e3099789df684e452ca0d680fcf"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/1ba689599a7d25b37d97e1074c9b9456e535b7f0e51c0cc292f2e5064653b9b6/research/2026-09-20-astra-max/r02-effect-execution.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/1ba689599a7d25b37d97e1074c9b9456e535b7f0e51c0cc292f2e5064653b9b6/research/2026-09-20-astra-max/r02-effect-execution.json"
+      },
+      "reportSha256": {
+        "markdown": "fa11dc63ae552d8189f457df0d320e48f77d5e8a54521d29922e10338165c2fa",
+        "json": "0669f868796e50e1478bf5024539b95fc000c08beaf1a3ead958a145dd2c2a43"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "max"
+      },
+      "artifactRevision": "sha256:0669f868796e50e1478bf5024539b95fc000c08beaf1a3ead958a145dd2c2a43"
+    },
+    {
+      "id": "r03",
+      "topic": "Идентичность и жизненный цикл процессов",
+      "markdown": "research/2026-09-20-astra-max/r03-process-lifecycle.md",
+      "json": "research/2026-09-20-astra-max/r03-process-lifecycle.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/997f1a4e97442278d27defcb44e62736b625fd4981f9a87a3c05db8a3737c7e6",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "f438196da55043262e81366871da9748e00cc9e6"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/997f1a4e97442278d27defcb44e62736b625fd4981f9a87a3c05db8a3737c7e6/research/2026-09-20-astra-max/r03-process-lifecycle.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/997f1a4e97442278d27defcb44e62736b625fd4981f9a87a3c05db8a3737c7e6/research/2026-09-20-astra-max/r03-process-lifecycle.json"
+      },
+      "reportSha256": {
+        "markdown": "3a7d91936ff610efd84e196d150b126b8218c012e57bf1c658ffeef82769caef",
+        "json": "3ace97cccd22692c634f0f2aa8af474bbb96fec809a86034b3bd839e7918156e"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "max"
+      },
+      "artifactRevision": "sha256:3ace97cccd22692c634f0f2aa8af474bbb96fec809a86034b3bd839e7918156e"
+    },
+    {
+      "id": "r04",
+      "topic": "Журнал SQLite и восстановление",
+      "markdown": "research/2026-09-20-astra-max/r04-journal-recovery.md",
+      "json": "research/2026-09-20-astra-max/r04-journal-recovery.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/2d13b5261cf4b4fedc32c057e7589adb0ff6d8ef6f52a2fb4d8c090ff85c71cc",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "03695bc3ca59e71bdf5a1059618ac970219f8bd6"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/2d13b5261cf4b4fedc32c057e7589adb0ff6d8ef6f52a2fb4d8c090ff85c71cc/research/2026-09-20-astra-max/r04-journal-recovery.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/2d13b5261cf4b4fedc32c057e7589adb0ff6d8ef6f52a2fb4d8c090ff85c71cc/research/2026-09-20-astra-max/r04-journal-recovery.json"
+      },
+      "reportSha256": {
+        "markdown": "909e36ca25d8763fe2398e3552294452402fa491391b3c982c93d93efcfb9389",
+        "json": "2da1e821ba4edb03baaf93ad09622b0a254ddc336ae7c1df911cfca046895d5f"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "max"
+      },
+      "artifactRevision": "sha256:2da1e821ba4edb03baaf93ad09622b0a254ddc336ae7c1df911cfca046895d5f"
+    },
+    {
+      "id": "r05",
+      "topic": "Однократность, идемпотентность и continuation",
+      "markdown": "research/2026-09-20-astra-max/r05-idempotency-continuation.md",
+      "json": "research/2026-09-20-astra-max/r05-idempotency-continuation.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/481943797181ce2546f5ae674f7e93e931b5ae2bc839512d37af8dbb2a996a3c",
+        "branch": "dynamicwf/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/481943797181ce2546f5ae674f7e93e931b5ae2bc839512d37af8dbb2a996a3c",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "db64d318e98386aa79e6fade2ae7809a9b324cc5"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/481943797181ce2546f5ae674f7e93e931b5ae2bc839512d37af8dbb2a996a3c/research/2026-09-20-astra-max/r05-idempotency-continuation.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/481943797181ce2546f5ae674f7e93e931b5ae2bc839512d37af8dbb2a996a3c/research/2026-09-20-astra-max/r05-idempotency-continuation.json"
+      },
+      "reportSha256": {
+        "markdown": "787eb8044acd5d0fa521e1c7ef5ec1afdba3161a3f80d1aabef428a67a0ef2e8",
+        "json": "0928d4949762410f343f935342eef81c65d503a8733402e393ce3dc7e12745b1"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "max"
+      },
+      "artifactRevision": "sha256:0928d4949762410f343f935342eef81c65d503a8733402e393ce3dc7e12745b1"
+    },
+    {
+      "id": "r06",
+      "topic": "Worktree/integrate и ревизия артефакта",
+      "markdown": "research/2026-09-20-astra-max/r06-worktrees-artifacts.md",
+      "json": "research/2026-09-20-astra-max/r06-worktrees-artifacts.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/00926e26e13d4c9c311099d455a644d39595d6d0ff1732efa62ed4d82ad27267",
+        "branch": "dynamicwf/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/00926e26e13d4c9c311099d455a644d39595d6d0ff1732efa62ed4d82ad27267",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "ce08d9426f4057333c759764314a1147bee67a82"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/00926e26e13d4c9c311099d455a644d39595d6d0ff1732efa62ed4d82ad27267/research/2026-09-20-astra-max/r06-worktrees-artifacts.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/00926e26e13d4c9c311099d455a644d39595d6d0ff1732efa62ed4d82ad27267/research/2026-09-20-astra-max/r06-worktrees-artifacts.json"
+      },
+      "reportSha256": {
+        "markdown": "388d61e4ee975bbf97b262a19c3d382828ffce5c0a8278fa216868963e8bdd09",
+        "json": "3fb227b82815a8a1f7f6f9de883c7f1b551db7bc1a9439768771e55b65f5d632"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "low"
+      },
+      "artifactRevision": "sha256:3fb227b82815a8a1f7f6f9de883c7f1b551db7bc1a9439768771e55b65f5d632"
+    },
+    {
+      "id": "r07",
+      "topic": "Контракты authoring, CLI и MCP",
+      "markdown": "research/2026-09-20-astra-max/r07-authoring-cli-mcp.md",
+      "json": "research/2026-09-20-astra-max/r07-authoring-cli-mcp.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b",
+        "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "e0dfac01836f02fb2182a01d173f5987746841a7"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b/research/2026-09-20-astra-max/r07-authoring-cli-mcp.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b/research/2026-09-20-astra-max/r07-authoring-cli-mcp.json"
+      },
+      "reportSha256": {
+        "markdown": "9eae292cbfc22378efd1aa5a8646943d31a7db85caa8057888ba13264442e2d3",
+        "json": "4ea71d4ada5ee4bf3b4ae7c063a816ab1ae56878e39749f96bcb76ba3b983474"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "max"
+      },
+      "artifactRevision": "sha256:4ea71d4ada5ee4bf3b4ae7c063a816ab1ae56878e39749f96bcb76ba3b983474"
+    },
+    {
+      "id": "r08",
+      "topic": "Skill и семантика промптов: оставшиеся 6 ролей",
+      "markdown": "research/2026-09-20-astra-max/r08-roles-skills-eval.md",
+      "json": "research/2026-09-20-astra-max/r08-roles-skills-eval.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/6ddc23ed0afc5c81d40f8032ac685dea1350acc4ecde6436ec3ab19c90071ca2",
+        "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/6ddc23ed0afc5c81d40f8032ac685dea1350acc4ecde6436ec3ab19c90071ca2",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "e21957fd8094f917e4d13e40bec67ab50417a3c5"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/6ddc23ed0afc5c81d40f8032ac685dea1350acc4ecde6436ec3ab19c90071ca2/research/2026-09-20-astra-max/r08-roles-skills-eval.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/6ddc23ed0afc5c81d40f8032ac685dea1350acc4ecde6436ec3ab19c90071ca2/research/2026-09-20-astra-max/r08-roles-skills-eval.json"
+      },
+      "reportSha256": {
+        "markdown": "7245c39a24e2c1d28ede088593ae4c38076e45db9da541e9f1c56ea99f6f6e74",
+        "json": "ffec7efcf77bb7ab2481096f03069f754759de6509886e19dc6c773668de5af5"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "max"
+      },
+      "artifactRevision": "sha256:ffec7efcf77bb7ab2481096f03069f754759de6509886e19dc6c773668de5af5"
+    },
+    {
+      "id": "r09",
+      "topic": "UX approvals/gates/await и продолжения задачи",
+      "markdown": "research/2026-09-20-astra-max/r09-waits-gates-ux.md",
+      "json": "research/2026-09-20-astra-max/r09-waits-gates-ux.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/296767b722d7bc81389cc890291795fd34e157c7adfa3ccfa548b000fff995ca",
+        "branch": "dynamicwf/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/296767b722d7bc81389cc890291795fd34e157c7adfa3ccfa548b000fff995ca",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "1b6a5235816cc7de83839804322d6c15ac9c69c3"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/296767b722d7bc81389cc890291795fd34e157c7adfa3ccfa548b000fff995ca/research/2026-09-20-astra-max/r09-waits-gates-ux.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/296767b722d7bc81389cc890291795fd34e157c7adfa3ccfa548b000fff995ca/research/2026-09-20-astra-max/r09-waits-gates-ux.json"
+      },
+      "reportSha256": {
+        "markdown": "1027aa819b121a5063a497dda404d2b536b8952e40db06f29b6d337f788927cf",
+        "json": "97210cb550365236cad5cba94909d6cb646406d7700605c461df673ffef0e8ea"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "low"
+      },
+      "artifactRevision": "sha256:97210cb550365236cad5cba94909d6cb646406d7700605c461df673ffef0e8ea"
+    },
+    {
+      "id": "r10",
+      "topic": "Асинхронная браузерная панель",
+      "markdown": "research/2026-09-20-astra-max/r10-async-dashboard.md",
+      "json": "research/2026-09-20-astra-max/r10-async-dashboard.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/866766958ebb8006286c16773a1015c2598df9c62261f3964e03c157234a6314",
+        "branch": "dynamicwf/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/866766958ebb8006286c16773a1015c2598df9c62261f3964e03c157234a6314",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "96458af7f37a800a3e5bae38d343a053219d4caf"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/866766958ebb8006286c16773a1015c2598df9c62261f3964e03c157234a6314/research/2026-09-20-astra-max/r10-async-dashboard.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/866766958ebb8006286c16773a1015c2598df9c62261f3964e03c157234a6314/research/2026-09-20-astra-max/r10-async-dashboard.json"
+      },
+      "reportSha256": {
+        "markdown": "f25c98d1f295c3e76b7fb8540a1db5dc8ba0e34b22e738be8dc83bc98e15f755",
+        "json": "11854ecda269ce5f7664557926f8d03c0de1f98681018939386e5cd20a6a4d61"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "max"
+      },
+      "artifactRevision": "sha256:11854ecda269ce5f7664557926f8d03c0de1f98681018939386e5cd20a6a4d61"
+    },
+    {
+      "id": "r11",
+      "topic": "Визуализация графов большого размера",
+      "markdown": "research/2026-09-20-astra-max/r11-graph-scale.md",
+      "json": "research/2026-09-20-astra-max/r11-graph-scale.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/ae9f7bfdeccdee959148e259d55c43a8f4274f2d3f2d1b30b4b86466aab4b20c",
+        "branch": "dynamicwf/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/ae9f7bfdeccdee959148e259d55c43a8f4274f2d3f2d1b30b4b86466aab4b20c",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "03dd18f847939608515bfc273fc444687738a986"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/ae9f7bfdeccdee959148e259d55c43a8f4274f2d3f2d1b30b4b86466aab4b20c/research/2026-09-20-astra-max/r11-graph-scale.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/ae9f7bfdeccdee959148e259d55c43a8f4274f2d3f2d1b30b4b86466aab4b20c/research/2026-09-20-astra-max/r11-graph-scale.json"
+      },
+      "reportSha256": {
+        "markdown": "69671ef9c6c63d581c16309e9ce9e07687a12bdc1df9e5e8e708b2bedd68e525",
+        "json": "2366e41b1b2e0cd9cc270c5b5274dbcebef6430b772218334f700e182121b9e9"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "max"
+      },
+      "artifactRevision": "sha256:2366e41b1b2e0cd9cc270c5b5274dbcebef6430b772218334f700e182121b9e9"
+    },
+    {
+      "id": "r12",
+      "topic": "Наблюдаемость usage и lineage",
+      "markdown": "research/2026-09-20-astra-max/r12-usage-lineage.md",
+      "json": "research/2026-09-20-astra-max/r12-usage-lineage.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/3b11a6a47c97b1cc15eb29d7130232de1f7942cba4e5984c44d1c7558b61c9c9",
+        "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/3b11a6a47c97b1cc15eb29d7130232de1f7942cba4e5984c44d1c7558b61c9c9",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "1c3d386422b65de37165ee3001f529579660d167"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/3b11a6a47c97b1cc15eb29d7130232de1f7942cba4e5984c44d1c7558b61c9c9/research/2026-09-20-astra-max/r12-usage-lineage.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/3b11a6a47c97b1cc15eb29d7130232de1f7942cba4e5984c44d1c7558b61c9c9/research/2026-09-20-astra-max/r12-usage-lineage.json"
+      },
+      "reportSha256": {
+        "markdown": "5749bb45314e45942a70e3593b04188e428ebf3b3be70eff06f8ff4f42d69ee3",
+        "json": "bc1100a21e570c3519bde5880114815aab54ef7a477a7c06b394eb9e21916511"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "max"
+      },
+      "artifactRevision": "sha256:bc1100a21e570c3519bde5880114815aab54ef7a477a7c06b394eb9e21916511"
+    },
+    {
+      "id": "r13",
+      "topic": "Безопасность bridge/model/provider и отмена",
+      "markdown": "research/2026-09-20-astra-max/r13-security-provider-cancel.md",
+      "json": "research/2026-09-20-astra-max/r13-security-provider-cancel.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/0f47b6cc04ca6586af79878fc6baffeb8f730bc1e699065bb43d5e7a2c47d827",
+        "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/0f47b6cc04ca6586af79878fc6baffeb8f730bc1e699065bb43d5e7a2c47d827",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "8c2111a1a8139efb0f4e8946b5f82c1676744212"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/0f47b6cc04ca6586af79878fc6baffeb8f730bc1e699065bb43d5e7a2c47d827/research/2026-09-20-astra-max/r13-security-provider-cancel.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/0f47b6cc04ca6586af79878fc6baffeb8f730bc1e699065bb43d5e7a2c47d827/research/2026-09-20-astra-max/r13-security-provider-cancel.json"
+      },
+      "reportSha256": {
+        "markdown": "c5367e59ca0ce4b7df8575c17b651fe671a3cfb49b9ea7ad214b82450bb94992",
+        "json": "d824ee96087cee9c13bd5a5b16f209afd15fa0f895de89ad43898b3a72ac272b"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "max"
+      },
+      "artifactRevision": "sha256:d824ee96087cee9c13bd5a5b16f209afd15fa0f895de89ad43898b3a72ac272b"
+    },
+    {
+      "id": "r14",
+      "topic": "Производительность и большой fanout",
+      "markdown": "research/2026-09-20-astra-max/r14-performance-fanout.md",
+      "json": "research/2026-09-20-astra-max/r14-performance-fanout.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "failed",
+      "resultStatus": null,
+      "currentWrapper": {
+        "status": "failed",
+        "failure": {
+          "version": 1,
+          "code": "unknown",
+          "phase": "execution",
+          "effects": "unknown",
+          "message": "Git workspace must be clean, including untracked files: /Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev"
+        }
+      },
+      "workspace": null,
+      "producerPaths": null,
+      "reportSha256": null,
+      "missing": [
+        "markdown",
+        "json",
+        "current successful producer"
+      ],
+      "reason": "Git workspace must be clean, including untracked files: /Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+      "retainedLocalFiles": [],
+      "previousStatus": "failed: fetch failed"
+    },
+    {
+      "id": "r15",
+      "topic": "Тестирование и fault injection",
+      "markdown": "research/2026-09-20-astra-max/r15-testing-fault-injection.md",
+      "json": "research/2026-09-20-astra-max/r15-testing-fault-injection.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/a37c374d6b8793a4269c15969e9cebccd609c4f624fe712d7e4ceef4333a43b3",
+        "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/a37c374d6b8793a4269c15969e9cebccd609c4f624fe712d7e4ceef4333a43b3",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "becb78d0e83fee54d50001771447d2cd091a2912"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/a37c374d6b8793a4269c15969e9cebccd609c4f624fe712d7e4ceef4333a43b3/research/2026-09-20-astra-max/r15-testing-fault-injection.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/a37c374d6b8793a4269c15969e9cebccd609c4f624fe712d7e4ceef4333a43b3/research/2026-09-20-astra-max/r15-testing-fault-injection.json"
+      },
+      "reportSha256": {
+        "markdown": "bfca53758219b10c41b99da7a1b07f45f6c82946cf2c99f1f6f2d4f68c8fbc6c",
+        "json": "881177e63b9229ab15667a45b4f2782025b76b4340aea00faf6e98e632d70661"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "max"
+      },
+      "artifactRevision": "sha256:881177e63b9229ab15667a45b4f2782025b76b4340aea00faf6e98e632d70661"
+    },
+    {
+      "id": "r16",
+      "topic": "Установка, packaging и onboarding",
+      "markdown": "research/2026-09-20-astra-max/r16-packaging-onboarding.md",
+      "json": "research/2026-09-20-astra-max/r16-packaging-onboarding.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "research",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/945bd8a5705082c2160ee88810e3b2b413c4321de606d2c2540db0a5697b02cb",
+        "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/945bd8a5705082c2160ee88810e3b2b413c4321de606d2c2540db0a5697b02cb",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "5e5e1833a4ae2cecd335ab73ab20edc259f012ec"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/945bd8a5705082c2160ee88810e3b2b413c4321de606d2c2540db0a5697b02cb/research/2026-09-20-astra-max/r16-packaging-onboarding.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/945bd8a5705082c2160ee88810e3b2b413c4321de606d2c2540db0a5697b02cb/research/2026-09-20-astra-max/r16-packaging-onboarding.json"
+      },
+      "reportSha256": {
+        "markdown": "fe6f117918f28f998debddb0f305546554c0a56d38823b7fed9773010fa59b7e",
+        "json": "7ed9c5525994fb484d2d0a27a489d66d5720a3f2a81de28cbefa499361bbfe2f"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "max"
+      },
+      "artifactRevision": "sha256:7ed9c5525994fb484d2d0a27a489d66d5720a3f2a81de28cbefa499361bbfe2f"
+    },
+    {
+      "id": "c01",
+      "pair": [
+        "r01",
+        "r02"
+      ],
+      "markdown": "research/2026-09-20-astra-max/c01-review-r01-r02.md",
+      "json": "research/2026-09-20-astra-max/c01-review-r01-r02.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "critics",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/2f8853122377f0511d7d24954cb74e919bd78943f041386a3a80247792c873f0",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "dedb31e1e213f5e8279fa6bb024021e490f3109c"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/2f8853122377f0511d7d24954cb74e919bd78943f041386a3a80247792c873f0/research/2026-09-20-astra-max/c01-review-r01-r02.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/2f8853122377f0511d7d24954cb74e919bd78943f041386a3a80247792c873f0/research/2026-09-20-astra-max/c01-review-r01-r02.json"
+      },
+      "reportSha256": {
+        "markdown": "35a2397d97a12b6aa828a9edfa4bcfdfe615eaa0e8fa62b5f7e7c873b060c0d9",
+        "json": "74ce79ebc140fc9852f1640f9df21c1a20387e123e9a4dfda1b7db197384ab5a"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "low"
+      },
+      "reviewedMaterialDigest": "sha256:eef2b627b6561fb4569a431774164962c46452fa6992615a1d26a6a75c4be434",
+      "reviewedMaterialDigestVerified": true,
+      "researchResults": {
+        "r01": {
+          "status": "succeeded",
+          "value": {
+            "result": {
+              "status": "complete",
+              "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "reportMd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/bdbc8f9f0e0714e5fc160a485f0845516735ec68dd17f8e91bedca170edb4d10/research/2026-09-20-astra-max/r01-graph-compiler.md",
+              "reportJson": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/bdbc8f9f0e0714e5fc160a485f0845516735ec68dd17f8e91bedca170edb4d10/research/2026-09-20-astra-max/r01-graph-compiler.json",
+              "reportSha256": {
+                "markdown": "d8de0f86cd4df6662fbc83c33b4830828ac7eced5fb563c14ab592188b5cbb38",
+                "json": "bcd5065cd25107d07a6356aa18603eac1c13397ff2f45970603ed6dfaa24facf"
+              },
+              "summary": "Сохранённый пакет независимо проверен и дополнен: 3 bug, 1 unknown, 3 already-fixed/опровержения. Восстановлены недостающие fixtures, исправлены ссылки, добавлен continuation provenance. Подтверждены сохранённые итоги 143 тестов без повторного запуска; post-study исправления учтены отдельно.",
+              "blockers": [],
+              "researchId": "r01",
+              "artifactRevision": "sha256:bcd5065cd25107d07a6356aa18603eac1c13397ff2f45970603ed6dfaa24facf",
+              "findingCount": 7
+            },
+            "workspace": {
+              "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/bdbc8f9f0e0714e5fc160a485f0845516735ec68dd17f8e91bedca170edb4d10",
+              "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/bdbc8f9f0e0714e5fc160a485f0845516735ec68dd17f8e91bedca170edb4d10",
+              "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "head": "5b1ac700fad9e6855624b98233d8b4be1e740194"
+            }
+          }
+        },
+        "r02": {
+          "status": "succeeded",
+          "value": {
+            "result": {
+              "status": "complete",
+              "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "reportMd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/1ba689599a7d25b37d97e1074c9b9456e535b7f0e51c0cc292f2e5064653b9b6/research/2026-09-20-astra-max/r02-effect-execution.md",
+              "reportJson": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/1ba689599a7d25b37d97e1074c9b9456e535b7f0e51c0cc292f2e5064653b9b6/research/2026-09-20-astra-max/r02-effect-execution.json",
+              "reportSha256": {
+                "markdown": "fa11dc63ae552d8189f457df0d320e48f77d5e8a54521d29922e10338165c2fa",
+                "json": "0669f868796e50e1478bf5024539b95fc000c08beaf1a3ead958a145dd2c2a43"
+              },
+              "summary": "Пакет завершён с continuation provenance: 3 воспроизведённых bug распространения Cause/cleanup и 1 already-fixed admission race. Выполнены 8 новых offline cases на точной копии e15; сохранённые 234 успешных теста отмечены отдельно. Проверены ссылки, хеши и отсутствие изменений исходников.",
+              "blockers": [],
+              "researchId": "r02",
+              "artifactRevision": "sha256:0669f868796e50e1478bf5024539b95fc000c08beaf1a3ead958a145dd2c2a43",
+              "findingCount": 4
+            },
+            "workspace": {
+              "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/1ba689599a7d25b37d97e1074c9b9456e535b7f0e51c0cc292f2e5064653b9b6",
+              "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/1ba689599a7d25b37d97e1074c9b9456e535b7f0e51c0cc292f2e5064653b9b6",
+              "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "head": "9523c9137dbc6e3099789df684e452ca0d680fcf"
+            }
+          }
+        }
+      },
+      "artifactRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "decision": "approve"
+    },
+    {
+      "id": "c02",
+      "pair": [
+        "r03",
+        "r04"
+      ],
+      "markdown": "research/2026-09-20-astra-max/c02-review-r03-r04.md",
+      "json": "research/2026-09-20-astra-max/c02-review-r03-r04.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "critics",
+      "status": "failed",
+      "resultStatus": null,
+      "currentWrapper": {
+        "status": "failed",
+        "failure": {
+          "version": 1,
+          "code": "unknown",
+          "phase": "execution",
+          "effects": "unknown",
+          "message": "Git workspace must be clean, including untracked files: /Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev"
+        }
+      },
+      "workspace": null,
+      "producerPaths": null,
+      "reportSha256": null,
+      "missing": [
+        "current successful producer",
+        "current output hashes",
+        "current complete reviewed evidence"
+      ],
+      "reason": "Git workspace must be clean, including untracked files: /Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+      "retainedLocalFiles": [],
+      "previousStatus": "failed: fetch failed"
+    },
+    {
+      "id": "c03",
+      "pair": [
+        "r05",
+        "r06"
+      ],
+      "markdown": "research/2026-09-20-astra-max/c03-review-r05-r06.md",
+      "json": "research/2026-09-20-astra-max/c03-review-r05-r06.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "critics",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/4cb966bf58d616def5608e43beed66e960861c5a4ace06c216ece14efd9c0b29",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "3655fcf0cbfb4607a98cdd518484d8a156f9d76e"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/4cb966bf58d616def5608e43beed66e960861c5a4ace06c216ece14efd9c0b29/research/2026-09-20-astra-max/c03-review-r05-r06.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/4cb966bf58d616def5608e43beed66e960861c5a4ace06c216ece14efd9c0b29/research/2026-09-20-astra-max/c03-review-r05-r06.json"
+      },
+      "reportSha256": {
+        "markdown": "78f1e3aba1354606d29f0a09f568ce7a3f08323a3ae1857a6da1193bbdb38cdd",
+        "json": "48f70bb6ed6bc798b23ee3e7b6bda96e8b763885deda197c6403421354859d69"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "low"
+      },
+      "reviewedMaterialDigest": "sha256:921a4aaf35af227dc8a22f4b843841a3c585547b69719c4153ae704a5202fd7a",
+      "reviewedMaterialDigestVerified": true,
+      "researchResults": {
+        "r05": {
+          "status": "succeeded",
+          "value": {
+            "result": {
+              "status": "complete",
+              "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "reportMd": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/481943797181ce2546f5ae674f7e93e931b5ae2bc839512d37af8dbb2a996a3c/research/2026-09-20-astra-max/r05-idempotency-continuation.md",
+              "reportJson": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/481943797181ce2546f5ae674f7e93e931b5ae2bc839512d37af8dbb2a996a3c/research/2026-09-20-astra-max/r05-idempotency-continuation.json",
+              "reportSha256": {
+                "markdown": "787eb8044acd5d0fa521e1c7ef5ec1afdba3161a3f80d1aabef428a67a0ef2e8",
+                "json": "0928d4949762410f343f935342eef81c65d503a8733402e393ce3dc7e12745b1"
+              },
+              "summary": "Воспроизведены 2 ошибки доставки: повтор исходного start после continuation отклоняется; continuation после commit до reserve остаётся queued при повторе. Подтверждены 2 already-fixed, отмечен 1 unknown. Пройдено 75 профильных тестов; собственные сценарии повторены дважды. Исходники не изменялись.",
+              "blockers": [],
+              "researchId": "r05",
+              "artifactRevision": "sha256:0928d4949762410f343f935342eef81c65d503a8733402e393ce3dc7e12745b1",
+              "findingCount": 5
+            },
+            "workspace": {
+              "path": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/481943797181ce2546f5ae674f7e93e931b5ae2bc839512d37af8dbb2a996a3c",
+              "branch": "dynamicwf/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/481943797181ce2546f5ae674f7e93e931b5ae2bc839512d37af8dbb2a996a3c",
+              "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "head": "db64d318e98386aa79e6fade2ae7809a9b324cc5"
+            }
+          }
+        },
+        "r06": {
+          "status": "succeeded",
+          "value": {
+            "result": {
+              "status": "complete",
+              "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "reportMd": "research/2026-09-20-astra-max/r06-worktrees-artifacts.md",
+              "reportJson": "research/2026-09-20-astra-max/r06-worktrees-artifacts.json",
+              "reportSha256": {
+                "markdown": "388d61e4ee975bbf97b262a19c3d382828ffce5c0a8278fa216868963e8bdd09",
+                "json": "3fb227b82815a8a1f7f6f9de883c7f1b551db7bc1a9439768771e55b65f5d632"
+              },
+              "summary": "Проверена и перенесена собственная сохранённая пара с явным provenance. Подтверждены входные хеши, согласованность findings и 27 хешей исходников. Сохранены 2 bug, 4 already-fixed и 1 unknown; исторические тесты не перезапускались.",
+              "blockers": [],
+              "researchId": "r06",
+              "artifactRevision": "sha256:3fb227b82815a8a1f7f6f9de883c7f1b551db7bc1a9439768771e55b65f5d632",
+              "findingCount": 7
+            },
+            "workspace": {
+              "path": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/00926e26e13d4c9c311099d455a644d39595d6d0ff1732efa62ed4d82ad27267",
+              "branch": "dynamicwf/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/00926e26e13d4c9c311099d455a644d39595d6d0ff1732efa62ed4d82ad27267",
+              "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "head": "ce08d9426f4057333c759764314a1147bee67a82"
+            }
+          }
+        }
+      },
+      "artifactRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "decision": "approve"
+    },
+    {
+      "id": "c04",
+      "pair": [
+        "r07",
+        "r08"
+      ],
+      "markdown": "research/2026-09-20-astra-max/c04-review-r07-r08.md",
+      "json": "research/2026-09-20-astra-max/c04-review-r07-r08.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "critics",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/8195165551f007b669f975e37466fc6c5a3f9302f675f8625016e942862b68b0",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "3525bf8f821646a2fa623e84f397fee2024d821a"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/8195165551f007b669f975e37466fc6c5a3f9302f675f8625016e942862b68b0/research/2026-09-20-astra-max/c04-review-r07-r08.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/8195165551f007b669f975e37466fc6c5a3f9302f675f8625016e942862b68b0/research/2026-09-20-astra-max/c04-review-r07-r08.json"
+      },
+      "reportSha256": {
+        "markdown": "99c796845a48f706456a691499f61071da41e42052ef782b8c3aa02fba34b4a4",
+        "json": "883a99cc104a79b5017fd9dd632e1e2e2750d146ba813ce010dd8959e7fcf765"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "low"
+      },
+      "reviewedMaterialDigest": "sha256:8677d575b6cd304044dd0181ceaa960e041155ea9fba63880c1ea3d64a5f839d",
+      "reviewedMaterialDigestVerified": true,
+      "researchResults": {
+        "r07": {
+          "status": "succeeded",
+          "value": {
+            "result": {
+              "status": "complete",
+              "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "reportMd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b/research/2026-09-20-astra-max/r07-authoring-cli-mcp.md",
+              "reportJson": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b/research/2026-09-20-astra-max/r07-authoring-cli-mcp.json",
+              "reportSha256": {
+                "markdown": "9eae292cbfc22378efd1aa5a8646943d31a7db85caa8057888ba13264442e2d3",
+                "json": "4ea71d4ada5ee4bf3b4ae7c063a816ab1ae56878e39749f96bcb76ba3b983474"
+              },
+              "summary": "Доказательный пакет восстановлен и независимо проверен: 4 воспроизведённых bug и 1 idea. Сохранённые результаты 181 теста перенесены без повторного запуска. Проверены хеши, fixture, исходники и ссылки; provenance и два post-study already-fixed выделены отдельно.",
+              "blockers": [],
+              "researchId": "r07",
+              "artifactRevision": "sha256:4ea71d4ada5ee4bf3b4ae7c063a816ab1ae56878e39749f96bcb76ba3b983474",
+              "findingCount": 5
+            },
+            "workspace": {
+              "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b",
+              "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b",
+              "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "head": "e0dfac01836f02fb2182a01d173f5987746841a7"
+            }
+          }
+        },
+        "r08": {
+          "status": "succeeded",
+          "value": {
+            "result": {
+              "status": "complete",
+              "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "reportMd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/6ddc23ed0afc5c81d40f8032ac685dea1350acc4ecde6436ec3ab19c90071ca2/research/2026-09-20-astra-max/r08-roles-skills-eval.md",
+              "reportJson": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/6ddc23ed0afc5c81d40f8032ac685dea1350acc4ecde6436ec3ab19c90071ca2/research/2026-09-20-astra-max/r08-roles-skills-eval.json",
+              "reportSha256": {
+                "markdown": "7245c39a24e2c1d28ede088593ae4c38076e45db9da541e9f1c56ea99f6f6e74",
+                "json": "ffec7efcf77bb7ab2481096f03069f754759de6509886e19dc6c773668de5af5"
+              },
+              "summary": "Пакет перенесён с проверенными историческими хешами и явным continuation provenance. Перепроверены источники, шесть схем и corpus из 24 сценариев; уточнены golden-ответы. Четыре находки, новых подтверждённых bugs нет. Model eval не запускался; post-study fixes отмечены отдельно.",
+              "blockers": [],
+              "researchId": "r08",
+              "artifactRevision": "sha256:ffec7efcf77bb7ab2481096f03069f754759de6509886e19dc6c773668de5af5",
+              "findingCount": 4
+            },
+            "workspace": {
+              "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/6ddc23ed0afc5c81d40f8032ac685dea1350acc4ecde6436ec3ab19c90071ca2",
+              "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/6ddc23ed0afc5c81d40f8032ac685dea1350acc4ecde6436ec3ab19c90071ca2",
+              "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "head": "e21957fd8094f917e4d13e40bec67ab50417a3c5"
+            }
+          }
+        }
+      },
+      "artifactRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "decision": "approve"
+    },
+    {
+      "id": "c05",
+      "pair": [
+        "r09",
+        "r10"
+      ],
+      "markdown": "research/2026-09-20-astra-max/c05-review-r09-r10.md",
+      "json": "research/2026-09-20-astra-max/c05-review-r09-r10.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "critics",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/3e9b4db90205cad9f70bafdb7300424062e3bc79f14019fd2e6218bc96567e8b",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "b7670f7e6d1913870c2677a232cb85587c44e8f0"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/3e9b4db90205cad9f70bafdb7300424062e3bc79f14019fd2e6218bc96567e8b/research/2026-09-20-astra-max/c05-review-r09-r10.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/3e9b4db90205cad9f70bafdb7300424062e3bc79f14019fd2e6218bc96567e8b/research/2026-09-20-astra-max/c05-review-r09-r10.json"
+      },
+      "reportSha256": {
+        "markdown": "a4dfb35d6f9e430495fe4156022dbad7020f9dbd2ae53c05e0d833e326d15385",
+        "json": "8362ca06d773c4b75ba481ed89ef379a0e9fce843a010522b70776b4fefe2789"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "low"
+      },
+      "reviewedMaterialDigest": "sha256:c4afd282534c46b4d87184a7d000c38bd01a2bcddbc628f0373dbf2da10c28d5",
+      "reviewedMaterialDigestVerified": true,
+      "researchResults": {
+        "r09": {
+          "status": "succeeded",
+          "value": {
+            "result": {
+              "status": "complete",
+              "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "reportMd": "research/2026-09-20-astra-max/r09-waits-gates-ux.md",
+              "reportJson": "research/2026-09-20-astra-max/r09-waits-gates-ux.json",
+              "reportSha256": {
+                "markdown": "1027aa819b121a5063a497dda404d2b536b8952e40db06f29b6d337f788927cf",
+                "json": "97210cb550365236cad5cba94909d6cb646406d7700605c461df673ffef0e8ea"
+              },
+              "summary": "Сохранённая пара проверена и перенесена с provenance. Семь находок: 2 bug, 1 idea, 3 already-fixed, 1 unknown. Проверены согласованность отчётов, ссылки и исходники; исторические поведенческие проверки не повторялись.",
+              "blockers": [],
+              "researchId": "r09",
+              "artifactRevision": "sha256:97210cb550365236cad5cba94909d6cb646406d7700605c461df673ffef0e8ea",
+              "findingCount": 7
+            },
+            "workspace": {
+              "path": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/296767b722d7bc81389cc890291795fd34e157c7adfa3ccfa548b000fff995ca",
+              "branch": "dynamicwf/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/296767b722d7bc81389cc890291795fd34e157c7adfa3ccfa548b000fff995ca",
+              "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "head": "1b6a5235816cc7de83839804322d6c15ac9c69c3"
+            }
+          }
+        },
+        "r10": {
+          "status": "succeeded",
+          "value": {
+            "result": {
+              "status": "complete",
+              "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "reportMd": "research/2026-09-20-astra-max/r10-async-dashboard.md",
+              "reportJson": "research/2026-09-20-astra-max/r10-async-dashboard.json",
+              "reportSha256": {
+                "markdown": "f25c98d1f295c3e76b7fb8540a1db5dc8ba0e34b22e738be8dc83bc98e15f755",
+                "json": "11854ecda269ce5f7664557926f8d03c0de1f98681018939386e5cd20a6a4d61"
+              },
+              "summary": "Воспроизведены 3 клиентских bug: устаревший список runs, инвалидация медленной загрузки всей задачи polling-ом и откат истории восстановления старым GET после POST. 33/33 регрессии прошли; пять изолированных Chrome-сценариев подтвердили находки и уже исправленные guards/disclosure/editor persistence. Изменений реализации нет.",
+              "blockers": [],
+              "researchId": "r10",
+              "artifactRevision": "sha256:11854ecda269ce5f7664557926f8d03c0de1f98681018939386e5cd20a6a4d61",
+              "findingCount": 3
+            },
+            "workspace": {
+              "path": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/866766958ebb8006286c16773a1015c2598df9c62261f3964e03c157234a6314",
+              "branch": "dynamicwf/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/866766958ebb8006286c16773a1015c2598df9c62261f3964e03c157234a6314",
+              "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "head": "96458af7f37a800a3e5bae38d343a053219d4caf"
+            }
+          }
+        }
+      },
+      "artifactRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "decision": "approve"
+    },
+    {
+      "id": "c06",
+      "pair": [
+        "r11",
+        "r12"
+      ],
+      "markdown": "research/2026-09-20-astra-max/c06-review-r11-r12.md",
+      "json": "research/2026-09-20-astra-max/c06-review-r11-r12.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "critics",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/794762f3582c5906ca2a84fc196a3c906fee6bfe9622d65ad26030d08b0dc0ee",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "c92bb2038c32c3c3c6b2dcc11a9ba9daf703b0e4"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/794762f3582c5906ca2a84fc196a3c906fee6bfe9622d65ad26030d08b0dc0ee/research/2026-09-20-astra-max/c06-review-r11-r12.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/794762f3582c5906ca2a84fc196a3c906fee6bfe9622d65ad26030d08b0dc0ee/research/2026-09-20-astra-max/c06-review-r11-r12.json"
+      },
+      "reportSha256": {
+        "markdown": "1dcc6f9796a0f6d883b6582f300aad13b8c9a778a453ba8f252e64ace08f7347",
+        "json": "50c1ec66ecb8392aacea0794ef7fa8e4c6bc1e3c3705c091d048d1b04cccc47c"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "low"
+      },
+      "reviewedMaterialDigest": "sha256:1adb5e9862e627363e5093163e7ac6c33e069ec09ec5187152a3385cd372ce19",
+      "reviewedMaterialDigestVerified": true,
+      "researchResults": {
+        "r11": {
+          "status": "succeeded",
+          "value": {
+            "result": {
+              "status": "complete",
+              "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "reportMd": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/ae9f7bfdeccdee959148e259d55c43a8f4274f2d3f2d1b30b4b86466aab4b20c/research/2026-09-20-astra-max/r11-graph-scale.md",
+              "reportJson": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/ae9f7bfdeccdee959148e259d55c43a8f4274f2d3f2d1b30b4b86466aab4b20c/research/2026-09-20-astra-max/r11-graph-scale.json",
+              "reportSha256": {
+                "markdown": "69671ef9c6c63d581c16309e9ce9e07687a12bdc1df9e5e8e708b2bedd68e525",
+                "json": "2366e41b1b2e0cd9cc270c5b5274dbcebef6430b772218334f700e182121b9e9"
+              },
+              "summary": "Исследование завершено: 4 воспроизведённых бага фокуса, видимости, zoom и текста; 1 идея оптимизации, 1 unknown, 3 подтверждённых already-fixed. Пройдено 45 профильных тестов; измерены геометрия до 1000 узлов и браузерные fixtures до 5000 scope. Воспроизводители включены в JSON; исходники не изменялись.",
+              "blockers": [],
+              "researchId": "r11",
+              "artifactRevision": "sha256:2366e41b1b2e0cd9cc270c5b5274dbcebef6430b772218334f700e182121b9e9",
+              "findingCount": 9
+            },
+            "workspace": {
+              "path": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/ae9f7bfdeccdee959148e259d55c43a8f4274f2d3f2d1b30b4b86466aab4b20c",
+              "branch": "dynamicwf/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/ae9f7bfdeccdee959148e259d55c43a8f4274f2d3f2d1b30b4b86466aab4b20c",
+              "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "head": "03dd18f847939608515bfc273fc444687738a986"
+            }
+          }
+        },
+        "r12": {
+          "status": "succeeded",
+          "value": {
+            "result": {
+              "status": "complete",
+              "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "reportMd": "research/2026-09-20-astra-max/r12-usage-lineage.md",
+              "reportJson": "research/2026-09-20-astra-max/r12-usage-lineage.json",
+              "reportSha256": {
+                "markdown": "5749bb45314e45942a70e3593b04188e428ebf3b3be70eff06f8ff4f42d69ee3",
+                "json": "bc1100a21e570c3519bde5880114815aab54ef7a477a7c06b394eb9e21916511"
+              },
+              "summary": "Пакет завершён с continuation provenance. Два дефекта независимо воспроизведены offline: missing usage становится полным нулём; подпись старого отчёта смешивает номера попыток. Сохранённые результаты 196 тестов проверены без повторного запуска. JSON создан впервые, ссылки и хеши проверены; post-study исправления отделены.",
+              "blockers": [],
+              "researchId": "r12",
+              "artifactRevision": "sha256:bc1100a21e570c3519bde5880114815aab54ef7a477a7c06b394eb9e21916511",
+              "findingCount": 8
+            },
+            "workspace": {
+              "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/3b11a6a47c97b1cc15eb29d7130232de1f7942cba4e5984c44d1c7558b61c9c9",
+              "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/3b11a6a47c97b1cc15eb29d7130232de1f7942cba4e5984c44d1c7558b61c9c9",
+              "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "head": "1c3d386422b65de37165ee3001f529579660d167"
+            }
+          }
+        }
+      },
+      "artifactRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "decision": "approve"
+    },
+    {
+      "id": "c07",
+      "pair": [
+        "r13",
+        "r14"
+      ],
+      "markdown": "research/2026-09-20-astra-max/c07-review-r13-r14.md",
+      "json": "research/2026-09-20-astra-max/c07-review-r13-r14.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "critics",
+      "status": "failed",
+      "resultStatus": null,
+      "currentWrapper": {
+        "status": "failed",
+        "failure": {
+          "version": 1,
+          "code": "unknown",
+          "phase": "execution",
+          "effects": "unknown",
+          "message": "Git workspace must be clean, including untracked files: /Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev"
+        }
+      },
+      "workspace": null,
+      "producerPaths": null,
+      "reportSha256": null,
+      "missing": [
+        "current successful producer",
+        "current output hashes",
+        "current complete reviewed evidence"
+      ],
+      "reason": "Git workspace must be clean, including untracked files: /Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+      "retainedLocalFiles": [
+        {
+          "path": "research/2026-09-20-astra-max/c07-review-r13-r14.md",
+          "sha256": "5ac32bcbe64759537e23150646fd2b70489b686cca9a4316d369f5f928742ebc",
+          "acceptedAsCurrentEvidence": false
+        },
+        {
+          "path": "research/2026-09-20-astra-max/c07-review-r13-r14.json",
+          "sha256": "75ec1ed5cc14585c40014c48fb50f19a9585ac26a2f35f99c3a2c5aa80a500ae",
+          "acceptedAsCurrentEvidence": false
+        }
+      ],
+      "previousStatus": "blocked: missing r14"
+    },
+    {
+      "id": "c08",
+      "pair": [
+        "r15",
+        "r16"
+      ],
+      "markdown": "research/2026-09-20-astra-max/c08-review-r15-r16.md",
+      "json": "research/2026-09-20-astra-max/c08-review-r15-r16.json",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "kind": "critics",
+      "status": "succeeded",
+      "resultStatus": "complete",
+      "workspace": {
+        "path": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/d28ec856f4d6f59d82b4f466193f078ea32d44eb7ff41eba6fa0e865ebf69a2e",
+        "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "head": "b829ff84f789861a1c51ee4d6a231a4ccc52b424"
+      },
+      "producerPaths": {
+        "markdown": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/d28ec856f4d6f59d82b4f466193f078ea32d44eb7ff41eba6fa0e865ebf69a2e/research/2026-09-20-astra-max/c08-review-r15-r16.md",
+        "json": "/Users/ramu/.dynamicwf/runs/run-b46cf9ab-6e57-4c7a-83dc-e44802a4ab9c/worktrees/d28ec856f4d6f59d82b4f466193f078ea32d44eb7ff41eba6fa0e865ebf69a2e/research/2026-09-20-astra-max/c08-review-r15-r16.json"
+      },
+      "reportSha256": {
+        "markdown": "a1644906a4c15ef550e4167dab7222f6299e6795f7d8b8bec6a3b835e16af8eb",
+        "json": "e93bcaaece69f008aa251d47d38a13f3d084107d8f96501ae925337af830a9de"
+      },
+      "checks": {
+        "parseJSON": true,
+        "sourceRevision": true,
+        "producerHashes": true,
+        "materializedBytes": true,
+        "snapshotBlobs": true
+      },
+      "missing": [],
+      "provenance": {
+        "reuse": true,
+        "newModelInvocation": false,
+        "thinking": "low"
+      },
+      "reviewedMaterialDigest": "sha256:51d34cb96d11e51b2635051b95f421c9626a0bb3fa07b1fae43527dce0f08d7a",
+      "reviewedMaterialDigestVerified": true,
+      "researchResults": {
+        "r15": {
+          "status": "succeeded",
+          "value": {
+            "result": {
+              "status": "complete",
+              "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "reportMd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/a37c374d6b8793a4269c15969e9cebccd609c4f624fe712d7e4ceef4333a43b3/research/2026-09-20-astra-max/r15-testing-fault-injection.md",
+              "reportJson": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/a37c374d6b8793a4269c15969e9cebccd609c4f624fe712d7e4ceef4333a43b3/research/2026-09-20-astra-max/r15-testing-fault-injection.json",
+              "reportSha256": {
+                "markdown": "bfca53758219b10c41b99da7a1b07f45f6c82946cf2c99f1f6f2d4f68c8fbc6c",
+                "json": "881177e63b9229ab15667a45b4f2782025b76b4340aea00faf6e98e632d70661"
+              },
+              "summary": "Пакет перенесён с provenance и проверен: 1 дефект тестового harness, 0 доказанных продуктовых багов. 121 исторический pass подтверждён сохранёнными логами; новых тестовых запусков нет.",
+              "blockers": [],
+              "researchId": "r15",
+              "artifactRevision": "sha256:881177e63b9229ab15667a45b4f2782025b76b4340aea00faf6e98e632d70661",
+              "findingCount": 5
+            },
+            "workspace": {
+              "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/a37c374d6b8793a4269c15969e9cebccd609c4f624fe712d7e4ceef4333a43b3",
+              "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/a37c374d6b8793a4269c15969e9cebccd609c4f624fe712d7e4ceef4333a43b3",
+              "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "head": "becb78d0e83fee54d50001771447d2cd091a2912"
+            }
+          }
+        },
+        "r16": {
+          "status": "succeeded",
+          "value": {
+            "result": {
+              "status": "complete",
+              "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "reportMd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/945bd8a5705082c2160ee88810e3b2b413c4321de606d2c2540db0a5697b02cb/research/2026-09-20-astra-max/r16-packaging-onboarding.md",
+              "reportJson": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/945bd8a5705082c2160ee88810e3b2b413c4321de606d2c2540db0a5697b02cb/research/2026-09-20-astra-max/r16-packaging-onboarding.json",
+              "reportSha256": {
+                "markdown": "fe6f117918f28f998debddb0f305546554c0a56d38823b7fed9773010fa59b7e",
+                "json": "7ed9c5525994fb484d2d0a27a489d66d5720a3f2a81de28cbefa499361bbfe2f"
+              },
+              "summary": "Полный пакет r16 восстановлен с provenance. Сохранены 5 находок: hardlink bug helper, идея диагностики SDK patch, unknown clean install и 2 already-fixed. Перепроверены хеши, ссылки, сохранённые результаты 106 тестов и fixtures без повторного исполнения. Post-study исправления отмечены отдельно.",
+              "blockers": [],
+              "researchId": "r16",
+              "artifactRevision": "sha256:7ed9c5525994fb484d2d0a27a489d66d5720a3f2a81de28cbefa499361bbfe2f",
+              "findingCount": 5
+            },
+            "workspace": {
+              "path": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/945bd8a5705082c2160ee88810e3b2b413c4321de606d2c2540db0a5697b02cb",
+              "branch": "dynamicwf/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/945bd8a5705082c2160ee88810e3b2b413c4321de606d2c2540db0a5697b02cb",
+              "base": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+              "head": "5e5e1833a4ae2cecd335ab73ab20edc259f012ec"
+            }
+          }
+        }
+      },
+      "artifactRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "decision": "approve"
+    }
+  ]
+}

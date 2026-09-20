@@ -1,0 +1,1194 @@
+{
+  "metadata": {
+    "researchId": "r01",
+    "topic": "Корректность графа, выражений и компилятора",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "date": "2026-09-20",
+    "timezone": "UTC",
+    "status": "complete",
+    "mode": "Continuation: проверка и ограниченное дополнение сохранённого независимого исследования; без реализации",
+    "language": "ru",
+    "sourceVerified": "Новый cwd независимо проверен на study-source; HEAD integration-dev на continuation равен publicationRevision. Исторический отчёт отдельно относил тогдашние worktree/dev к study-source.",
+    "runtime": "Исторические E01–E09: Node v26.8.1; behavioural tests в continuation не запускались",
+    "dependencies": "Существующие node_modules integration-dev; установки и изменения пакетов не выполнялись",
+    "executionLocation": "Исторические E01–E09: /tmp/r01-graph-compiler.PkapHE; continuation только читает сохранённые материалы, пишет два отчёта в новый cwd",
+    "reportMarkdown": "research/2026-09-20-astra-max/r01-graph-compiler.md",
+    "reportJson": "research/2026-09-20-astra-max/r01-graph-compiler.json",
+    "findingCount": 7,
+    "findingCountDefinition": "Семь записей findings на study-source: 3 bug, 1 unknown, 3 already-fixed. Два postStudyAlreadyFixed — отдельный контекст, не новые находки и не включены в счётчик.",
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "completionDate": "2026-09-20"
+  },
+  "summary": {
+    "bugCount": 3,
+    "unknownCount": 1,
+    "alreadyFixedCount": 3,
+    "ideaCount": 0,
+    "testsPassed": 143,
+    "testsFailed": 0,
+    "testsSkipped": 0,
+    "conclusion": "Воспроизведены изменение семантики exists при канонизации object.fields, обход прямой graph JSON-границы exotic массивом и непереносимая публичная DraftSchema. Базовые lazy/routing/scopes regressions прошли. Исправленные authoring/output arrays, literal-preserving schema conversion и patch/id не переоткрываются.",
+    "blockers": [],
+    "testsExecutionPhase": "original-study; агрегаты 131+12 перепроверены чтением сохранённых результатов, не повторным запуском",
+    "newBehavioralTestsRun": 0
+  },
+  "coverage": {
+    "initialReading": [
+      "AGENTS.md",
+      "PROJECT_INFO/architecture.md",
+      "PROJECT_INFO/development.md",
+      "PROJECT_INFO/known-issues.md",
+      "PROJECT_INFO/graph-contract.md",
+      "PROJECT_INFO/authoring.md:1-120",
+      "git log -18 --oneline",
+      "git log по целевым файлам и git show --stat профильных исправлений"
+    ],
+    "fullyReadCoreFiles": [
+      "src/graph.ts",
+      "src/expressions.ts",
+      "src/compiler.ts",
+      "src/public-schema.ts"
+    ],
+    "supportingSources": [
+      "src/authoring.ts",
+      "src/output-schema.ts",
+      "src/generated-module.ts",
+      "src/runtime-contract.ts",
+      "src/compiler-versions.ts",
+      "src/run-runtime.ts",
+      "src/mcp-tools.ts",
+      "src/service.ts:1-110",
+      "src/execution-plan.ts:1-145",
+      "tests/routing-trace.test.ts",
+      "tests/run-runtime.test.ts:1-110"
+    ],
+    "areas": [
+      {
+        "name": "Graph schema and topology",
+        "performed": "Текущий код и graph/authoring/campaign-schema regressions: ссылки, достижимость, end path, рекурсия, config, clone/freeze",
+        "boundary": "Структурный путь к end не доказывает завершение цикла; это документированная граница"
+      },
+      {
+        "name": "Expression and routing semantics",
+        "performed": "Lazy select/all/any/exists, strict boolean, missing refs, equality, собственные поля; 781 routing sequences с/без посторонних рёбер; direct/generated контрпример",
+        "boundary": "Полного второго production interpreter нет; сравнение expression/routing API с generated execution"
+      },
+      {
+        "name": "Compiler, loops, scopes and replay",
+        "performed": "Compiler suite с настоящими generated TS diagnostics; loop/map/parallel/subworkflow, legacy-v3, v9 reuse; собственный двухпроходный loop в двух map scopes и cache replay",
+        "boundary": "Не вся матрица старых compiler versions; cache fixture не доказывает crash recovery supervisor"
+      },
+      {
+        "name": "Public schema portability",
+        "performed": "Literal-preserving conversion, escaping, repeated/conflicting definitions, настоящий workflow.schema response и Ajv2020",
+        "boundary": "Нет проверки всех сторонних потребителей и произвольных JSON Schema vocabularies"
+      },
+      {
+        "name": "JSON corner cases",
+        "performed": "Компенсированные дырки, унаследованный getter, dense Array subclass, валидность snapshot, signed zero",
+        "boundary": "Prototype/getter fixtures только внутрипроцессные; произвольные Proxy не проверены"
+      }
+    ],
+    "notPerformed": [
+      "Полный npm test",
+      "Полный typecheck репозитория вне generated TS diagnostics существующего compiler suite",
+      "Live provider, модельные вызовы, pi/dynamicwf/subagents",
+      "Управление реальными пользовательскими runs или процессами",
+      "Browser/SSH/web/credentials checks",
+      "Повторная проверка UI ownership, wait disclosure/caret/scroll и skill delivery",
+      "Запуск полных routing-trace и run-runtime suites",
+      "Изменение исходников, tests, PROJECT_INFO, package/lock или integration-dev",
+      "Git commit/push/checkout/reset",
+      "Повтор behavioral tests/probes E01–E09 в continuation; новые publication suites"
+    ],
+    "phase": "Основное coverage перенесено из исходного исследования; независимо перепроверенные материалы перечислены в continuationProvenance",
+    "continuationAdditionalReading": [
+      "PROJECT_INFO/execution-plan.md",
+      "git objects/diff study-source..publicationRevision",
+      "skills/dynamic-workflows/SKILL.md:110-114 @ publicationRevision",
+      "skills/dynamic-workflows/references/authoring.md:128-156 @ publicationRevision"
+    ]
+  },
+  "findings": [
+    {
+      "id": "r01-B01",
+      "classification": "bug",
+      "title": "Канонизация object.fields меняет exists/fallback на routing error",
+      "priority": "medium",
+      "confidence": "Воспроизведено на текущей ревизии, включая JournalRuntime с in-memory RunStore",
+      "evidence": [
+        {
+          "file": "src/compiler.ts",
+          "lines": "17-23",
+          "fact": "Рекурсивная сортировка ключей всех объектов перед JSON.parse"
+        },
+        {
+          "file": "src/compiler.ts",
+          "lines": "68,121",
+          "fact": "Канонизация применяется к рёбрам и узлам"
+        },
+        {
+          "file": "src/expressions.ts",
+          "lines": "54-58",
+          "fact": "Object.entries задаёт порядок вычисления; exists подавляет только MissingReference"
+        },
+        {
+          "file": "src/run-runtime.ts",
+          "lines": "126-134",
+          "fact": "Ошибка explainEdge сохраняется и становится routing failure"
+        },
+        {
+          "file": "tests/expressions.test.ts",
+          "lines": "28-36",
+          "fact": "exists не должен подавлять ошибки типа"
+        }
+      ],
+      "trigger": {
+        "input": {
+          "flag": 1
+        },
+        "expression": {
+          "op": "exists",
+          "value": {
+            "op": "object",
+            "fields": {
+              "z": {
+                "op": "ref",
+                "path": [
+                  "input",
+                  "missing"
+                ]
+              },
+              "a": {
+                "op": "not",
+                "value": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "flag"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "orderRequirement": "В исходном AST z вставлен раньше a; expression используется условием ребра start->yes перед fallback start->no"
+      },
+      "expected": "Прямые evaluate/chooseEdge/explainEdge и generated execution одного принятого AST совпадают по успеху/ошибке и переходу",
+      "observed": {
+        "validation": "valid",
+        "directEvaluation": false,
+        "directDestination": "no",
+        "directTraceReason": "fallback",
+        "generatedError": "Condition must return a boolean",
+        "generatedTraceReason": "error",
+        "directJournalActivations": [
+          "start:succeeded",
+          "no:succeeded"
+        ],
+        "generatedJournalActivations": [
+          "start:succeeded"
+        ],
+        "hashObservation": "Перестановка z/a не меняет source hash, но меняет прямой результат"
+      },
+      "cause": "Порядок вычисления object fields наблюдаем через различие MissingReference и других ошибок; канонизатор предполагает его незначимость",
+      "impact": "На допустимом JSON-графе проверка через прямой evaluator показывает fallback, а compiled graph останавливается с ошибкой до терминального узла",
+      "counterEvidence": [
+        "При boolean flag true/false оба пути выбирают fallback",
+        "В исходном порядке a,z прямой evaluator также падает",
+        "Select и all/any short-circuit проходят существующие и дополнительные проверки",
+        "Это не инъекция кода, не изменение порядка массива рёбер и не доказательство дефекта live provider"
+      ],
+      "reproduction": {
+        "experiments": [
+          "r01-E03",
+          "r01-E04"
+        ],
+        "fixture": "Markdown: E04 / `probe-journal-parity.ts`",
+        "command": "cd $P && node --import tsx probe-journal-parity.ts",
+        "environment": "Offline archive исходной ревизии; availableModels: []; два отдельных RunStore(':memory:'); без supervisor/workers"
+      },
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Определить единый порядок object.fields и применять его в evaluator, например обход отсортированных ключей с тестом числоподобных имён. Альтернатива: сохранять значимый порядок AST при сериализации с решением о версии compiler/source hash.",
+        "risk": "Приоритет ошибок прямого API может измениться; изменение сериализации нарушает старые source/hash. Старые generated modules также загружают текущий evaluator.",
+        "acceptance": [
+          "Обе перестановки полей и числоподобные ключи дают одинаковую семантику direct/generated",
+          "Проверены valid/invalid boolean и присутствующее/отсутствующее поле",
+          "Choose/explain/generated JournalRuntime согласованы по результату или ошибке",
+          "Legacy и lazy regressions сохранены; exists не подавляет все ошибки подряд"
+        ]
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "observationPhase": "original-study; перенесено из проверенного по SHA256 отчёта",
+      "continuationReview": "Критические ссылки и причинная связь повторно просмотрены в study-source; behavioral воспроизводитель не повторялся"
+    },
+    {
+      "id": "r01-B02",
+      "classification": "bug",
+      "title": "Прямая graph JSON-граница выполняет inherited code и принимает нестабильный snapshot",
+      "priority": "medium для прямого TS API; низкая применимость к JSON CLI/MCP",
+      "confidence": "Воспроизведено с getter counts, повторной валидацией snapshot и исполнением compiled module",
+      "evidence": [
+        {
+          "file": "src/graph.ts",
+          "lines": "77-89",
+          "fact": "Обещана защита от getters/prototypes; массивы исключены из prototype-check, проверяется только количество ключей"
+        },
+        {
+          "file": "src/graph.ts",
+          "lines": "98-103",
+          "fact": "После слабого preflight запускается TypeBox Check"
+        },
+        {
+          "file": "src/graph.ts",
+          "lines": "243-246",
+          "fact": "После validation выполняется structuredClone без повторной проверки"
+        },
+        {
+          "file": "src/compiler.ts",
+          "lines": "19",
+          "fact": "Канонизация map/join пропускает единственную дырку"
+        },
+        {
+          "file": "src/authoring.ts",
+          "lines": "154-156",
+          "fact": "Строгая проверка собственных индексов уже есть на authoring-границе"
+        },
+        {
+          "file": "src/output-schema.ts",
+          "lines": "13-15",
+          "fact": "Та же более строгая проверка уже есть на output-границе"
+        }
+      ],
+      "trigger": "Literal = Array(1) без собственного 0, с extra:42 и prototype поверх Array.prototype, содержащим getter 0, возвращающий 7. Дополнительный случай: dense Array subclass в graph.nodes с переопределённым entries().",
+      "expected": "Отказ до getter/method; принятый parseWorkflow snapshot должен оставаться валидным без потери данных",
+      "observed": {
+        "initialValidation": "valid; getter вызван один раз",
+        "parse": "getter вызван повторно; snapshot length=1, own 0 отсутствует; повторная validation false",
+        "compile": "getter вызван третий раз; generated output []",
+        "denseSubclass": "validation valid; overridden entries вызван 3 раза",
+        "controls": "Четыре обычных compensated holes отвергнуты TypeBox; authoring/output отвергают exotic sparse fixture без getter"
+      },
+      "cause": "Разные реализации JSON-границы: graph принимает inherited numeric read, structuredClone удаляет prototype, canonicalization затем теряет дырку. Dense subclass показывает дополнительный риск вызова переопределяемых array methods.",
+      "impact": "Нарушены side-effect-free preflight и согласованность validate/parse/compile для прямого unknown API",
+      "counterEvidence": [
+        "Обычные sparse+extra массивы без exotic prototype не обходят итоговую TypeBox validation",
+        "JSON.parse не создаёт такие getters/prototypes; удалённый exploit через JSON не продемонстрирован",
+        "Authoring/output исправлены и отказывают до getter",
+        "Подготовка плана имеет дополнительный assertJson; прохождение fixture до реального запуска не заявляется"
+      ],
+      "reproduction": {
+        "experiments": [
+          "r01-E05",
+          "r01-E09"
+        ],
+        "fixture": "Markdown: E05 / `probe-exotic-array.ts`",
+        "command": "cd $P && node --import tsx probe-exotic-array.ts"
+      },
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Проверять точные собственные индексы в graph preflight и либо отклонять nonstandard array prototypes до schema walking, либо не вызывать переопределяемые методы входного массива. По возможности согласовать JSON boundary с authoring/output.",
+        "risk": "Изменение допустимости subclasses/cross-realm arrays и диагностик прямого API. Только исправления количества ключей недостаточно для dense subclass.",
+        "acceptance": [
+          "Обе exotic fixtures отклоняются до getter/entries",
+          "Плотные, frozen и shared noncyclic JSON по-прежнему допустимы",
+          "Validation success в поддерживаемом домене влечёт валидность parseWorkflow snapshot",
+          "Compile не превращает принятый массив длины 1 в []"
+        ]
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "observationPhase": "original-study; перенесено из проверенного по SHA256 отчёта",
+      "continuationReview": "Критические ссылки и причинная связь повторно просмотрены в study-source; behavioral воспроизводитель не повторялся"
+    },
+    {
+      "id": "r01-B03",
+      "classification": "bug",
+      "title": "workflow.schema.draft содержит конфликтующие named definitions",
+      "priority": "medium для потребителей публичной схемы",
+      "confidence": "Воспроизведено через настоящий WorkflowService.dispatch('workflow.schema')",
+      "evidence": [
+        {
+          "file": "src/authoring.ts",
+          "lines": "36-39",
+          "fact": "DraftSchema включает два cyclic bundle через NodeSchema и EdgeSchema"
+        },
+        {
+          "file": "src/graph.ts",
+          "lines": "73-74",
+          "fact": "Оба bundle определяют Json и Expr"
+        },
+        {
+          "file": "src/service.ts",
+          "lines": "91-93",
+          "fact": "Публичный ответ возвращает внутренний DraftSchema без conversion"
+        },
+        {
+          "file": "src/authoring.ts",
+          "lines": "30-33",
+          "fact": "PublicDraftPatchSchema уже преобразована portableInputSchema"
+        },
+        {
+          "file": "src/public-schema.ts",
+          "lines": "20-48",
+          "fact": "Существующий helper устраняет неоднозначность repeated definitions"
+        }
+      ],
+      "trigger": "JSON roundtrip ответа workflow.schema, затем new Ajv2020({strict:true,allowUnionTypes:true}).compile(schemas.draft)",
+      "expected": "Самостоятельная опубликованная JSON Schema компилируется и проверяет результат createDraft",
+      "observed": {
+        "error": "reference \"Json\" resolves to more than one schema",
+        "duplicatePositions": [
+          "graphs patternProperties / nodes / items / $defs / Json",
+          "graphs patternProperties / edges / items / $defs / Json"
+        ],
+        "strictFalse": "Та же ошибка",
+        "afterPortableConversion": "Compile успешен; draft принят; extra property отвергнуто",
+        "internalTypeBox": "Принимает draft",
+        "publicPatch": "Компилируется и принимает корректный patch с id"
+      },
+      "cause": "Внутренняя TypeBox-схема опубликована без уже существующей нормализации local refs",
+      "impact": "Внешний JSON Schema consumer не может использовать поле draft из публичного workflow.schema даже для валидного черновика",
+      "counterEvidence": [
+        "Internal authoring TypeBox работает",
+        "Публичный patch/id уже исправлен и работает",
+        "Exploratory probe отдельно компилирует workflow/expression/patch с strict:false",
+        "Проблема возникает до validation данных, без run/model/provider"
+      ],
+      "reproduction": {
+        "experiments": [
+          "r01-E06",
+          "r01-E09"
+        ],
+        "fixture": "Markdown: E06 / `probe-schema-service.ts`",
+        "command": "cd $P && node --import tsx probe-schema-service.ts",
+        "environment": "WorkflowService(':memory:'); только schema dispatch; без controller"
+      },
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Публиковать portable-копию DraftSchema, не меняя internal TypeBox schema; проверять весь schema response в отдельной регрессии",
+        "risk": "Форма named refs изменится для потребителей; набор принимаемых JSON drafts должен остаться прежним",
+        "acceptance": [
+          "Все schema documents ответа по отдельности компилируются стандартным валидатором после JSON roundtrip",
+          "Draft принимает пустой корректный черновик и отвергает extra property",
+          "Patch/id и literal-preserving regressions сохранены",
+          "Ослабление Ajv strictness не используется как обход"
+        ]
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "observationPhase": "original-study; перенесено из проверенного по SHA256 отчёта",
+      "continuationReview": "Критические ссылки и причинная связь повторно просмотрены в study-source; behavioral воспроизводитель не повторялся"
+    },
+    {
+      "id": "r01-U01",
+      "classification": "unknown",
+      "title": "Сохранение знака -0 не определено контрактом",
+      "confidence": "Различие воспроизведено; нормативное ожидание и пользовательский дефект не установлены",
+      "evidence": [
+        {
+          "file": "src/expressions.ts",
+          "lines": "50",
+          "fact": "structuredClone literal сохраняет -0"
+        },
+        {
+          "file": "src/compiler.ts",
+          "lines": "18",
+          "fact": "JSON.stringify нормализует -0 в 0"
+        },
+        {
+          "file": "src/expressions.ts",
+          "lines": "36-37",
+          "fact": "DSL equality считает ±0 равными"
+        },
+        {
+          "file": "tests/json-array-boundary.test.ts",
+          "lines": "49-59",
+          "fact": "Signed zero входит в accepted JSON fixtures, но это не устанавливает compiled bit-level semantics"
+        },
+        {
+          "file": "PROJECT_INFO/execution-plan.md",
+          "lines": "171-174",
+          "fact": "JSON-доставка явно нормализует -0 в 0; это ожидаемо для транспорта",
+          "reviewPhase": "continuation"
+        }
+      ],
+      "observed": "Parsed JSON -0 принят; direct Object.is(value,-0)=true, generated=false; source hash ±0 одинаков; DSL eq=true; wire JSON обоих равен 0",
+      "unresolved": "Нужна ли побитовая signed-zero семантика прямого evaluator относительно compiler; транспортная нормализация определена и не является неизвестной",
+      "counterEvidence": [
+        "Расхождение routing не показано",
+        "Обычный JSON transport уже нормализует знак",
+        "Транспортная нормализация явно описана в PROJECT_INFO/execution-plan.md:171-174; unknown относится только к побитовому контракту прямого evaluator относительно compiler"
+      ],
+      "reproduction": {
+        "experiments": [
+          "r01-E08"
+        ],
+        "fixture": "Markdown: E08 / `probe-zero.ts`",
+        "command": "cd $P && node --import tsx probe-zero.ts"
+      },
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Сначала определить контракт, затем добавить прямой/generated/transport test",
+        "risk": "Сохранение знака меняет source/hash без доказанной пользовательской пользы",
+        "acceptance": [
+          "Документирован единый контракт; наблюдение не переименовано автоматически в bug"
+        ]
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "observationPhase": "original-study; перенесено из проверенного по SHA256 отчёта",
+      "continuationReview": "Критические ссылки и причинная связь повторно просмотрены в study-source; behavioral воспроизводитель не повторялся"
+    },
+    {
+      "id": "r01-AF01",
+      "classification": "already-fixed",
+      "title": "Компенсированные дырки authoring/output отклоняются",
+      "evidence": [
+        {
+          "file": "src/authoring.ts",
+          "lines": "154-156",
+          "fact": "Проверяются имена собственных индексов"
+        },
+        {
+          "file": "src/output-schema.ts",
+          "lines": "13-15",
+          "fact": "Та же строгая проверка индексов"
+        },
+        {
+          "file": "tests/json-array-boundary.test.ts",
+          "lines": "22-45",
+          "fact": "Компенсированные дырки на двух границах"
+        }
+      ],
+      "history": "7209b98f0e221f692a5712d64e363c32ba08ba0b",
+      "experiments": [
+        "r01-E01",
+        "r01-E05"
+      ],
+      "conclusion": "Прежний дефект двух исправленных границ не воспроизводится; отдельная graph boundary остаётся предметом B02",
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Сохранить защиту; включить graph в общую матрицу boundary cases",
+        "risk": "При переносе helper может измениться формат диагностик",
+        "acceptance": [
+          "Прежние accepted/rejected cases и отсутствие побочных вызовов сохранены"
+        ]
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "observationPhase": "original-study; перенесено из проверенного по SHA256 отчёта",
+      "continuationReview": "Критические ссылки и причинная связь повторно просмотрены в study-source; behavioral воспроизводитель не повторялся"
+    },
+    {
+      "id": "r01-AF02",
+      "classification": "already-fixed",
+      "title": "Literal-preserving conversion и публичный patch/id работают",
+      "evidence": [
+        {
+          "file": "src/public-schema.ts",
+          "lines": "38-41",
+          "fact": "Различаются schema positions и произвольные JSON data"
+        },
+        {
+          "file": "src/authoring.ts",
+          "lines": "30-33",
+          "fact": "Public patch включает id и portable definitions"
+        },
+        {
+          "file": "tests/public-schema-literals.test.ts",
+          "lines": "1-107",
+          "fact": "Literal keywords, names, refs, merge/conflicts проверены"
+        },
+        {
+          "file": "tests/public-patch-schema.test.ts",
+          "lines": "8-33",
+          "fact": "Публичная schema и service patch проверены"
+        }
+      ],
+      "history": [
+        "0894d1f9a6eb5ac7b37160af3c6466c0057b83f8",
+        "ba0bb589977ef9ab7bf32b780808e8bb6a815cff"
+      ],
+      "experiments": [
+        "r01-E01",
+        "r01-E02",
+        "r01-E06"
+      ],
+      "conclusion": "Старое повреждение $id/$ref/$defs в literal data не воспроизводится; B03 относится к ещё не преобразованному draft",
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Не заменять позиционный rewrite универсальной рекурсией всех объектов",
+        "risk": "Такое упрощение изменит принимаемые literal data",
+        "acceptance": [
+          "Текущие literal и patch regressions проходят"
+        ]
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "observationPhase": "original-study; перенесено из проверенного по SHA256 отчёта",
+      "continuationReview": "Критические ссылки и причинная связь повторно просмотрены в study-source; behavioral воспроизводитель не повторялся"
+    },
+    {
+      "id": "r01-AF03",
+      "classification": "already-fixed",
+      "title": "Общий router сохраняет порядок, fallback и short-circuit",
+      "evidence": [
+        {
+          "file": "src/expressions.ts",
+          "lines": "85-134",
+          "fact": "Choose/explain используют один routeEdge"
+        },
+        {
+          "file": "tests/routing-equivalence.test.ts",
+          "lines": "61-154",
+          "fact": "Frozen reference, 781 последовательность, traces и thrown identity"
+        }
+      ],
+      "history": "9ea773400c0a52193700bfc60c028675b67bfe8b",
+      "experiments": [
+        "r01-E01",
+        "r01-E07"
+      ],
+      "conclusion": "Общей ошибки fallback priority или eager tail evaluation не обнаружено; B01 возникает до router в serialized AST semantics",
+      "recommendation": {
+        "implemented": false,
+        "minimalChange": "Сохранить core; добавить direct/generated parity fixture, не писать второй router",
+        "risk": "Два wrapper одного core нельзя считать независимым oracle",
+        "acceptance": [
+          "Сравнение с внешним reference и generated module, а не только wrapper друг с другом"
+        ]
+      },
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "observationPhase": "original-study; перенесено из проверенного по SHA256 отчёта",
+      "continuationReview": "Критические ссылки и причинная связь повторно просмотрены в study-source; behavioral воспроизводитель не повторялся"
+    }
+  ],
+  "experiments": [
+    {
+      "id": "r01-E01",
+      "executed": true,
+      "command": "cd $P && node --import tsx --test --test-concurrency=1 tests/graph.test.ts tests/expressions.test.ts tests/compiler.test.ts tests/routing-equivalence.test.ts tests/json-array-boundary.test.ts tests/public-schema-literals.test.ts",
+      "outcome": {
+        "passed": 131,
+        "failed": 0,
+        "skipped": 0
+      },
+      "boundary": "Offline archive текущей ревизии, existing deps; mock runtimes; generated TS diagnostics внутри compiler suite, не полный project typecheck",
+      "executionPhase": "original-study",
+      "executedInContinuation": false,
+      "continuationEvidence": "E01/E02: проверены сохранённые агрегаты; E03–E09: исторический исход перенесён, fixture/код перепроверены без запуска"
+    },
+    {
+      "id": "r01-E02",
+      "executed": true,
+      "command": "cd $P && node --import tsx --test --test-concurrency=1 tests/public-patch-schema.test.ts tests/campaign-schema.test.ts tests/authoring.test.ts",
+      "outcome": {
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      },
+      "boundary": "Schema/authoring и in-memory service; без запуска run/model",
+      "executionPhase": "original-study",
+      "executedInContinuation": false,
+      "continuationEvidence": "E01/E02: проверены сохранённые агрегаты; E03–E09: исторический исход перенесён, fixture/код перепроверены без запуска"
+    },
+    {
+      "id": "r01-E03",
+      "executed": true,
+      "command": "cd $P && node --import tsx probe-parity.ts",
+      "fixture": "Markdown: E03 / `probe-parity.ts`",
+      "outcome": "Direct false/fallback; generated boolean error; equal hashes после перестановки; boolean controls дают fallback",
+      "boundary": "Injectable runtime без журнала; проверяет actual generated module",
+      "executionPhase": "original-study",
+      "executedInContinuation": false,
+      "continuationEvidence": "E01/E02: проверены сохранённые агрегаты; E03–E09: исторический исход перенесён, fixture/код перепроверены без запуска"
+    },
+    {
+      "id": "r01-E04",
+      "executed": true,
+      "command": "cd $P && node --import tsx probe-journal-parity.ts",
+      "fixture": "Markdown: E04 / `probe-journal-parity.ts`",
+      "outcome": "Original AST JournalRuntime: fallback/no, start+no succeeded. Generated: error, только start succeeded",
+      "boundary": "Две собственные in-memory БД; no agent/check/worktree/controller/supervisor",
+      "executionPhase": "original-study",
+      "executedInContinuation": false,
+      "continuationEvidence": "E01/E02: проверены сохранённые агрегаты; E03–E09: исторический исход перенесён, fixture/код перепроверены без запуска"
+    },
+    {
+      "id": "r01-E05",
+      "executed": true,
+      "command": "cd $P && node --import tsx probe-exotic-array.ts",
+      "fixture": "Markdown: E05 / `probe-exotic-array.ts`",
+      "outcome": "Getter counts 1/2/3; accepted→invalid snapshot; generated []; dense subclass entries=3; ordinary holes rejected; authoring/output reject до getter",
+      "boundary": "Внутрипроцессный unknown API; fixture не представима JSON-транспортом",
+      "executionPhase": "original-study",
+      "executedInContinuation": false,
+      "continuationEvidence": "E01/E02: проверены сохранённые агрегаты; E03–E09: исторический исход перенесён, fixture/код перепроверены без запуска"
+    },
+    {
+      "id": "r01-E06",
+      "executed": true,
+      "command": "cd $P && node --import tsx probe-schema-service.ts",
+      "fixture": "Markdown: E06 / `probe-schema-service.ts`",
+      "outcome": "Raw draft Ajv conflict; portable draft и public patch работают; TypeBox принимает draft",
+      "boundary": "WorkflowService(':memory:'), только workflow.schema; no credential/network/model access",
+      "executionPhase": "original-study",
+      "executedInContinuation": false,
+      "continuationEvidence": "E01/E02: проверены сохранённые агрегаты; E03–E09: исторический исход перенесён, fixture/код перепроверены без запуска"
+    },
+    {
+      "id": "r01-E07",
+      "executed": true,
+      "command": "cd $P && node --import tsx probe-scopes.ts",
+      "fixture": "Markdown: E07 / `probe-scopes.ts`",
+      "outcome": "16 distinct activation keys; visits [0,0,1,1] для constructor; результат двух map items сохраняет input и prior=false; replay fan/done; 7 lazy controls",
+      "boundary": "Детерминированный cache runtime, не supervisor crash-recovery",
+      "executionPhase": "original-study",
+      "executedInContinuation": false,
+      "continuationEvidence": "E01/E02: проверены сохранённые агрегаты; E03–E09: исторический исход перенесён, fixture/код перепроверены без запуска"
+    },
+    {
+      "id": "r01-E08",
+      "executed": true,
+      "command": "cd $P && node --import tsx probe-zero.ts",
+      "fixture": "Markdown: E08 / `probe-zero.ts`",
+      "outcome": "Direct -0 / generated +0; source hashes equal; DSL eq=true; JSON wire=0",
+      "boundary": "Воспроизведён факт, нормативная ошибка не установлена",
+      "executionPhase": "original-study",
+      "executedInContinuation": false,
+      "continuationEvidence": "E01/E02: проверены сохранённые агрегаты; E03–E09: исторический исход перенесён, fixture/код перепроверены без запуска"
+    },
+    {
+      "id": "r01-E09",
+      "executed": true,
+      "command": "cd $P && node --import tsx probe-boundaries.ts; node --import tsx probe-public.ts",
+      "outcome": "Обычные compensated holes отвергнуты TypeBox; raw draft конфликтует и при strict:false; workflow/expression/patch по отдельности компилируются",
+      "boundary": "Exploratory checks, не полный vocabulary corpus",
+      "executionPhase": "original-study",
+      "executedInContinuation": false,
+      "continuationEvidence": "E01/E02: проверены сохранённые агрегаты; E03–E09: исторический исход перенесён, fixture/код перепроверены без запуска",
+      "fixtures": [
+        "Markdown: E09 / `probe-boundaries.ts`",
+        "Markdown: E09 / `probe-public.ts`"
+      ]
+    }
+  ],
+  "experimentNotes": {
+    "temporaryDirectory": "/tmp/r01-graph-compiler.PkapHE",
+    "sourceCopyCommand": "git archive e15bc407da8753fd6b683c0aa4a68634e3c458a7 src tests package.json tsconfig.json | tar -x -C $P",
+    "dependenciesCommand": "ln -s $DEPS $P/node_modules",
+    "dependenciesVariable": "DEPS — существующий node_modules указанного integration-dev, без установки",
+    "fullSetup": "Markdown: Подготовка offline-копии",
+    "executionOrder": "Профильные suites запускались последовательно, полного npm test не было",
+    "harnessCorrections": "Два первых черновика временных probes содержали синтаксические опечатки; исправлены только в /tmp, повторные запуски успешны. Не считаются продуктовыми сбоями. При проверке actions учтены три строковых изменения: две синтаксические коррекции и явное отображение catch в injectable runtime; команды не исполнялись.",
+    "rawLogsPublished": false,
+    "phase": "original-study; не инструкция повторять команды в старом scratch",
+    "continuation": "Старые workspace/tmp files только читались. Все восемь fixtures теперь включены в MD. Новые behavioral проверки не требовались."
+  },
+  "alreadyFixedRefutations": [
+    {
+      "findingId": "r01-AF01",
+      "refutes": "Повторное открытие уже исправленной sparse-array ошибки authoring/output"
+    },
+    {
+      "findingId": "r01-AF02",
+      "refutes": "Повторное открытие literal-rewrite или отсутствующего id в public patch"
+    },
+    {
+      "findingId": "r01-AF03",
+      "refutes": "Общая несогласованность choose/explain, неверный приоритет fallback или eager tail"
+    }
+  ],
+  "sources": [
+    {
+      "id": "r01-S01",
+      "type": "repository-document",
+      "path": "PROJECT_INFO/graph-contract.md",
+      "sections": "32-34,77-94,97-120,165-184,188-209,234-275",
+      "use": "Контракты JSON, expressions, routing, compilation, scopes"
+    },
+    {
+      "id": "r01-S02",
+      "type": "repository-document",
+      "path": "PROJECT_INFO/authoring.md",
+      "sections": "1-120",
+      "use": "Public draft/patch и strict boundary"
+    },
+    {
+      "id": "r01-S03",
+      "type": "repository-document",
+      "path": "PROJECT_INFO/architecture.md",
+      "use": "Разделение compiler/runtime/service"
+    },
+    {
+      "id": "r01-S04",
+      "type": "repository-document",
+      "path": "PROJECT_INFO/development.md",
+      "use": "Профильные offline checks и границы inference"
+    },
+    {
+      "id": "r01-S05",
+      "type": "repository-document",
+      "path": "PROJECT_INFO/known-issues.md",
+      "use": "Исправленные ошибки не переоткрывались по старому main"
+    },
+    {
+      "id": "r01-S06",
+      "type": "source-code",
+      "path": "src/graph.ts",
+      "use": "Schema/preflight/semantic validation/parse snapshot"
+    },
+    {
+      "id": "r01-S07",
+      "type": "source-code",
+      "path": "src/expressions.ts",
+      "use": "Evaluation order, MissingReference, routeEdge"
+    },
+    {
+      "id": "r01-S08",
+      "type": "source-code",
+      "path": "src/compiler.ts",
+      "use": "Canonical data and generated Effect control flow"
+    },
+    {
+      "id": "r01-S09",
+      "type": "source-code",
+      "path": "src/public-schema.ts",
+      "use": "Schema-position-aware conversion"
+    },
+    {
+      "id": "r01-S10",
+      "type": "source-code",
+      "path": "src/authoring.ts",
+      "use": "Draft/public patch schemas and stricter JSON boundary"
+    },
+    {
+      "id": "r01-S11",
+      "type": "source-code",
+      "path": "src/output-schema.ts",
+      "use": "Strict JSON and Ajv validation"
+    },
+    {
+      "id": "r01-S12",
+      "type": "source-code",
+      "path": "src/service.ts:91-93",
+      "use": "Real public schema response"
+    },
+    {
+      "id": "r01-S13",
+      "type": "source-code",
+      "path": "src/generated-module.ts",
+      "use": "Actual generated-module loading in probes"
+    },
+    {
+      "id": "r01-S14",
+      "type": "source-code",
+      "path": "src/run-runtime.ts:126-134",
+      "use": "Production JournalRuntime routing without workers"
+    },
+    {
+      "id": "r01-S15",
+      "type": "source-code",
+      "path": "src/execution-plan.ts:32-105",
+      "use": "Plan preparation with explicit empty availableModels"
+    },
+    {
+      "id": "r01-S16",
+      "type": "git-history",
+      "revisions": [
+        "7209b98f0e221f692a5712d64e363c32ba08ba0b",
+        "0894d1f9a6eb5ac7b37160af3c6466c0057b83f8",
+        "9ea773400c0a52193700bfc60c028675b67bfe8b",
+        "ba0bb589977ef9ab7bf32b780808e8bb6a815cff"
+      ],
+      "use": "История исправлений; выводы подтверждены текущим кодом и повторными tests"
+    },
+    {
+      "id": "r01-S17",
+      "type": "executed-tests",
+      "experiments": [
+        "r01-E01",
+        "r01-E02"
+      ],
+      "use": "143 passing targeted regressions"
+    },
+    {
+      "id": "r01-S18",
+      "type": "offline-fixtures",
+      "experiments": [
+        "r01-E03",
+        "r01-E04",
+        "r01-E05",
+        "r01-E06",
+        "r01-E07",
+        "r01-E08",
+        "r01-E09"
+      ],
+      "use": "Контрпримеры и отрицательные controls; не live-provider evidence"
+    },
+    {
+      "id": "r01-S19",
+      "type": "retained-own-reports",
+      "paths": [
+        "research/2026-09-20-astra-max/r01-graph-compiler.md",
+        "research/2026-09-20-astra-max/r01-graph-compiler.json"
+      ],
+      "location": "continuationProvenance.oldWorkspace",
+      "use": "Сохранённые исторические наблюдения, подтверждённые SHA256; не успешный прежний submit"
+    },
+    {
+      "id": "r01-S20",
+      "type": "retained-actions",
+      "path": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r01-actions.json",
+      "sha256": "5510cce0b7edb1ef7b1632daf587fe664739a794691f0c4b89c7c6aacb868e4f",
+      "use": "Тексты команд и fixtures, не журнал результатов"
+    },
+    {
+      "id": "r01-S21",
+      "type": "retained-own-fixtures-and-test-summaries",
+      "path": "/tmp/r01-graph-compiler.PkapHE",
+      "use": "Только чтение своих 8 TS-fixtures и агрегатов двух suites; hashes в continuationProvenance"
+    },
+    {
+      "id": "r01-S22",
+      "type": "git-history",
+      "revision": "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+      "use": "Post-study early authoring isolation, не повторная рекомендация"
+    },
+    {
+      "id": "r01-S23",
+      "type": "git-history",
+      "revision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "use": "Post-study reviewer binding documentation, не runtime fix"
+    },
+    {
+      "id": "r01-S24",
+      "type": "repository-document",
+      "path": "PROJECT_INFO/execution-plan.md",
+      "sections": "171-174",
+      "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "use": "Явная signed-zero нормализация JSON-доставки; дополнительное контрдоказательство U01"
+    }
+  ],
+  "unknowns": [
+    {
+      "id": "r01-U01",
+      "question": "Нужна ли signed-zero bit preservation прямого evaluator относительно compiler? Транспортная нормализация уже определена.",
+      "status": "Различие установлено, требуемая семантика не установлена"
+    },
+    {
+      "relatedFinding": "r01-B01",
+      "question": "Как версионировать изменение приоритета ошибок и проверить legacy generated modules?",
+      "status": "Изменений нет; требуется решение совместимости"
+    },
+    {
+      "relatedFinding": "r01-B02",
+      "question": "Должны ли поддерживаться cross-realm и subclass arrays прямого API?",
+      "status": "Граница не определена; arbitrary Proxy не исследованы"
+    },
+    {
+      "relatedFinding": "r01-B03",
+      "question": "Поведение сторонних schema consumers кроме установленного Ajv?",
+      "status": "Не проверено"
+    },
+    {
+      "question": "Node 22.19 и полная матрица recovery/collect/compiler-version combinations",
+      "status": "Не проверены, не объявлены неисправными"
+    }
+  ],
+  "proposedButNotPerformed": [
+    "Изменения кода по B01-B03",
+    "Новые repository regression tests",
+    "Расширенный property-based direct/generated differential corpus",
+    "Повтор на минимальной поддерживаемой версии Node"
+  ],
+  "continuationChecks": [
+    {
+      "id": "r01-C01",
+      "executed": true,
+      "executionPhase": "continuation",
+      "command": "shasum -a 256 $OLD/r01-graph-compiler.{md,json}; wc -c $OLD/r01-graph-compiler.{md,json}; python3 (json.loads и проверка symlink/bytes)",
+      "outcome": "Сохранённые SHA256/размеры совпали с retainedEvidence; оба regular files, JSON валиден",
+      "boundary": "OLD — только назначенный каталог своей старой ветви. Старый metadata.status не является workflow success."
+    },
+    {
+      "id": "r01-C02",
+      "executed": true,
+      "executionPhase": "continuation",
+      "command": "git rev-parse HEAD; git -C <integration-dev> rev-parse HEAD; git log --oneline e15bc407da8753fd6b683c0aa4a68634e3c458a7..3d8ba65ee84402c0e3b0587f70095b7847824a9f; git show/git diff профильных файлов и двух коммитов",
+      "outcome": "cwd=study-source; dev=publicationRevision; просмотрены 86f5e07 и 3d8ba65, причины B01–B03 не изменены diff",
+      "boundary": "Только чтение Git objects; применимость на publication — source inference, не новое воспроизведение."
+    },
+    {
+      "id": "r01-C03",
+      "executed": true,
+      "executionPhase": "continuation",
+      "command": "python3 (inline): Path.read_bytes == subprocess.check_output([git,show,sourceRevision+\":\"+path]); чтение baseline.tap/boundaries.tap, удаление ANSI и извлечение агрегатов",
+      "outcome": {
+        "filesEqualToSourceRevisionInCwdAndOldArchive": 20,
+        "retainedTestTotals": {
+          "passed": 143,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "boundary": "Проверены явно перечисленные source/test files, не все зависимости/Node. Команды suites не повторены."
+    },
+    {
+      "id": "r01-C04",
+      "executed": true,
+      "executionPhase": "continuation",
+      "command": "python3 (inline): regex извлечения cat heredoc, ast.parse Python payload и ast.Constant аргументов replace; строковое сравнение с 8 TS-fixtures и 3 MD-блоками; проверка ID и file:line",
+      "outcome": "8 файлов совпали после 3 просмотренных текстовых исправлений harness; 3 старых MD-блока совпали; 7 ID согласованы. Дополнены отсутствовавшие fixtures, исправлены EOF ranges.",
+      "boundary": "Ни exec/eval, ни shell replay, ни исполнение fixtures не выполнялись. Commands-only evidence не заменяет stdout/exit."
+    }
+  ],
+  "continuationProvenance": {
+    "mode": "carry-forward with independent verification and limited completion; not a replay",
+    "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+    "currentRunId": "run-9dbb044c-664f-4dd8-96c0-57192dc4ed89",
+    "researchId": "r01",
+    "date": "2026-09-20",
+    "oldOperationStatus": "failed",
+    "oldMetadataStatusClaim": "complete; не является подтверждением сдачи старой операции",
+    "retainedFailure": {
+      "code": "provider",
+      "phase": "execution",
+      "providerStatus": 429,
+      "effects": "unknown",
+      "interpretation": "Внешний отказ прежней операции; не дефект compiler из offline fixtures. Внешнее действие не повторялось."
+    },
+    "oldWorkspace": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/bdbc8f9f0e0714e5fc160a485f0845516735ec68dd17f8e91bedca170edb4d10",
+    "actualCwd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/bdbc8f9f0e0714e5fc160a485f0845516735ec68dd17f8e91bedca170edb4d10",
+    "studySourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "oldReports": [
+      {
+        "path": "research/2026-09-20-astra-max/r01-graph-compiler.md",
+        "bytes": 42455,
+        "sha256": "f3f3e692d85d4cae7577d72cd61b9095a108d7bab14a0b002fd20f040e9a9364",
+        "sha256Verified": true,
+        "symlink": false
+      },
+      {
+        "path": "research/2026-09-20-astra-max/r01-graph-compiler.json",
+        "bytes": 36578,
+        "sha256": "4a588ab8dd8a5b34e1f09c3a3240562718daf68de4869de1e6cf78d2b3a0b308",
+        "sha256Verified": true,
+        "symlink": false
+      }
+    ],
+    "preservedActionEvidence": {
+      "path": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r01-actions.json",
+      "sha256": "5510cce0b7edb1ef7b1632daf587fe664739a794691f0c4b89c7c6aacb868e4f",
+      "kind": "commands-only; без stdout/exit",
+      "inspected": true,
+      "commandsReplayed": false
+    },
+    "oldReportCompletenessAssessment": "Основные находки и ключевые B01–B03 fixtures полны. Были пропущены полные E03/E07/E08, отдельные координаты выходили за EOF; устранено только в новых отчётах. Не выдаётся за ранее успешный выход.",
+    "carriedFacts": [
+      "Все 7 finding IDs и их исходные классификации",
+      "Результаты и границы E01–E09, объяснения причин и минимальные рекомендации без реализации"
+    ],
+    "independentlyRecheckedFacts": [
+      "SHA256/bytes/валидность/обычность двух исходных файлов",
+      "Критические строки четырёх core-файлов, вспомогательные API и контрдоказательства",
+      "20 файлов текущего cwd и собственной старой offline-копии точно равны Git study-source",
+      "Сохранённые агрегаты 131+12 passing tests, fail/skip=0",
+      "Восемь собственных TS-fixtures согласованы с heredoc и 3 явными текстовыми изменениями retained commands; 3 старых MD TS-блока равны fixtures",
+      "Семь IDs и классификаций согласованы; публикационные исправления прочитаны отдельно"
+    ],
+    "addedMaterial": [
+      "Полные E03/E07/E08 и две exploratory fixtures E09 в MD",
+      "Исправлены source ranges expressions 85-134, generated-module 12-39, mcp-tools 52-59 и 80-94",
+      "Явное разделение исторических проверок и continuation",
+      "Post-study already-fixed 86f5e07 и 3d8ba65",
+      "Контрдоказательство U01 из PROJECT_INFO/execution-plan.md:171-174"
+    ],
+    "historicalObservationsNotReexecuted": [
+      "E03–E09 исходы перенесены из сохранённого отчёта; отдельные stdout/exit в action evidence отсутствуют",
+      "E01/E02 тесты не запускались вновь; доступны сохранённые текстовые summaries"
+    ],
+    "verifiedSourcePaths": [
+      "src/authoring.ts",
+      "src/compiler-versions.ts",
+      "src/compiler.ts",
+      "src/execution-plan.ts",
+      "src/expressions.ts",
+      "src/generated-module.ts",
+      "src/graph.ts",
+      "src/output-schema.ts",
+      "src/public-schema.ts",
+      "src/run-runtime.ts",
+      "src/service.ts",
+      "tests/authoring.test.ts",
+      "tests/campaign-schema.test.ts",
+      "tests/compiler.test.ts",
+      "tests/expressions.test.ts",
+      "tests/graph.test.ts",
+      "tests/json-array-boundary.test.ts",
+      "tests/public-patch-schema.test.ts",
+      "tests/public-schema-literals.test.ts",
+      "tests/routing-equivalence.test.ts"
+    ],
+    "fixtures": [
+      {
+        "experimentId": "r01-E03",
+        "name": "probe-parity.ts",
+        "bytes": 2299,
+        "sha256": "5de1b63277eaae4d3d4538a6ac74ccfa32a9fbd367213b6c19585aea7692ab73",
+        "source": "Собственный сохранённый /tmp fixture; байты сверены с inspected heredoc/строковыми исправлениями preservedActionEvidence",
+        "markdownSection": "E03 / probe-parity.ts",
+        "executedInContinuation": false
+      },
+      {
+        "experimentId": "r01-E04",
+        "name": "probe-journal-parity.ts",
+        "bytes": 2406,
+        "sha256": "2429f7c81bfd69993dcea8e1811b3e52caee32ae292500d704c4494313015f35",
+        "source": "Собственный сохранённый /tmp fixture; байты сверены с inspected heredoc/строковыми исправлениями preservedActionEvidence",
+        "markdownSection": "E04 / probe-journal-parity.ts",
+        "executedInContinuation": false
+      },
+      {
+        "experimentId": "r01-E05",
+        "name": "probe-exotic-array.ts",
+        "bytes": 2496,
+        "sha256": "a5af0eeb1c575ed210732aed8ca06b57ef0e6e1c04baa54c1fe76027fbe30b50",
+        "source": "Собственный сохранённый /tmp fixture; байты сверены с inspected heredoc/строковыми исправлениями preservedActionEvidence",
+        "markdownSection": "E05 / probe-exotic-array.ts",
+        "executedInContinuation": false
+      },
+      {
+        "experimentId": "r01-E06",
+        "name": "probe-schema-service.ts",
+        "bytes": 1451,
+        "sha256": "308115671156e4f35f9c90da96fbb1bdf4f358bc4261094d0a99e62f1640036d",
+        "source": "Собственный сохранённый /tmp fixture; байты сверены с inspected heredoc/строковыми исправлениями preservedActionEvidence",
+        "markdownSection": "E06 / probe-schema-service.ts",
+        "executedInContinuation": false
+      },
+      {
+        "experimentId": "r01-E07",
+        "name": "probe-scopes.ts",
+        "bytes": 3216,
+        "sha256": "5dc2d18618d54f70d61f028e98fecd0a57a3af8b74fc8e30dfc1944da85e91eb",
+        "source": "Собственный сохранённый /tmp fixture; байты сверены с inspected heredoc/строковыми исправлениями preservedActionEvidence",
+        "markdownSection": "E07 / probe-scopes.ts",
+        "executedInContinuation": false
+      },
+      {
+        "experimentId": "r01-E08",
+        "name": "probe-zero.ts",
+        "bytes": 1277,
+        "sha256": "fce4c6a5d992f27392eac5f3d74a55c707f585c0c4cee17680c93ad4c3910776",
+        "source": "Собственный сохранённый /tmp fixture; байты сверены с inspected heredoc/строковыми исправлениями preservedActionEvidence",
+        "markdownSection": "E08 / probe-zero.ts",
+        "executedInContinuation": false
+      },
+      {
+        "experimentId": "r01-E09",
+        "name": "probe-boundaries.ts",
+        "bytes": 1318,
+        "sha256": "5cfabc13fcdfaec1074fdcc52de77cc75fe6f7e1d812e31894b59614a08c1cad",
+        "source": "Собственный сохранённый /tmp fixture; байты сверены с inspected heredoc/строковыми исправлениями preservedActionEvidence",
+        "markdownSection": "E09 / probe-boundaries.ts",
+        "executedInContinuation": false
+      },
+      {
+        "experimentId": "r01-E09",
+        "name": "probe-public.ts",
+        "bytes": 983,
+        "sha256": "f1afed91bbd51dbcd5c73f9c57f230f882f35e65919480e69f3f3b33aa5eb9e1",
+        "source": "Собственный сохранённый /tmp fixture; байты сверены с inspected heredoc/строковыми исправлениями preservedActionEvidence",
+        "markdownSection": "E09 / probe-public.ts",
+        "executedInContinuation": false
+      }
+    ],
+    "retainedTestSummaries": [
+      {
+        "file": "baseline.tap",
+        "sha256": "64f96a4a8a418d37f1050b49adff25d774181d0ade5cb56c43c3952de7ec61e9",
+        "passed": 131,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "file": "boundaries.tap",
+        "sha256": "70df526a00b03ea38250f5cdb3be6f81c0cb67a93ef1df3b3915217c7fa5ec11",
+        "passed": 12,
+        "failed": 0,
+        "skipped": 0
+      }
+    ],
+    "newBehavioralTestsRun": 0,
+    "oldWorkspaceWrites": false,
+    "oldFixtureWrites": false,
+    "siblingReportsRead": false,
+    "externalOperationsRepeated": false,
+    "publicationAssessment": {
+      "kind": "source inference only",
+      "conclusion": "Diff не меняет причины B01–B03; early isolation добавляет новый обход, поэтому точные счётчики B02 не экстраполируются на publication",
+      "behavioralTestsAtPublication": false
+    }
+  },
+  "postStudyAlreadyFixed": [
+    {
+      "id": "r01-PSAF01",
+      "classification": "already-fixed",
+      "contextOnly": true,
+      "includedInFindingCount": false,
+      "revision": "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+      "title": "Ранняя authoring parallel-writer isolation уже добавлена",
+      "evidence": [
+        {
+          "sourceRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+          "file": "src/graph.ts",
+          "lines": "198-199",
+          "fact": "После проверки ссылок/циклов/config вызывается общая isolation validation"
+        },
+        {
+          "sourceRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+          "file": "src/parallel-isolation.ts",
+          "lines": "6-36",
+          "fact": "Чистая общая проверка effective/frozen permissions и integrate внутри fanout"
+        },
+        {
+          "sourceRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+          "file": "src/compiler.ts",
+          "lines": "28-29",
+          "fact": "Compiler передаёт frozen agents в parse"
+        },
+        {
+          "sourceRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+          "file": "src/execution-plan.ts",
+          "lines": "94-104",
+          "fact": "Сохранённый план проверяется с зафиксированными permissions"
+        }
+      ],
+      "verification": "git show/diff, без запуска новых suites",
+      "conclusion": "Не предлагать повторное внедрение; произвольные check effects автоматически не выводятся."
+    },
+    {
+      "id": "r01-PSAF02",
+      "classification": "already-fixed",
+      "contextOnly": true,
+      "includedInFindingCount": false,
+      "revision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "title": "Reviewer artifact binding уже уточнён в skill",
+      "evidence": [
+        {
+          "sourceRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+          "file": "skills/dynamic-workflows/SKILL.md",
+          "lines": "110-114",
+          "fact": "Версия рецензируемого артефакта передаётся на верхнем уровне и точно копируется"
+        },
+        {
+          "sourceRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+          "file": "skills/dynamic-workflows/references/authoring.md",
+          "lines": "128-156",
+          "fact": "Custom reviewer schema не отменяет binding; reportRevision отдельно от artifactRevision"
+        }
+      ],
+      "verification": "Просмотрен doc-only commit; новый runtime binding probe не выполнялся",
+      "conclusion": "Повторно дописывать эти инструкции не предлагается; runtime fix этим коммитом не заявляется."
+    }
+  ]
+}

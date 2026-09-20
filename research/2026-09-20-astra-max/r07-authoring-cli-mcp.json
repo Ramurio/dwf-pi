@@ -1,0 +1,908 @@
+{
+  "schemaVersion": 1,
+  "metadata": {
+    "researchId": "r07",
+    "topic": "Контракты authoring, CLI и MCP",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "date": "2026-09-20",
+    "timezone": "UTC",
+    "mode": "Завершение доказательного исследования по сохранённым материалам; реализация не выполнялась",
+    "sourceWorktree": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b",
+    "offlineTestCheckout": "/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+    "checkoutRevisionVerified": true,
+    "nodeVersion": "v26.8.1",
+    "reports": {
+      "markdown": "research/2026-09-20-astra-max/r07-authoring-cli-mcp.md",
+      "json": "research/2026-09-20-astra-max/r07-authoring-cli-mcp.json"
+    },
+    "independence": "Отчёты других исследователей не читались",
+    "permissionsObserved": "В новой операции записаны только два назначенных отчёта в фактическом cwd и собственные проверочные скрипты/сводки в /tmp/r07-continuation-7GpzfL. Старые worktree и /tmp fixtures только прочитаны. Исходники, тесты, dev, runtime и чужие отчёты не изменялись. Модели, сеть, credentials, реальные runs и процессы пользователя не использовались; git commit/push/checkout/reset не выполнялись.",
+    "webAccessUsed": false,
+    "originalSourceWorktree": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b",
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "continuationDate": "2026-09-20",
+    "checkoutRevisionVerificationScope": "HEAD текущего worktree независимо проверен: sourceRevision. Старый offline-test checkout был проверен в source operation (отчёт и retained commands); сейчас его HEAD отдельно прочитан: publicationRevision. Исторические тесты повторно не запускались.",
+    "nodeVersionScope": "Версия из исходного исследования, не новый запуск тестов в continuation"
+  },
+  "status": "complete",
+  "summary": "Завершён перенос полного доказательного пакета r07 после failed source operation: сохранены 4 воспроизведённых на sourceRevision bug и 1 idea, 181 исторический успешный профильный тест. Хеши, исходы, fixture и причинные строки перепроверены без повторного исполнения приложения. Два более поздних исправления из publicationRevision отделены как post-study already-fixed; новых дефектов и реализации нет.",
+  "counts": {
+    "findingCount": 5,
+    "bugs": 4,
+    "ideas": 1,
+    "alreadyFixedRefutations": 4,
+    "unknowns": 4,
+    "testsPassed": 181,
+    "testsFailed": 0,
+    "findingCountDefinition": "Длина findings (4 bug + 1 idea) на sourceRevision; source alreadyFixedRefutations, postStudyAlreadyFixed и unknowns отдельно; testsPassed=181 относится только к исходной операции",
+    "historicalTestsPassed": 181,
+    "continuationApplicationTestsRun": 0,
+    "postStudyAlreadyFixed": 2
+  },
+  "coverage": {
+    "initialReading": [
+      "AGENTS.md",
+      "PROJECT_INFO/architecture.md",
+      "PROJECT_INFO/development.md",
+      "PROJECT_INFO/known-issues.md",
+      "PROJECT_INFO/service.md",
+      "PROJECT_INFO/authoring.md",
+      "PROJECT_INFO/execution-plan.md",
+      "PROJECT_INFO/graph-contract.md",
+      "PROJECT_INFO/models-and-setup.md",
+      "README.md",
+      "skills/dynamic-workflows/SKILL.md",
+      "git log -16 --oneline и история профильных файлов"
+    ],
+    "inspected": [
+      "authoring: closed schemas, JSON boundary, rollback, operationIndex, immutable patch results",
+      "DraftStore: read/apply/CAS и две ветви revision conflict",
+      "WorkflowService: request copy, dispatch, lazy stores, close, prepare/start и continuation parser",
+      "CLI/MCP: stdin EOF, stdout/stderr, names, error envelopes, official stdio client",
+      "public-schema: schema-position rewrite, recursive definitions, literal preservation",
+      "prepared-plans/execution-plan: canonical cwd, snapshot verification, frozen model/skill configuration",
+      "onboarding: fixture setup, executable из другого cwd, doctor с injected model catalog"
+    ],
+    "executed": [
+      "178 профильных тестов последовательно: authoring, public-patch-schema, public-schema-literals, json-array-boundary, service, cli, mcp, prepared-start, skill-handoff, setup, doctor",
+      "3 выбранных теста store/lineage",
+      "Два запуска собственного contract-probes.mjs; второй с дополнительными контрпроверками",
+      "Контролируемый CAS race двух настоящих CLI-процессов и SQLite",
+      "Одинаковый malformed continuation request через официальный MCP и настоящий CLI; только paused fixture runs",
+      "Компиляция пяти опубликованных схем pinned Ajv после JSON round-trip",
+      "Immediate-close во время prepare с наблюдением двух открытых соединений"
+    ],
+    "notExecuted": [
+      "Полный npm test и typecheck",
+      "Live inference, пользовательская авторизация, сетевое обновление каталога, web",
+      "Браузерные ownership/disclosure/caret/scroll tests",
+      "Полный exhaustive differential corpus полей всех 39 инструментов",
+      "Минимальная версия Node 22.19.0 и сторонние MCP hosts",
+      "Принудительный CAS race именно через MCP и разрыв MCP в окне prepare",
+      "Повтор R07-E01/E02/E03 и выполнение post-study parallel-authoring/reviewer regressions в continuation"
+    ],
+    "boundary": "Подмена моделей используется только для offline подготовки/doctor. Положительный mock не является доказательством live provider. Проверка всех объявлений MCP в существующем тесте означает компиляцию и representative arguments, не исчерпывающее сравнение семантики.",
+    "executionProvenance": "Все ранее перечисленные executed проверки — R07-E01–E03 из source operation. В continuation выполнены только сверка материалов и статический анализ R07-E04/E05; приложение и провайдеры не запускались.",
+    "continuationRechecked": [
+      "AGENTS, architecture, development, known-issues, профильные contracts, README/SKILL и git log текущего worktree",
+      "Оба старых отчёта: bytes, SHA256, JSON, полнота findings/experiments/контрдоказательств; fixture из Markdown побайтово совпал с сохранённым JS",
+      "Сохранённые итоги 178+3 тестов и обе собственные probe summaries; commands-only retained evidence не принято за exit log",
+      "Причинные строки всех 4 bug и сравнение envelope, CAS, schemas, prepare/close с текущим sourceRevision",
+      "81 уникальная явная file:line ссылка старого пакета проверена на наличие/границы; уточнены диапазоны tests/store.test.ts",
+      "13 профильных файлов побайтово совпадают между sourceRevision и publicationRevision; schema declarations graph.ts тоже совпадают",
+      "Diff двух post-study commits и reviewer input/output binding; не повторный runtime-тест этих изменений"
+    ]
+  },
+  "findings": [
+    {
+      "id": "R07-B01",
+      "classification": "bug",
+      "severity": "medium",
+      "title": "CLI принимает неправильные типы continuation request, которые отвергает MCP",
+      "confidence": "high",
+      "facts": [
+        "parseContinuationRequest применяет String к source.checkpoint и source.planHash до проверки и возвращает приведённые строки.",
+        "Одноэлементный JSON-массив [hash] превращается в тот же hash.",
+        "value.reuse ?? [] превращает явный null в отсутствие reuse.",
+        "MCP публикует string для обоих source-хешей и array для reuse и валидирует вход до сервиса без coercion."
+      ],
+      "locations": [
+        "src/lineage.ts:244",
+        "src/lineage.ts:254",
+        "src/lineage.ts:259",
+        "src/service.ts:274-282",
+        "src/mcp-tools.ts:37-40",
+        "src/mcp.ts:19-26",
+        "src/output-schema.ts:35"
+      ],
+      "contractSources": [
+        "PROJECT_INFO/service.md:11-15",
+        "PROJECT_INFO/service.md:208-214"
+      ],
+      "trigger": "В корректном run.continue заменить source.checkpoint и source.planHash на [исходнаяСтрока]. Отдельный случай: reuse:null без reuse-узлов.",
+      "expected": "Обе поверхности отвергают неверные типы до изменения runs/receipts.",
+      "observed": {
+        "mcp": "isError:true; Invalid structured output: data/source/checkpoint must be string; data/source/planHash must be string; число fixture runs осталось 1",
+        "cli": "exit 0, ok:true, создан новый paused run, число fixture runs стало 2",
+        "normalRedelivery": "Корректный запрос со строками через MCP возвратил тот же ID, что ошибочная форма через CLI",
+        "reuseNull": "CLI принял null как повторную доставку; MCP отвергнул null",
+        "supervisorCreated": false
+      },
+      "reproduction": {
+        "experimentId": "R07-E02",
+        "fixture": "contract-probes.mjs: блок continuation; полный исполняемый листинг в Markdown-приложении",
+        "command": "TMPDIR=/tmp/r07-authoring-MCi7LO/tmp node --import tsx /tmp/r07-authoring-MCi7LO/contract-probes.mjs \"$PWD\" /tmp/r07-authoring-MCi7LO",
+        "cwd": "/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev"
+      },
+      "counterEvidence": [
+        "Неверный строковый checkpoint из 64 нулей отвергнут без нового run.",
+        "src/run-controller.ts:422-427 по-прежнему проверяет сохранённые checkpoint, planHash и workspaceDigest.",
+        "Корректная дедупликация работает; обход свежести или повтор внешнего действия не доказан.",
+        "Источник и преемник в собственном fixture paused; исполнители не запускались."
+      ],
+      "recommendation": {
+        "minimalChange": "Проверять typeof обоих source-хешей до regex и не приводить их String; различать omitted reuse и null. Добавить differential cases parser/service/CLI/MCP.",
+        "risk": "Отказ недокументированным клиентам, полагавшимся на coercion. Не менять canonical representation корректных запросов и историю ключей.",
+        "acceptance": "[hash], вложенный массив и reuse:null отвергаются обеими поверхностями до записи; строковые хеши, omitted reuse и [] работают; прежний корректный idempotency key возвращает исходный ID.",
+        "implemented": false
+      },
+      "continuationVerification": {
+        "origin": "source-operation retained experiment R07-E02",
+        "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+        "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "historicalOutcomeRechecked": true,
+        "causalCodeReinspected": true,
+        "applicationReexecuted": false,
+        "publicationAssessment": "Граница находки не изменена двумя последующими коммитами по просмотренному diff/сравнению файлов. Это статическая сверка, не новое динамическое воспроизведение на publicationRevision."
+      }
+    },
+    {
+      "id": "R07-B02",
+      "classification": "bug",
+      "severity": "medium",
+      "title": "Проигрыш SQLite CAS теряет RevisionConflictError и revision-поля",
+      "confidence": "high",
+      "facts": [
+        "Ранний конфликт applyPatch типизирован, но ветвь changes!==1 в DraftStore.patch бросает обычный Error.",
+        "Оба serializer-а выдают expectedRevision/actualRevision только для RevisionConflictError.",
+        "CAS предотвращает потерю обновления: найден дефект диагностики, не атомарности записи."
+      ],
+      "locations": [
+        "src/store.ts:42-49",
+        "src/authoring.ts:44-47",
+        "src/authoring.ts:60",
+        "src/cli.ts:30-31",
+        "src/mcp.ts:32"
+      ],
+      "contractSources": [
+        "PROJECT_INFO/authoring.md:85-94",
+        "PROJECT_INFO/service.md:48-49",
+        "skills/dynamic-workflows/SKILL.md:58-71"
+      ],
+      "trigger": "Два редактора читают revision 1, первый сохраняет 2 до UPDATE второго; второй проигрывает условный UPDATE.",
+      "expected": "Один победитель, один структурный RevisionConflictError с expectedRevision и actualRevision, без записи проигравшего пакета.",
+      "observed": {
+        "successes": 1,
+        "finalRevision": 2,
+        "loserExitCode": 1,
+        "loserError": {
+          "name": "Error",
+          "message": "Revision conflict while saving workflow: race"
+        },
+        "revisionFieldsPresent": false,
+        "lostUpdate": false
+      },
+      "reproduction": {
+        "experimentId": "R07-E02",
+        "fixture": "Два отдельных CLI-процесса; monkeypatch DraftStore.get добавляет только пост-read барьер, чтобы оба процесса видели revision 1. Реальный UPDATE и serialization не подменяются.",
+        "publishedIn": "r07-authoring-cli-mcp.md, приложение R07-E02, ветка cas-worker"
+      },
+      "counterEvidence": [
+        "При последовательном stale patch обе поверхности вернули одинаковый RevisionConflictError expected 1 / actual 2.",
+        "Итоговый draft содержит только одну из двух graph-записей.",
+        "tests/store.test.ts:9-34 проверяет последовательный stale editor; :50-75 — конкурентную инициализацию, не patch CAS.",
+        "operationIndex и rollback подтверждены skill-handoff tests.",
+        "MCP CAS race отдельно не запускался; потеря его revision-полей следует из общего store и inspected serializer."
+      ],
+      "recommendation": {
+        "minimalChange": "После failed CAS получить текущую revision и выбросить RevisionConflictError(request.expectedRevision, actualRevision). Сохранить CAS, не повторять пакет автоматически.",
+        "risk": "Изменение класса/текста ошибки для клиентов; при третьем писателе actualRevision является текущим наблюдением, не обязательно revision первого победителя.",
+        "acceptance": "Барьерный fixture даёт одного победителя и один RevisionConflictError expected 1 / actual 2; ровно один пакет записан; CLI/MCP сохраняют поля.",
+        "implemented": false
+      },
+      "continuationVerification": {
+        "origin": "source-operation retained experiment R07-E02",
+        "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+        "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "historicalOutcomeRechecked": true,
+        "causalCodeReinspected": true,
+        "applicationReexecuted": false,
+        "publicationAssessment": "Граница находки не изменена двумя последующими коммитами по просмотренному diff/сравнению файлов. Это статическая сверка, не новое динамическое воспроизведение на publicationRevision."
+      }
+    },
+    {
+      "id": "R07-B03",
+      "classification": "bug",
+      "severity": "low",
+      "title": "Публичная draft schema содержит неоднозначные повторные идентификаторы",
+      "confidence": "high",
+      "facts": [
+        "DraftSchema вкладывает NodeSchema и EdgeSchema с повторными cyclic Json/Expr definitions.",
+        "workflow.schema отдаёт сырой DraftSchema, тогда как PublicDraftPatchSchema уже portable.",
+        "JSON-сериализованная result.draft не компилируется установленным Ajv2020."
+      ],
+      "locations": [
+        "src/authoring.ts:31-39",
+        "src/graph.ts:73-75",
+        "src/service.ts:91-93",
+        "src/public-schema.ts:20-48"
+      ],
+      "contractSources": [
+        "src/mcp-tools.ts:52",
+        "PROJECT_INFO/service.md:55-56"
+      ],
+      "trigger": "JSON round-trip workflow.schema result, затем new Ajv2020(...).compile(result.draft).",
+      "expected": "Публичная схема черновика самостоятельно компилируется и может проверять в том числе незавершённый draft.",
+      "observed": {
+        "draft": "reference \"Json\" resolves to more than one schema",
+        "workflow": "compiled",
+        "expression": "compiled",
+        "create": "compiled",
+        "patch": "compiled",
+        "portableDraftControl": "После существующего portableInputSchema схема скомпилировалась и приняла пустой корректный draft"
+      },
+      "reproduction": {
+        "experimentId": "R07-E02",
+        "fixture": "contract-probes.mjs: schemaCompilation; actual WorkflowService result после JSON.parse(JSON.stringify(...))",
+        "publishedIn": "r07-authoring-cli-mcp.md, приложение R07-E02"
+      },
+      "counterEvidence": [
+        "Внутренний TypeBox authoring и обычные create/patch работают.",
+        "Публичные workflow, expression, create, patch компилируются в том же цикле.",
+        "Это не возвращение старого бага patch без id.",
+        "Доказана несовместимость с закреплённым Ajv, не со всеми schema processors. Если draft предназначался исключительно для чтения TypeBox-представления, область дефекта уже, но он публикуется как самостоятельная схема."
+      ],
+      "recommendation": {
+        "minimalChange": "Публиковать отдельную переносимую копию DraftSchema через существующий portableInputSchema, не мутируя внутреннюю схему; либо собрать один cyclic bundle.",
+        "risk": "Сохранность literals, имён свойств и $ref; нельзя заменять строки/ключи глобально.",
+        "acceptance": "Все пять опубликованных схем компилируются pinned Ajv после JSON round-trip; draft принимает пустой черновик и отвергает лишние поля/malformed nodes; literal regressions проходят.",
+        "implemented": false
+      },
+      "continuationVerification": {
+        "origin": "source-operation retained experiment R07-E02",
+        "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+        "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "historicalOutcomeRechecked": true,
+        "causalCodeReinspected": true,
+        "applicationReexecuted": false,
+        "publicationAssessment": "Граница находки не изменена двумя последующими коммитами по просмотренному diff/сравнению файлов. Это статическая сверка, не новое динамическое воспроизведение на publicationRevision."
+      }
+    },
+    {
+      "id": "R07-B04",
+      "classification": "bug",
+      "severity": "medium",
+      "title": "Начатый prepare открывает незакрываемые повторным close соединения после закрытия сервиса",
+      "confidence": "high",
+      "facts": [
+        "closed проверяется только на входе dispatch.",
+        "prepare сначала ожидает executionWorkspace, затем вызывает lazy store getters без closed guard.",
+        "close выставляет closed и повторно становится no-op, даже если позднее появились соединения."
+      ],
+      "locations": [
+        "src/service.ts:48-69",
+        "src/service.ts:114-120",
+        "src/prepared-plans.ts:28-40",
+        "src/mcp.ts:37",
+        "src/cli.ts:21-34"
+      ],
+      "contractSources": [
+        "PROJECT_INFO/service.md:30-32"
+      ],
+      "trigger": "Свежий service с существующим валидным draft на диске; pending=dispatch(workflow.prepare); немедленный close; await pending; повторный close.",
+      "expected": "После close сервис не оставляет новые открытые соединения. Это не требование run.cancel или отката уже совершённых действий.",
+      "observed": {
+        "prepareReturnedAfterClose": true,
+        "draftConnectionQueryableAfterSecondClose": true,
+        "planConnectionQueryableAfterSecondClose": true,
+        "futureDispatchRejected": true,
+        "normalAwaitThenCloseClosesConnection": true
+      },
+      "reproduction": {
+        "experimentId": "R07-E02",
+        "fixture": "contract-probes.mjs: closeRace. Без таймеров и подмены функций. TypeScript-private fields читаются только fixture-ом для запросов и ручного cleanup.",
+        "publishedIn": "r07-authoring-cli-mcp.md, приложение R07-E02"
+      },
+      "counterEvidence": [
+        "Нормальный await dispatch; close действительно закрывает соединение.",
+        "CLI следует этому нормальному порядку и не объявляется сломанным данным race.",
+        "Реальный disconnect MCP в этом окне не воспроизведён; распространение через server.onclose — inference.",
+        "Доказаны открытые соединения, не production RSS growth, постоянная блокировка или исчерпание дескрипторов. GC/exit могут освободить ресурсы."
+      ],
+      "recommendation": {
+        "minimalChange": "Общий closed guard в lazy getters, включая использование существующих объектов. Альтернатива требует явного drain-протокола уже начатых dispatch. Не добавлять автоматическую отмену runs.",
+        "risk": "Нужно определить controlled closed error для начатого prepare. Нельзя обещать rollback завершившихся до close эффектов.",
+        "acceptance": "Immediate-close не оставляет открытых draft/plan connections; повторный close не пропускает ресурсы; нормальный close, отказ будущим dispatch и независимость уже созданного supervisor сохраняются.",
+        "implemented": false
+      },
+      "continuationVerification": {
+        "origin": "source-operation retained experiment R07-E02",
+        "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+        "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "historicalOutcomeRechecked": true,
+        "causalCodeReinspected": true,
+        "applicationReexecuted": false,
+        "publicationAssessment": "Граница находки не изменена двумя последующими коммитами по просмотренному diff/сравнению файлов. Это статическая сверка, не новое динамическое воспроизведение на publicationRevision."
+      }
+    },
+    {
+      "id": "R07-I01",
+      "classification": "idea",
+      "severity": "low",
+      "title": "Общая машинно-читаемая диагностика неверных запросов",
+      "observed": [
+        "catalog.list с extra отвергнут обеими поверхностями, но CLI сообщает Unexpected request field, MCP — Invalid structured output с additional properties.",
+        "workflow.create с bad/id возвращает CLI AuthoringError, а MCP обычный Error.",
+        "Корректно сформированный stale patch одинаков на CLI/MCP; text и structuredContent MCP совпадают."
+      ],
+      "locations": [
+        "src/mcp.ts:19-34",
+        "src/service.ts:372-395",
+        "src/authoring.ts:144-146",
+        "src/cli.ts:24-34"
+      ],
+      "experimentIds": [
+        "R07-E02"
+      ],
+      "whyNotBug": "Документы гарантируют оболочку и сохранение известных структурных полей, но не побайтовую идентичность сообщений всех валидаторов.",
+      "recommendation": {
+        "minimalChange": "Общая serialization ошибок и устойчивый request-validation code/path; без переписывания authoring или исполнения.",
+        "risk": "Совместимость клиентов, использующих error.name/message.",
+        "acceptance": "Curated corpus malformed JSON имеет общий code/path на обеих поверхностях; semantic ошибки сохраняют operationIndex/revisions/failure.",
+        "implemented": false
+      },
+      "continuationVerification": {
+        "origin": "source-operation retained experiment R07-E02",
+        "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+        "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+        "historicalOutcomeRechecked": true,
+        "causalCodeReinspected": true,
+        "applicationReexecuted": false,
+        "publicationAssessment": "Граница находки не изменена двумя последующими коммитами по просмотренному diff/сравнению файлов. Это статическая сверка, не новое динамическое воспроизведение на publicationRevision."
+      }
+    }
+  ],
+  "experiments": [
+    {
+      "id": "R07-E01",
+      "type": "executed-offline-tests",
+      "cwd": "/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+      "command": "TMPDIR=/tmp/r07-authoring-MCi7LO/tmp node --import tsx --test --test-concurrency=1 tests/authoring.test.ts tests/public-patch-schema.test.ts tests/public-schema-literals.test.ts tests/json-array-boundary.test.ts tests/service.test.ts tests/cli.test.ts tests/mcp.test.ts tests/prepared-start.test.ts tests/skill-handoff.test.ts tests/setup.test.ts tests/doctor.test.ts",
+      "outcome": {
+        "exitCode": 0,
+        "passed": 178,
+        "failed": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "durationMs": 123789.629583
+      },
+      "boundaries": [
+        "Последовательный профильный набор, не полный npm test.",
+        "Только собственные temporary fixtures; model catalog injected там, где нужен.",
+        "Реальные процессы CLI/MCP/supervisor/check и SQLite не означают live inference.",
+        "Недостижимый agent в prepared-start не вызван; этот тест не проверяет качество skill."
+      ],
+      "operation": "source-operation",
+      "executedAgainstRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "continuationTreatment": "Результат перенесён из полного старого отчёта и независимо сверен с сохранённым offline-выводом; команда НЕ выполнена заново. Старый /tmp путь в command является историческим, для нового воспроизведения нужен новый уникальный scratch.",
+      "retainedResultFile": "/tmp/r07-authoring-MCi7LO/profile-tests.log"
+    },
+    {
+      "id": "R07-E02",
+      "type": "executed-custom-probe",
+      "cwd": "/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+      "command": "TMPDIR=/tmp/r07-authoring-MCi7LO/tmp node --import tsx /tmp/r07-authoring-MCi7LO/contract-probes.mjs \"$PWD\" /tmp/r07-authoring-MCi7LO",
+      "fixturePath": "/tmp/r07-authoring-MCi7LO/contract-probes.mjs",
+      "fixtureSha256": "33aa61f55b19b1300145772e8bbdbe28eee63440188cb0c139250d03da947c20",
+      "fixturePublishedIn": "research/2026-09-20-astra-max/r07-authoring-cli-mcp.md; блок между R07_FIXTURE_START и R07_FIXTURE_END",
+      "outcome": "Два успешных запуска. Финальная версия с дополнительными controls подтвердила B01-B04 и различия diagnostics из I01.",
+      "assertions": [
+        "CAS: один успех, один Error без revision-полей, итоговая revision 2 и один пакет",
+        "Continuation: MCP отверг массивы; CLI создал paused successor; корректная MCP redelivery вернула тот же ID",
+        "Wrong string checkpoint отвергнут без нового run; null reuse принят CLI и отвергнут MCP",
+        "Ajv: только draft не компилируется; portableDraft компилируется и принимает incomplete draft",
+        "Close: два соединения открыты после второго close; future dispatch запрещён; normal close закрывает"
+      ],
+      "boundaries": [
+        "CAS использует инструментированный post-read barrier, не fake database/error.",
+        "Continuation fixture не создаёт supervisor/worker.",
+        "Библиотечный lifetime race воспроизведён; реальный MCP disconnect в том же окне не выполнялся.",
+        "Листинг утверждает дефектное поведение текущей версии, не является готовым post-fix regression test.",
+        "Сырые логи не публикуются."
+      ],
+      "operation": "source-operation",
+      "executedAgainstRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "continuationTreatment": "Результат перенесён из полного старого отчёта и независимо сверен с сохранённым offline-выводом; команда НЕ выполнена заново. Старый /tmp путь в command является историческим, для нового воспроизведения нужен новый уникальный scratch.",
+      "retainedResultFiles": [
+        "/tmp/r07-authoring-MCi7LO/probe-summary.json",
+        "/tmp/r07-authoring-MCi7LO/probe-summary-controls.json"
+      ]
+    },
+    {
+      "id": "R07-E03",
+      "type": "executed-selected-tests",
+      "cwd": "/Users/ramu/.local/state/dynamicwf-evaluation-20260920/integration-dev",
+      "command": "TMPDIR=/tmp/r07-authoring-MCi7LO/tmp node --import tsx --test --test-concurrency=1 --test-name-pattern='drafts persist|failed patch|continuation request parsing' tests/store.test.ts tests/lineage.test.ts",
+      "outcome": {
+        "exitCode": 0,
+        "passed": 3,
+        "failed": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "durationMs": 1118.074833
+      },
+      "boundaries": [
+        "Остальные тесты файлов не выбирались, включая 24-процессный initialization test.",
+        "Существующий parser test не содержит [hash]/reuse:null."
+      ],
+      "operation": "source-operation",
+      "executedAgainstRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+      "continuationTreatment": "Результат перенесён из полного старого отчёта и независимо сверен с сохранённым offline-выводом; команда НЕ выполнена заново. Старый /tmp путь в command является историческим, для нового воспроизведения нужен новый уникальный scratch.",
+      "retainedResultFile": "/tmp/r07-authoring-MCi7LO/parser-tests.log"
+    },
+    {
+      "id": "R07-E04",
+      "type": "executed-continuation-integrity-check",
+      "operation": "continuation",
+      "cwd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b",
+      "command": "python3 /tmp/r07-continuation-7GpzfL/verify-retained.py; python3 /tmp/r07-continuation-7GpzfL/verify-retained.py --final",
+      "verificationScriptSha256": "2d3196983eb0fc76512a92b7bf3db879824213099d9ed9fd68b00adce27d1b9b",
+      "outcome": "Старые md/json совпали с retainedEvidence по bytes/SHA256, JSON корректен; 24 исходных ID без дубликатов; fixture совпал побайтово; логи подтверждают 178+3 passed, обе probe summaries согласованы с B01–B04/I01; диапазон tests/store.test.ts уточнён. Итоговые файлы проходят структурную сверку, fixture не изменён.",
+      "boundaries": [
+        "Только чтение файлов/Git и проверка отчётов. Приложение не импортируется, исторические команды не исполняются.",
+        "Хеш подтверждает идентичность материала, не полноту исторического transcript; старый успешный submit_result не утверждается.",
+        "Raw logs в Git не перенесены."
+      ],
+      "assemblyNote": "Первая попытка запуска временного publish-helper остановилась на SyntaxError до записи отчётов; последующий final-check тогда закономерно не нашёл файлов. Исправлен только собственный helper, затем выполнена окончательная запись и успешная проверка. Это не дефект Dynamicwf."
+    },
+    {
+      "id": "R07-E05",
+      "type": "executed-continuation-static-review",
+      "operation": "continuation",
+      "cwd": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b",
+      "commands": [
+        "git log --oneline e15bc407da8753fd6b683c0aa4a68634e3c458a7..3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+        "git diff --name-only e15bc407da8753fd6b683c0aa4a68634e3c458a7 3d8ba65ee84402c0e3b0587f70095b7847824a9f -- src tests package.json package-lock.json PROJECT_INFO skills",
+        "git show 86f5e07 -- src/parallel-isolation.ts src/workspaces.ts src/compiler.ts src/execution-plan.ts tests/parallel-authoring.test.ts",
+        "git show 3d8ba65 -- skills/dynamic-workflows/SKILL.md skills/dynamic-workflows/references/authoring.md",
+        "nl -ba src/run-runtime.ts | sed -n '342,379p'"
+      ],
+      "outcome": "История содержит ровно два последующих коммита; изучены ранняя проверка parallel-isolation и уточнение reviewer binding. В E04 дополнительно доказано совпадение 13 полных профильных файлов и блока деклараций graph schema между ревизиями. Четыре source bug этими изменениями не устранены на просмотренных границах.",
+      "boundaries": [
+        "Статическая проверка, не новый запуск тестов публикационной ревизии.",
+        "Новые regressions parallel-authoring прочитаны, но не запускались; существующие 181 test result остаются результатами sourceRevision."
+      ]
+    }
+  ],
+  "alreadyFixedRefutations": [
+    {
+      "id": "R07-AF01",
+      "classification": "already-fixed",
+      "claim": "Public patch содержит id; literal/schema positions и JSON arrays защищены",
+      "evidence": [
+        "src/authoring.ts:31-33,148-164",
+        "src/public-schema.ts:3-48",
+        "tests/public-patch-schema.test.ts",
+        "tests/public-schema-literals.test.ts",
+        "tests/json-array-boundary.test.ts",
+        "tests/skill-handoff.test.ts"
+      ],
+      "verification": "Профильные тесты выполнены в R07-E01. B03 относится к draft, не patch."
+    },
+    {
+      "id": "R07-AF02",
+      "classification": "already-fixed",
+      "claim": "CLI читает delayed UTF-8 до EOF; MCP не загрязняет protocol stdout",
+      "evidence": [
+        "src/cli.ts:18-19",
+        "bin/dynamicwf.mjs:4-23",
+        "tests/cli.test.ts:40-73",
+        "tests/mcp.test.ts:147-166",
+        "tests/setup.test.ts:109-132,184-210",
+        "git log: 146193d Read CLI stdin asynchronously through EOF"
+      ],
+      "verification": "R07-E01 прошёл, включая fixture executable из другого cwd. Не доказана совместимость всех сторонних MCP hosts."
+    },
+    {
+      "id": "R07-AF03",
+      "classification": "already-fixed",
+      "kind": "refutation",
+      "claim": "Prepared start использует неизменный сохранённый plan и идемпотентную доставку",
+      "evidence": [
+        "src/service.ts:121-143",
+        "src/prepared-plans.ts:28-52",
+        "src/execution-plan.ts:89-106",
+        "src/run-controller.ts:113-127",
+        "tests/prepared-start.test.ts:58-220"
+      ],
+      "verification": "R07-E01 прошёл: draft/skills/default changes, canonical cwd, concurrent keyed starts, removed workspace, paused/interrupted/terminal, tampering. Живые cwd/HEAD не заморожены по документированному контракту; это не новая ошибка и не гарантия exactly-once внешних действий."
+    },
+    {
+      "id": "R07-AF04",
+      "classification": "already-fixed",
+      "claim": "Выбранный skill без read/bash уже блокируется",
+      "evidence": [
+        "src/catalog.ts:31-35,93-95",
+        "src/execution-plan.ts:125-127",
+        "PROJECT_INFO/execution-plan.md, раздел skills",
+        "PROJECT_INFO/known-issues.md"
+      ],
+      "verification": "Только inspected current code/docs в r07, отдельные skill-delivery/SDK tests не запускались. Исправления browser ownership и wait editor state не переоткрываются; UI вне coverage."
+    }
+  ],
+  "unknowns": [
+    {
+      "id": "R07-U01",
+      "classification": "unknown",
+      "question": "Live provider/auth/catalog capabilities",
+      "reason": "Сеть и пользовательские credentials не использовались; doctor/prepare работали с fixture-каталогами.",
+      "notClaimed": "Offline success не подтверждает реальные права аккаунта или live inference."
+    },
+    {
+      "id": "R07-U02",
+      "classification": "unknown",
+      "question": "Сторонние MCP hosts и минимальная поддерживаемая Node",
+      "reason": "Проверены официальный client и legacy initialize на Node 26.8.1; Node 22.19.0 не запускалась."
+    },
+    {
+      "id": "R07-U03",
+      "classification": "unknown",
+      "question": "Частота естественного CAS race и MCP disconnect во время prepare",
+      "reason": "CAS schedule управляемый; close race воспроизведён библиотечно, не транспортным disconnect.",
+      "proposedNotExecuted": "Добавить MCP-specific CAS/disconnect regressions с явным барьером; не подменять их увеличением таймаутов."
+    },
+    {
+      "id": "R07-U04",
+      "classification": "unknown",
+      "question": "Исчерпывающее равенство полей всех 39 tools и full-suite stability",
+      "reason": "Representative schemas и профильный набор не равны exhaustive differential corpus или полному процессному прогону под нагрузкой.",
+      "proposedNotExecuted": "Общий негативный corpus типов/лишних полей/границ для CLI и MCP. Известные full-suite flakes не объявляются ни исправленными, ни новыми находками."
+    }
+  ],
+  "sources": [
+    {
+      "id": "R07-S01",
+      "type": "repository-guidance",
+      "paths": [
+        "AGENTS.md",
+        "PROJECT_INFO/architecture.md",
+        "PROJECT_INFO/development.md",
+        "PROJECT_INFO/known-issues.md",
+        "README.md"
+      ],
+      "use": "Архитектура, ограничения, актуальные исправления и допустимые проверки"
+    },
+    {
+      "id": "R07-S02",
+      "type": "contract-documentation",
+      "paths": [
+        "PROJECT_INFO/service.md:11-62,208-228",
+        "PROJECT_INFO/authoring.md:65-110",
+        "PROJECT_INFO/execution-plan.md",
+        "PROJECT_INFO/graph-contract.md",
+        "PROJECT_INFO/models-and-setup.md",
+        "skills/dynamic-workflows/SKILL.md:36-86"
+      ],
+      "use": "Заявленные публичные contracts, ошибки, prepare/start и onboarding"
+    },
+    {
+      "id": "R07-S03",
+      "type": "current-source",
+      "paths": [
+        "src/authoring.ts:19-172",
+        "src/store.ts:19-50",
+        "src/graph.ts:37-75",
+        "src/catalog.ts:31-35,66-95",
+        "src/output-schema.ts:6-67",
+        "src/public-schema.ts:3-48"
+      ],
+      "use": "Authoring, CAS, TypeBox/Ajv, JSON boundaries"
+    },
+    {
+      "id": "R07-S04",
+      "type": "current-source",
+      "paths": [
+        "src/service.ts:42-143,274-283,327-399",
+        "src/cli.ts:8-34",
+        "src/mcp.ts:13-68",
+        "src/mcp-tools.ts:7-94",
+        "bin/dynamicwf.mjs:4-23"
+      ],
+      "use": "Dispatch, transports, envelopes, lifetime"
+    },
+    {
+      "id": "R07-S05",
+      "type": "current-source",
+      "paths": [
+        "src/execution-plan.ts:33-150",
+        "src/prepared-plans.ts:7-52",
+        "src/run-controller.ts:108-127,193-227,413-464",
+        "src/lineage.ts:173-261",
+        "src/reconciliation.ts:18-30",
+        "src/sqlite.ts:9-31"
+      ],
+      "use": "Snapshot integrity, continuation parsing и запись"
+    },
+    {
+      "id": "R07-S06",
+      "type": "onboarding-source-and-tests",
+      "paths": [
+        "scripts/setup.ts:13-56",
+        "src/doctor.ts:27-90",
+        "tests/setup.test.ts",
+        "tests/doctor.test.ts",
+        "tests/cli.test.ts",
+        "tests/mcp.test.ts",
+        "tests/service.test.ts",
+        "tests/skill-handoff.test.ts"
+      ],
+      "use": "Выполненные offline onboarding и transport checks"
+    },
+    {
+      "id": "R07-S07",
+      "type": "regression-tests",
+      "paths": [
+        "tests/authoring.test.ts",
+        "tests/public-patch-schema.test.ts",
+        "tests/public-schema-literals.test.ts",
+        "tests/json-array-boundary.test.ts",
+        "tests/prepared-start.test.ts",
+        "tests/store.test.ts:9-75",
+        "tests/lineage.test.ts:20-31",
+        "tests/continuation.test.ts:61-147"
+      ],
+      "use": "Контрдоказательства и границы покрытия; continuation.test прочитан частично, не запускался"
+    },
+    {
+      "id": "R07-S08",
+      "type": "revision-and-experiment-evidence",
+      "paths": [
+        "package.json",
+        "git rev-parse HEAD в worktree и разрешённом dev",
+        "git log -16 --oneline и профильная история",
+        "R07-E01",
+        "R07-E02",
+        "R07-E03"
+      ],
+      "use": "Ревизия, dependency/Node metadata, реально выполненные проверки"
+    },
+    {
+      "id": "R07-S09",
+      "type": "retained-own-evidence",
+      "paths": [
+        "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b/research/2026-09-20-astra-max/r07-authoring-cli-mcp.md",
+        "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b/research/2026-09-20-astra-max/r07-authoring-cli-mcp.json",
+        "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r07-actions.json"
+      ],
+      "use": "Предыдущая полная запись исследования; SHA256 проверены, failed операция не превращается в prior successful submission"
+    },
+    {
+      "id": "R07-S10",
+      "type": "retained-own-offline-results",
+      "paths": [
+        "/tmp/r07-authoring-MCi7LO/contract-probes.mjs",
+        "/tmp/r07-authoring-MCi7LO/profile-tests.log",
+        "/tmp/r07-authoring-MCi7LO/parser-tests.log",
+        "/tmp/r07-authoring-MCi7LO/probe-summary.json",
+        "/tmp/r07-authoring-MCi7LO/probe-summary-controls.json"
+      ],
+      "use": "Исторические результаты, fixture/логи только прочитаны; SHA256 в continuationProvenance, сырые логи не публикуются"
+    },
+    {
+      "id": "R07-S11",
+      "type": "post-study-git-diff",
+      "revision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "paths": [
+        "src/parallel-isolation.ts",
+        "src/graph.ts",
+        "src/compiler.ts",
+        "src/execution-plan.ts",
+        "src/workspaces.ts",
+        "tests/parallel-authoring.test.ts",
+        "PROJECT_INFO/graph-contract.md",
+        "PROJECT_INFO/known-issues.md",
+        "skills/dynamic-workflows/SKILL.md",
+        "skills/dynamic-workflows/references/authoring.md"
+      ],
+      "use": "Отдельная статическая сверка двух более поздних исправлений; не source findings"
+    },
+    {
+      "id": "R07-S12",
+      "type": "continuation-check",
+      "paths": [
+        "R07-E04",
+        "R07-E05",
+        "/tmp/r07-continuation-7GpzfL/verify-retained.py"
+      ],
+      "use": "Независимая проверка соответствия отчётов/fixture/outcomes и source/publication; не исполнение приложения"
+    }
+  ],
+  "blockers": [],
+  "postStudyAlreadyFixed": [
+    {
+      "id": "R07-PSAF01",
+      "classification": "already-fixed",
+      "scope": "post-study",
+      "commit": "86f5e0756e67fa7a18e925d77b7d2728db2f0627",
+      "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "claim": "Ранняя диагностика параллельных писателей перенесена на общую authoring/validate/compile границу; не предлагать повторную реализацию.",
+      "evidence": [
+        {
+          "revision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+          "locations": [
+            "src/parallel-isolation.ts:5-35",
+            "src/graph.ts:198-200",
+            "src/execution-plan.ts:94-104",
+            "tests/parallel-authoring.test.ts:49-173",
+            "PROJECT_INFO/graph-contract.md:177-184"
+          ]
+        }
+      ],
+      "verification": "R07-E05: прочитан diff и новая общая функция. Patch сохраняет редактируемый draft, но возвращает validation.valid:false с узлом/worktree remedy; compile/prepare отказывают. Frozen plan проверяется с сохранёнными permissions.",
+      "boundaries": "Это post-study изменение, его тесты здесь не выполнялись. Эффекты произвольного check не выводятся; worktree не sandbox ОС. К B01–B04 не относится."
+    },
+    {
+      "id": "R07-PSAF02",
+      "classification": "already-fixed",
+      "scope": "post-study documentation",
+      "commit": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+      "claim": "Документация собственного reviewer outputSchema и верхнеуровневого input.artifactRevision уже уточнена; повторную правку не предлагать.",
+      "evidence": [
+        {
+          "revision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+          "locations": [
+            "skills/dynamic-workflows/SKILL.md:110-115",
+            "skills/dynamic-workflows/references/authoring.md:128-156"
+          ]
+        },
+        {
+          "revision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+          "locations": [
+            "src/run-runtime.ts:237-239",
+            "src/run-runtime.ts:264",
+            "src/run-runtime.ts:359-372"
+          ]
+        }
+      ],
+      "verification": "R07-E05: docs-only commit сравнен с уже существовавшими checkReviewInput/checkReviewOutput. Required artifactRevision у reviewer требует входной версии и точного совпадения результата; новая версия отчёта критика — другое поле.",
+      "boundaries": "Новое поведение runtime этим коммитом не вводится; статическая проверка графа не может доказать форму произвольного runtime ref. Live reviewer не вызывался."
+    }
+  ],
+  "continuationProvenance": {
+    "sourceRunId": "run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0",
+    "continuationRunId": "run-9dbb044c-664f-4dd8-96c0-57192dc4ed89",
+    "oldOperationStatus": "failed",
+    "oldJsonDeclaredStatus": "complete",
+    "priorSuccessfulSubmissionClaimed": false,
+    "failureContext": "retainedEvidence сообщает provider failure в execution с effects unknown. Это контекст восстановления, не исследованная проблема Dynamicwf, не вывод о квотах и не разрешение повторять внешние действия.",
+    "oldWorkspace": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b",
+    "newWorkspace": "/Users/ramu/.dynamicwf/runs/run-9dbb044c-664f-4dd8-96c0-57192dc4ed89/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b",
+    "sourceRevision": "e15bc407da8753fd6b683c0aa4a68634e3c458a7",
+    "publicationRevision": "3d8ba65ee84402c0e3b0587f70095b7847824a9f",
+    "oldReportsHashesVerified": true,
+    "oldReports": [
+      {
+        "path": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b/research/2026-09-20-astra-max/r07-authoring-cli-mcp.md",
+        "bytes": 42614,
+        "sha256": "784dad9ca2a0231a9c4141a0a817a5449feba71bbaa12f2bbead66f64782361c"
+      },
+      {
+        "path": "/Users/ramu/.dynamicwf/runs/run-babf9b25-b8f5-45ad-b79c-2b2e5d31d2f0/worktrees/8d0df569d4397e843e1b707095a63f510e8ed8eb9e8834415833e52a9c52599b/research/2026-09-20-astra-max/r07-authoring-cli-mcp.json",
+        "bytes": 34475,
+        "sha256": "effce81a205f19b5e13d7d57ab4a6c2fb06c78dc86b8761a4d0c62933a39b844"
+      }
+    ],
+    "oldReportsCompleteness": "Оба файла содержали metadata, coverage, findings, experiments, refutations, sources, unknowns; MD включал полный fixture. Неполный файл не объявлялся ранее успешным выходом; failed статус операции сохранён.",
+    "preservedActionEvidence": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r07-actions.json",
+    "preservedActionsNature": "17 записей команд, без их ответов; независимо прочитаны существующие собственные offline-результаты, команды не переиграны.",
+    "retainedOfflineEvidence": [
+      {
+        "path": "/Users/ramu/.local/state/pi-astra-research-20260920/dwf-orchestration/continuation-v1/retained/r07-actions.json",
+        "bytes": 15472,
+        "sha256": "c51cdf8c12c3943b8e02b8cfda9e48e7134b899d6c9c027a0744f4c2773c4f34"
+      },
+      {
+        "path": "/tmp/r07-authoring-MCi7LO/contract-probes.mjs",
+        "bytes": 9790,
+        "sha256": "33aa61f55b19b1300145772e8bbdbe28eee63440188cb0c139250d03da947c20"
+      },
+      {
+        "path": "/tmp/r07-authoring-MCi7LO/profile-tests.log",
+        "bytes": 16078,
+        "sha256": "a543979ffa87d6cab5094618dc47854869b04981367da15fb85dc5efb2af3931"
+      },
+      {
+        "path": "/tmp/r07-authoring-MCi7LO/parser-tests.log",
+        "bytes": 801,
+        "sha256": "b2d8f50a33cdbde13a56f88fd3e2b991b10980d8b1c96218c4df4031bbe3bef1"
+      },
+      {
+        "path": "/tmp/r07-authoring-MCi7LO/probe-summary.json",
+        "bytes": 2032,
+        "sha256": "f7df38a63e6cdf271243d685f30186c6266a6e43f4517be54192b005dfcb994f"
+      },
+      {
+        "path": "/tmp/r07-authoring-MCi7LO/probe-summary-controls.json",
+        "bytes": 2238,
+        "sha256": "9765bf18858b1c47d87b1ccaed8284fd8c6f0c75696ddfc8c09959422ce0c4cc"
+      }
+    ],
+    "carriedFacts": {
+      "findingIds": [
+        "R07-B01",
+        "R07-B02",
+        "R07-B03",
+        "R07-B04",
+        "R07-I01"
+      ],
+      "experimentIds": [
+        "R07-E01",
+        "R07-E02",
+        "R07-E03"
+      ],
+      "alreadyFixedRefutationIds": [
+        "R07-AF01",
+        "R07-AF02",
+        "R07-AF03",
+        "R07-AF04"
+      ],
+      "unknownIds": [
+        "R07-U01",
+        "R07-U02",
+        "R07-U03",
+        "R07-U04"
+      ],
+      "historicalTestsPassed": 181
+    },
+    "independentlyRechecked": [
+      "old md/json SHA256 и bytes",
+      "полнота JSON/Markdown, стабильные ID и соответствие outcomes",
+      "старый JS и Markdown fixture: одинаковые 9790 байт",
+      "178+3 passed по сохранённым журналам, без повторного прогона",
+      "оба probe summaries и контрпримеры",
+      "причинные source file:line",
+      "13 файлов и graph schema declarations: сравнение source/publication"
+    ],
+    "addedFacts": [
+      "R07-E04/E05 — проверки завершения пакета без запуска приложения",
+      "R07-PSAF01/R07-PSAF02 — post-study already-fixed отдельно от study-source"
+    ],
+    "corrections": [
+      "Уточнены диапазоны tests/store.test.ts: сводная ссылка 9-77 → 9-75, initialization 52-77 → 50-75; файл sourceRevision имеет 75 строк. Вывод о непокрытом patch CAS не меняется.",
+      "Metadata и формулировки executed отделяют исторические операции от нового завершения; все ID и классификации сохранены."
+    ],
+    "noHistoricalCommandReplay": true,
+    "noHistoricalWorkspaceOrFixtureWrites": true,
+    "newScratch": "/tmp/r07-continuation-7GpzfL",
+    "webUsed": false,
+    "newProviderCalls": false,
+    "publicationUnchangedFullFiles": [
+      "src/authoring.ts",
+      "src/store.ts",
+      "src/service.ts",
+      "src/cli.ts",
+      "src/mcp.ts",
+      "src/mcp-tools.ts",
+      "src/public-schema.ts",
+      "src/output-schema.ts",
+      "src/lineage.ts",
+      "src/prepared-plans.ts",
+      "src/run-controller.ts",
+      "package.json",
+      "package-lock.json"
+    ],
+    "publicationAssessmentScope": "Причинные границы B01–B04 не изменены; графовые schemas идентичны, изменения execution-plan/graph отдельно изучены. Это статическая оценка двух более поздних коммитов, не полный аудит publicationRevision.",
+    "assemblyNote": "Первая попытка запуска временного publish-helper остановилась на SyntaxError до записи отчётов; последующий final-check тогда закономерно не нашёл файлов. Исправлен только собственный helper, затем выполнена окончательная запись и успешная проверка. Это не дефект Dynamicwf."
+  }
+}
