@@ -251,6 +251,23 @@ window.harvestQA = () => {
   const textFits=Array.from(group.querySelectorAll('text')).every(t=>t.getComputedTextLength()<=width-32);
   return {visible,kept,outward,inward,textFits,fullName:group.getAttribute('aria-label').includes('Ш'.repeat(30))};
 };
+window.prepareWaitQA = () => {
+  state.run = {...state.run,status:'paused',desired:'paused',waits:[{id:'native-wait',key:'native-key',status:'open',reason:'Ответ',input:{},responseSchema:{type:'object'}}]};
+  state.tab='now';state.node=null;renderPanel();
+  const field=$('wait-response-native-wait');field.style.height='80px';field.focus();
+  window.waitTrusted=false;field.addEventListener('input',event=>{window.waitTrusted=event.isTrusted;});
+};
+window.checkWaitQA = () => {
+  const field=$('wait-response-native-wait'),details=document.querySelector('details[data-wait-details]');
+  details.open=true;field.setSelectionRange(2,9,'backward');field.scrollTop=120;
+  const before={value:field.value,start:field.selectionStart,end:field.selectionEnd,direction:field.selectionDirection,scroll:field.scrollTop};
+  state.run.updatedAt++;renderPanel();
+  const next=$('wait-response-native-wait');
+  const after={value:next.value,start:next.selectionStart,end:next.selectionEnd,direction:next.selectionDirection,scroll:next.scrollTop};
+  const kept=document.activeElement===next&&JSON.stringify(before)===JSON.stringify(after)&&document.querySelector('details[data-wait-details]').open;
+  const submit=$('wait-submit-native-wait');submit.focus();renderPanel();
+  return {trusted:window.waitTrusted,kept,scrolled:before.scroll>0,submitKept:document.activeElement===$('wait-submit-native-wait')};
+};
 await fetch('/replay-result', { method: 'POST', body: document.body.getAttribute('data-replay') });` : readFileSync(new URL(name, root)));
   });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -330,6 +347,10 @@ await fetch('/replay-result', { method: 'POST', body: document.body.getAttribute
       assert.equal(observation.result.value.focused, true);
       const harvest = await send("Runtime.evaluate", { expression: "window.harvestQA()", returnByValue: true });
       assert.deepEqual(harvest.result.value, {visible:true,kept:true,outward:62500,inward:50000,textFits:true,fullName:true});
+      await send("Runtime.evaluate",{expression:"window.prepareWaitQA()"});
+      await send("Input.insertText",{text:JSON.stringify({answer:Array.from({length:50},(_,i)=>'строка '+i)},null,2)});
+      const waitQA=await send("Runtime.evaluate",{expression:"window.checkWaitQA()",returnByValue:true});
+      assert.deepEqual(waitQA.result.value,{trusted:true,kept:true,scrolled:true,submitKept:true});
     } finally { socket.close(); }
   } finally {
     clearTimeout(deadline);

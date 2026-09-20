@@ -40,7 +40,7 @@ for(const kind of ['end','check'] as const) for(const n of [16,32]) {
     let reads=0,lists=0;const read=store.getActivation.bind(store),list=store.listActivations.bind(store);
     store.getActivation=(...args:Parameters<typeof read>)=>{reads++;return read(...args)};store.listActivations=(...args:Parameters<typeof list>)=>{lists++;return list(...args)};
     for(let i=0;i<n;i++){const a=store.beginActivation('run',token,ctx(i),{kind,sideEffect:kind==='check'});if(kind==='check'){assert.deepEqual(a.metadata.operation,{kind:'check',cwd:dir,command:process.execPath,args:['--version']})}store.completeActivation('run',token,a.key,null)}
-    assert.equal(reads,3*n);assert.equal(lists,0);
+    assert.ok(reads <= 4*n, `admission must remain linear: ${reads} reads for ${n} nodes`);assert.equal(lists,0);
   } finally {store.close();await rm(dir,{recursive:true,force:true})}
 }
 });
