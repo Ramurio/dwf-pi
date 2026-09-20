@@ -6,6 +6,14 @@ import { basename, dirname, isAbsolute, join, resolve, sep } from "node:path";
 export interface FileObservation { path: string; kind: "directory" | "file" | "symlink" | "missing" | "special"; mode?: number; size?: number; digest?: string; target?: string }
 export interface WorkspaceObservation { digest: string; roots: string[]; excluded: string[]; entries: number; bytes: number; links: string[]; special: string[] }
 export const recoveryDigest = (value: unknown): string => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+const utf8 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+function filesystemText(bytes: Buffer, path: string): string {
+  try { return utf8.decode(bytes); }
+  catch { throw new Error(`Recovery inspection requires UTF-8 filesystem names and symlink targets: ${path}`); }
+}
+async function directoryNames(path: string): Promise<string[]> {
+  return (await readdir(path, { encoding: "buffer" })).map(bytes => filesystemText(bytes, path));
+}
 const within = (path: string, root: string) => path === root || path.startsWith(root + sep);
 async function canonicalPath(path: string): Promise<string> {
   try { return await realpath(path); }
@@ -34,11 +42,11 @@ export async function observeRecoveryFiles(paths: readonly string[], exclusions:
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; rows.push({ path, kind: "missing" }); return; }
     const mode = Number(before.mode);
     if (before.isSymbolicLink()) {
-      rows.push({ path, kind: "symlink", mode, target: await readlink(path) });
+      rows.push({ path, kind: "symlink", mode, target: filesystemText(await readlink(path, { encoding: "buffer" }), path) });
     } else if (before.isDirectory()) {
-      const names = (await readdir(path)).filter(name => !skip(join(path, name), root)).sort(); rows.push({ path, kind: "directory", mode });
+      const names = (await directoryNames(path)).filter(name => !skip(join(path, name), root)).sort(); rows.push({ path, kind: "directory", mode });
       for (const name of names) await visit(join(path, name), root);
-      const afterNames = (await readdir(path)).filter(name => !skip(join(path, name), root)).sort();
+      const afterNames = (await directoryNames(path)).filter(name => !skip(join(path, name), root)).sort();
       if (JSON.stringify(names) !== JSON.stringify(afterNames)) throw new Error(`Directory changed during recovery inspection: ${path}`);
     } else if (before.isFile()) {
       const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);

@@ -118,3 +118,27 @@ test("public recovery inspection binds a failed operation to separate journal an
     assert.equal(JSON.parse(output).result.workspace.digest, changed.workspace?.digest);
   } finally { service.close(); controller.close(); }
 }));
+
+test("recovery refuses undecodable byte names instead of hashing a missing replacement path", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "dwf-byte-name-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const invalid = Buffer.concat([Buffer.from(directory + "/"), Buffer.from([0xff])]);
+  try { await writeFile(invalid, "original"); }
+  catch (error) {
+    if (["EILSEQ", "EINVAL"].includes((error as NodeJS.ErrnoException).code ?? "")) { t.skip("Filesystem refuses non-UTF-8 names"); return; }
+    throw error;
+  }
+  await assert.rejects(observeRecoveryFiles([directory]), /requires UTF-8/);
+  await writeFile(invalid, "changed");
+  await assert.rejects(observeRecoveryFiles([directory]), /requires UTF-8/);
+});
+
+test("recovery preserves Unicode and BOM-leading names as actual filesystem bytes", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "dwf-unicode-name-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "\uFEFFПривет-�.txt");
+  await writeFile(path, "original"); const before = await observeRecoveryFiles([directory]);
+  assert.equal(before.bytes, 8);
+  await writeFile(path, "changed"); const after = await observeRecoveryFiles([directory]);
+  assert.notEqual(before.digest, after.digest); assert.equal(after.bytes, 7);
+});
