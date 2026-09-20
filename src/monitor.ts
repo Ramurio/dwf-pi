@@ -197,7 +197,8 @@ export class MonitorLog {
 
 function tokenDetails(run: RunRecord, records: readonly ActivationRecord[]): string[] {
   const total = summarizeUsage(records);
-  const lines = [tokenSummary(records), `Вход: ${tokenNumber(total.input)} · Выход: ${tokenNumber(total.output)}`,
+  const known = total.reported || !total.partial;
+  const lines = [tokenSummary(records), `Вход: ${known ? tokenNumber(total.input) : "н/д"} · Выход: ${known ? tokenNumber(total.output) : "н/д"}${total.reported && total.partial ? " · известная часть" : ""}`,
     "Total — счётчик провайдера; он может включать кэш сверх input/output.",
     "Это суммарный расход всех вызовов, а не размер одного контекста."];
   if (total.pending) lines.push(`Ещё работают без отчёта: ${total.pending}. Их расход пока не включён.`);
@@ -217,7 +218,7 @@ function tokenDetails(run: RunRecord, records: readonly ActivationRecord[]): str
   }
   for (const [model, group] of [...groups].sort((a, b) => summarizeUsage(b[1]).totalTokens - summarizeUsage(a[1]).totalTokens)) {
     const usage = summarizeUsage(group);
-    const percent = total.totalTokens > 0 ? ` · ${Math.round(usage.totalTokens / total.totalTokens * 100)}%` : "";
+    const percent = usage.reported && total.totalTokens > 0 ? ` · ${Math.round(usage.totalTokens / total.totalTokens * 100)}%` : "";
     lines.push(`${usage.reported ? tokenNumber(usage.totalTokens) : "н/д"} ток.${percent} · ${terminalText(model)}${usage.partial ? " · неполные данные" : ""}`);
   }
   lines.push("", "ПО АГЕНТАМ И ПРОХОДАМ — больше расход сверху");

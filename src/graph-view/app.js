@@ -81,6 +81,8 @@ const state = {
   controlError: null,
   cameras: new Map(),
   snapshotAt: 0,
+  snapshotRequest: 0,
+  runSelection: 0,
   usageScope: "run",
   taskUsage: null,
   linkedRuns: [],
@@ -160,8 +162,9 @@ function notice(message) {
   $("notice").textContent = message ?? "";
   $("notice").hidden = !message;
 }
-async function api(path, options) {
+async function api(path, options, isCurrent = () => true) {
   const response = await fetch(path, { cache: "no-store", ...options });
+  if (!isCurrent()) return;
   if (response.status === 401) {
     // A viewer restart rotates the local session; the bookmark itself stays valid.
     window.location.reload();
@@ -222,6 +225,10 @@ function selectedGraph() {
     }),
   };
 }
+function tokenTotalLabel(summary) {
+  if (!summary.reported && summary.partial) return "Нет отчётов";
+  return `${number(summary.totalTokens)} ток.${summary.partial ? " · известная часть" : ""}`;
+}
 function renderRuns() {
   const filter = $("search").value.toLowerCase();
   $("runs").replaceChildren();
@@ -245,7 +252,7 @@ function renderRuns() {
       el(
         "small",
         "mini-id",
-        `${run.id.slice(-8)} · ${number(run.usage.totalTokens)} ток.${run.lineage?.role === "continuation" ? " · продолжение" : run.lineage?.successorRunId ? " · есть продолжение" : ""}`,
+        `${run.id.slice(-8)} · ${tokenTotalLabel(run.usage)}${run.lineage?.role === "continuation" ? " · продолжение" : run.lineage?.successorRunId ? " · есть продолжение" : ""}`,
       ),
     );
     $("runs").append(item);
@@ -264,13 +271,14 @@ async function selectRun(id, navigation = "push") {
     }
   }
   if (state.id === id) return;
+  const selection = ++state.runSelection;
   const { previousTaskId } = beginRunSelection(state, id);
   $("workspace").hidden = true;
   $("empty").hidden = true;
   for (const name of ["pause", "resume", "cancel"]) $(name).disabled = true;
   renderRuns();
   await refreshSnapshot();
-  if (state.id !== id) return;
+  if (state.id !== id || selection !== state.runSelection) return;
   reconcileTaskScopeAfterSnapshot(state, previousTaskId);
   if (state.run) {
     renderHeader();
@@ -377,7 +385,7 @@ function renderHeader() {
   status.textContent = r.presentation.statusLabel;
   $("result").textContent = r.presentation.outcomeLabel ?? "";
   $("pause").hidden = !["queued", "running", "waiting"].includes(r.status);
-  $("resume").hidden = !["paused", "pausing", "interrupted"].includes(r.status);
+  $("resume").hidden = !["paused", "pausing", "interrupted"].includes(r.status) || r.desired === "cancelled" || Boolean(r.lineage?.successorRunId);
   $("cancel").hidden = finished.has(r.status);
   for (const id of ["pause", "resume", "cancel"]) $(id).disabled = state.busy;
   if (r.error && !r.failure) notice(r.error);
@@ -449,7 +457,7 @@ function renderHeader() {
     }
     if (r.taskOutcome.source === "legacy") outcome.append(el("small", "muted", "Результат прочитан из прежнего формата end."));
   }
-  const waits = (r.waits ?? []).filter(w => w.status === "open");
+  const waits = waitResponseBlocker(r) ? [] : (r.waits ?? []).filter(w => w.status === "open");
   const retries = r.retryingKeys?.length ?? 0;
   const summary = $("wait-summary");
   summary.hidden = (!waits.length && !retries) || finished.has(r.status);
@@ -1097,24 +1105,46 @@ function taskRow(a) {
   row.append(badge(a.status), body, right);
   return row;
 }
+// Explain only restrictions already enforced by RunStore; this is not authorization.
+function waitResponseBlocker(run) {
+  if (run.lineage?.successorRunId) return "Этот запуск заменён продолжением. Новые ответы здесь не принимаются.";
+  if (run.desired === "cancelled" || run.status === "cancelling") return "Отмена уже запрошена. Новые ответы не принимаются.";
+  if (finished.has(run.status)) return "Запуск завершён. Новые ответы не принимаются.";
+  return null;
+}
 function renderNow() {
   const panel = $("content-panel");
   panel.replaceChildren(sectionHeading("Текущая работа"));
+  const waitBlocker = waitResponseBlocker(state.run);
+  const activations = allActivations(), byKey = new Map(activations.map(a => [a.key, a]));
   if (!finished.has(state.run.status)) for (const wait of state.run.waits ?? []) {
     if (wait.status !== "open") continue;
     let draft = waitDrafts.get(wait.id);
     if (!draft) { draft = { text: "", busy: false, error: null }; waitDrafts.set(wait.id, draft); }
     const card = el("section", "wait-card"), selectedRun = state.id;
     card.append(el("h3", "", wait.reason));
+    const activation = byKey.get(wait.key);
+    card.append(el("p", "muted", activation?.path ?? `Активация: ${wait.key}`), el("p", "muted", `Ожидание: ${wait.id}`));
     const details = el("details");
-    details.append(el("summary", "", "Данные и формат ответа"), el("pre", "", JSON.stringify({ input: wait.input, responseSchema: wait.responseSchema }, null, 2)));
+    details.append(el("summary", "", "Данные и формат ответа"), el("pre", "", JSON.stringify({ runId: selectedRun, waitId: wait.id, input: wait.input, responseSchema: wait.responseSchema }, null, 2)));
+    card.append(details);
+    if (waitBlocker) {
+      card.append(el("p", "muted", waitBlocker));
+      if (state.run.lineage?.successorRunId) {
+        const successor = state.run.lineage.successorRunId;
+        card.append(button("Открыть продолжение", () => selectRun(successor), "child-button"));
+      }
+      panel.append(card);
+      continue;
+    }
     const field = el("textarea");
     field.id = `wait-response-${wait.id}`; field.dataset.waitId = wait.id;
-    field.setAttribute("aria-label", `Ответ: ${wait.reason}`);
+    field.setAttribute("aria-label", `Ответ: ${wait.reason} · ${wait.id}`);
     field.placeholder = "Ответ в формате JSON"; field.value = draft.text; field.rows = 5;
     field.addEventListener("input", () => { draft.text = field.value; });
     const submit = button(draft.busy ? "Сохраняем…" : "Сохранить ответ", async () => {
-      if (draft.busy) return;
+      if (draft.busy || state.id !== selectedRun || !state.run || waitResponseBlocker(state.run) ||
+          !state.run.waits?.some(current => current.id === wait.id && current.status === "open")) return;
       draft.busy = true; draft.error = null; submit.disabled = true;
       try {
         const response = JSON.parse(draft.text);
@@ -1124,15 +1154,15 @@ function renderNow() {
       finally { draft.busy = false; if (state.id === selectedRun && state.tab === "now") renderPanel(); }
     }, "child-button");
     submit.disabled = draft.busy;
-    card.append(details, field, submit);
+    card.append(field, submit);
     if (draft.error) { const error = el("p", "notice", draft.error); error.setAttribute("role", "alert"); card.append(error); }
     if (state.run.desired === "paused") card.append(el("p", "muted", "Ответ сохранится. Работа продолжится после снятия паузы."));
     panel.append(card);
   }
-  const active = allActivations().filter((a) =>
+  const active = activations.filter((a) =>
     state.run.activeKeys.includes(a.key),
   );
-  for (const a of allActivations().filter(a=>(state.run.retryingKeys??[]).includes(a.key))) {
+  for (const a of activations.filter(a=>(state.run.retryingKeys??[]).includes(a.key))) {
     const row=taskRow(a);if(a.retry)row.append(retryView(a.retry));panel.append(row);
   }
   if (!active.length)
@@ -1142,6 +1172,10 @@ function renderNow() {
         "muted",
         finished.has(state.run.status)
           ? "Запуск завершён. Все результаты доступны в истории."
+          : state.run.lineage?.successorRunId
+            ? "Работа перенесена в запуск-продолжение."
+          : state.run.desired === "cancelled"
+            ? "Отмена запрошена. Новые задачи и ответы больше не принимаются."
           : "Новых задач пока нет. Ожидание следующего шага.",
       ),
     );
@@ -1287,7 +1321,7 @@ function renderTokens() {
     if (taskMode) {
       panel.append(el("p", "muted", `Связанных запусков: ${taskUsage.runs.length}. Повторно использованные результаты (${taskUsage.reusedOutputs}) не добавляют вызовов модели. Оценка SDK — не списание по подписке.`));
       for (const item of taskUsage.runs) {
-        panel.append(button(`${item.id} · ${number(item.summary.totalTokens)} ток.`, () => selectRun(item.id), "child-button"));
+        panel.append(button(`${item.id} · ${tokenTotalLabel(item.summary)}`, () => selectRun(item.id), "child-button"));
       }
     }
   }
@@ -1395,9 +1429,11 @@ function renderTokens() {
 async function refreshSnapshot() {
   const id = state.id;
   if (!id) return;
+  const request = ++state.snapshotRequest;
+  const current = () => id === state.id && request === state.snapshotRequest;
   try {
-    const run = await api(`snapshot?id=${encodeURIComponent(id)}`);
-    if (id !== state.id) return;
+    const run = await api(`snapshot?id=${encodeURIComponent(id)}`, undefined, current);
+    if (!current()) return;
     state.snapshotAt = Date.now();
     state.run = run;
     state.graph ??= run.entryGraph;
@@ -1421,7 +1457,7 @@ async function refreshSnapshot() {
     notice(state.controlError ?? (run.failure ? null : run.error));
     $("connection").textContent = "● Данные обновляются";
   } catch (error) {
-    if (id === state.id) {
+    if (current()) {
       notice(error.message);
       $("connection").textContent = "Нет связи · повторяем подключение";
     }

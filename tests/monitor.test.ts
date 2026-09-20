@@ -92,6 +92,24 @@ test("activity reports observed tools or waiting, never infers model thinking fr
   assert.match(renderDashboard(r, [activation("candidate", "worktree", base)]), /контейнер на паузе/);
 });
 
+test("token details preserve unknown accounting, a reported zero and a known partial subtotal", () => {
+  const missing = { ...reviewer("missing"), status: "failed" as const, metadata: { model: { provider: "fixture", id: "unknown" } } };
+  const pending = reviewer("pending");
+  const zero = { ...reviewer("zero"), status: "succeeded" as const, metadata: { model: { provider: "fixture", id: "zero" }, usage: { input: 0, output: 0, totalTokens: 0 }, usageComplete: true } };
+  const partial = { ...reviewer("partial"), status: "failed" as const, metadata: { model: { provider: "fixture", id: "partial" }, usage: { input: 6, output: 4, totalTokens: 10 }, usageComplete: false } };
+  for (const record of [missing, pending]) {
+    const lines = monitorBody(run(), [record], { view: "tokens" });
+    assert.equal(lines[1], "Вход: н/д · Выход: н/д");
+    assert.doesNotMatch(lines.join("\n"), /н\/д ток\. · 0%/);
+  }
+  for (const records of [[], [zero]]) assert.equal(monitorBody(run(), records, { view: "tokens" })[1], "Вход: 0 · Выход: 0");
+  assert.equal(monitorBody(run(), [partial], { view: "tokens" })[1], "Вход: 6 · Выход: 4 · известная часть");
+  const mixed = monitorBody(run(), [missing, partial, zero], { view: "tokens" }).join("\n");
+  assert.doesNotMatch(mixed, /н\/д ток\. · 0%/);
+  assert.match(mixed, /н\/д ток\. · fixture\/unknown/);
+  assert.match(mixed, /0 ток\. · 0% · fixture\/zero/);
+});
+
 test("append-only mode emits each transition once and ignores heartbeat, metadata and clock ticks", () => {
   const log = new MonitorLog(), r = run(), a = reviewer("tests");
   assert.equal(log.update(r, [a]).length, 3);
