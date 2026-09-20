@@ -2,9 +2,8 @@ import { createHash } from "node:crypto";
 import { mkdir, realpath, stat, lstat, readdir, readFile, cp, mkdtemp, open } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join, resolve } from "node:path";
-import { resolveAgentConfig } from "./catalog.js";
-import type { ExecutionPlan } from "./execution-types.js";
-import type { Json, WorkflowDefinition } from "./graph.js";
+import type { Json } from "./graph.js";
+export { assertParallelWriterIsolation } from "./parallel-isolation.js";
 import { assertJson } from "./output-schema.js";
 import { runCheckProcess, type ProcessOptions } from "./process-client.js";
 import type { IntegrationProgress } from "./operation-record.js";
@@ -314,23 +313,4 @@ export function parseWorkspaceSources(value: unknown): WorkspaceRecord[] {
     if (!source || typeof source !== "object" || Array.isArray(source) || Object.keys(source).length !== 4 || typeof source.path !== "string" || typeof source.branch !== "string" || typeof source.base !== "string" || typeof source.head !== "string" || !hashPattern.test(source.base) || !hashPattern.test(source.head)) throw new Error("Invalid workspace record");
     return { path: source.path, branch: source.branch, base: source.base, head: source.head };
   });
-}
-
-/** Every concurrent writer gets a worktree per fan-out item/branch, including nested fan-out. */
-export function assertParallelWriterIsolation(workflow: WorkflowDefinition, frozen?: ExecutionPlan["agents"]): void {
-  const visited = new Set<string>();
-  function inspect(graphId: string, concurrent: boolean): void {
-    const key = `${graphId}:${concurrent}`;
-    if (visited.has(key)) return;
-    visited.add(key);
-    for (const node of workflow.graphs[graphId]!.nodes) {
-      if (node.kind === "agent" && concurrent && (frozen?.[graphId]?.[node.id]?.permission ?? resolveAgentConfig(node.role, node.config).permission) !== "read-only") throw new Error(`Parallel writer ${graphId}/${node.id} requires an explicit worktree block inside its fan-out branch`);
-      if (node.kind === "integrate" && concurrent) throw new Error(`Parallel integration ${graphId}/${node.id} requires its own worktree or sequential concurrency`);
-      if (node.kind === "worktree") inspect(node.graphId, false);
-      if (node.kind === "subworkflow") inspect(node.graphId, concurrent);
-      if (node.kind === "map") inspect(node.graphId, concurrent || node.concurrency !== 1);
-      if (node.kind === "parallel") for (const child of node.children) inspect(child.graphId, concurrent || (node.children.length > 1 && node.concurrency !== 1));
-    }
-  }
-  inspect(workflow.entryGraph, false);
 }

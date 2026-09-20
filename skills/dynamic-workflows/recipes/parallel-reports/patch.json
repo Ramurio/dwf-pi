@@ -1,0 +1,562 @@
+{
+  "id": "parallel-reports",
+  "expectedRevision": 1,
+  "operations": [
+    {
+      "op": "addGraph",
+      "graphId": "isolated"
+    },
+    {
+      "op": "addGraph",
+      "graphId": "writer"
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "reports",
+        "kind": "parallel",
+        "failurePolicy": "collect",
+        "children": [
+          {
+            "id": "first",
+            "graphId": "isolated",
+            "input": {
+              "op": "object",
+              "fields": {
+                "question": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "question"
+                  ]
+                },
+                "criteria": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "criteria"
+                  ]
+                },
+                "projectPolicy": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "projectPolicy"
+                  ]
+                },
+                "sources": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "sources"
+                  ]
+                },
+                "assignment": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "first",
+                    "assignment"
+                  ]
+                },
+                "reportPath": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "first",
+                    "reportPath"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": "second",
+            "graphId": "isolated",
+            "input": {
+              "op": "object",
+              "fields": {
+                "question": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "question"
+                  ]
+                },
+                "criteria": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "criteria"
+                  ]
+                },
+                "projectPolicy": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "projectPolicy"
+                  ]
+                },
+                "sources": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "sources"
+                  ]
+                },
+                "assignment": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "second",
+                    "assignment"
+                  ]
+                },
+                "reportPath": {
+                  "op": "ref",
+                  "path": [
+                    "input",
+                    "second",
+                    "reportPath"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "synthesize",
+        "kind": "agent",
+        "role": "synthesizer",
+        "task": {
+          "op": "literal",
+          "value": "Сопоставь отчёты двух ветвей с вопросом и критериями. Сначала проверь status каждой оболочки reports. При succeeded данные автора находятся в value.result, а запись рабочего дерева — в value.workspace. Не читай value у failed. Прочитай сохранённые отчёты по workspace.path + result.reportPath; сохраняй происхождение, расхождения и ограничения. accepted допустим только если обе ветви succeeded, оба result.status равны written и критерии выполнены; иначе верни inconclusive с конкретной причиной. Ничего не записывай и не публикуй."
+        },
+        "input": {
+          "op": "object",
+          "fields": {
+            "question": {
+              "op": "ref",
+              "path": [
+                "input",
+                "question"
+              ]
+            },
+            "criteria": {
+              "op": "ref",
+              "path": [
+                "input",
+                "criteria"
+              ]
+            },
+            "projectPolicy": {
+              "op": "ref",
+              "path": [
+                "input",
+                "projectPolicy"
+              ]
+            },
+            "reports": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "reports"
+              ]
+            }
+          }
+        },
+        "config": {
+          "model": {
+            "provider": "REPLACE_PROVIDER",
+            "id": "REPLACE_MODEL"
+          },
+          "thinking": "high",
+          "session": "fresh",
+          "permission": "read-only",
+          "tools": [
+            "read",
+            "grep",
+            "find",
+            "ls"
+          ],
+          "skills": [],
+          "outputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "decision",
+              "summary",
+              "reason"
+            ],
+            "properties": {
+              "decision": {
+                "type": "string",
+                "enum": [
+                  "accepted",
+                  "inconclusive"
+                ]
+              },
+              "summary": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "accepted",
+        "kind": "finish",
+        "decision": "accepted",
+        "reason": {
+          "op": "ref",
+          "path": [
+            "nodes",
+            "synthesize",
+            "reason"
+          ]
+        },
+        "evidence": {
+          "op": "array",
+          "items": [
+            {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "reports"
+              ]
+            },
+            {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "synthesize"
+              ]
+            }
+          ]
+        },
+        "value": {
+          "op": "object",
+          "fields": {
+            "reports": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "reports"
+              ]
+            },
+            "synthesis": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "synthesize"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "main",
+      "node": {
+        "id": "inconclusive",
+        "kind": "finish",
+        "decision": "inconclusive",
+        "reason": {
+          "op": "ref",
+          "path": [
+            "nodes",
+            "synthesize",
+            "reason"
+          ]
+        },
+        "evidence": {
+          "op": "array",
+          "items": [
+            {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "reports"
+              ]
+            },
+            {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "synthesize"
+              ]
+            }
+          ]
+        },
+        "value": {
+          "op": "object",
+          "fields": {
+            "reports": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "reports"
+              ]
+            },
+            "synthesis": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "synthesize"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "main",
+      "edge": {
+        "from": "reports",
+        "to": "synthesize"
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "main",
+      "edge": {
+        "from": "synthesize",
+        "to": "accepted",
+        "when": {
+          "op": "all",
+          "items": [
+            {
+              "op": "eq",
+              "left": {
+                "op": "ref",
+                "path": [
+                  "nodes",
+                  "reports",
+                  "first",
+                  "status"
+                ]
+              },
+              "right": {
+                "op": "literal",
+                "value": "succeeded"
+              }
+            },
+            {
+              "op": "eq",
+              "left": {
+                "op": "ref",
+                "path": [
+                  "nodes",
+                  "reports",
+                  "second",
+                  "status"
+                ]
+              },
+              "right": {
+                "op": "literal",
+                "value": "succeeded"
+              }
+            },
+            {
+              "op": "eq",
+              "left": {
+                "op": "ref",
+                "path": [
+                  "nodes",
+                  "reports",
+                  "first",
+                  "value",
+                  "result",
+                  "status"
+                ]
+              },
+              "right": {
+                "op": "literal",
+                "value": "written"
+              }
+            },
+            {
+              "op": "eq",
+              "left": {
+                "op": "ref",
+                "path": [
+                  "nodes",
+                  "reports",
+                  "second",
+                  "value",
+                  "result",
+                  "status"
+                ]
+              },
+              "right": {
+                "op": "literal",
+                "value": "written"
+              }
+            },
+            {
+              "op": "eq",
+              "left": {
+                "op": "ref",
+                "path": [
+                  "nodes",
+                  "synthesize",
+                  "decision"
+                ]
+              },
+              "right": {
+                "op": "literal",
+                "value": "accepted"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "main",
+      "edge": {
+        "from": "synthesize",
+        "to": "inconclusive"
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "isolated",
+      "node": {
+        "id": "allocate",
+        "kind": "worktree",
+        "graphId": "writer",
+        "input": {
+          "op": "ref",
+          "path": [
+            "input"
+          ]
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "isolated",
+      "node": {
+        "id": "done",
+        "kind": "end",
+        "value": {
+          "op": "ref",
+          "path": [
+            "nodes",
+            "allocate"
+          ]
+        }
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "isolated",
+      "edge": {
+        "from": "allocate",
+        "to": "done"
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "writer",
+      "node": {
+        "id": "research",
+        "kind": "agent",
+        "role": "researcher",
+        "task": {
+          "op": "literal",
+          "value": "Изучи вопрос и своё assignment по указанным локальным sources, соблюдая criteria и projectPolicy. Создай Markdown-отчёт только по относительному reportPath внутри выделенного cwd; при необходимости создай родительский каталог через инструмент write. Не пиши в исходный репозиторий, абсолютные пути или соседние рабочие деревья. Цитируй реально прочитанные источники; отделяй наблюдения от предположений. Проверяй фактическое наличие записанного отчёта через read. Верни status written и относительный reportPath только после записи, иначе blocked с конкретной причиной в summary. Другие ветви не запускай и их задания не додумывай."
+        },
+        "input": {
+          "op": "ref",
+          "path": [
+            "input"
+          ]
+        },
+        "config": {
+          "model": {
+            "provider": "REPLACE_PROVIDER",
+            "id": "REPLACE_MODEL"
+          },
+          "thinking": "high",
+          "session": "fresh",
+          "permission": "workspace-write",
+          "tools": [
+            "read",
+            "grep",
+            "find",
+            "ls",
+            "write"
+          ],
+          "skills": [],
+          "outputSchema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "reportPath",
+              "summary"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "written",
+                  "blocked"
+                ]
+              },
+              "reportPath": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "op": "addNode",
+      "graphId": "writer",
+      "node": {
+        "id": "done",
+        "kind": "end",
+        "value": {
+          "op": "ref",
+          "path": [
+            "nodes",
+            "research"
+          ]
+        }
+      }
+    },
+    {
+      "op": "connect",
+      "graphId": "writer",
+      "edge": {
+        "from": "research",
+        "to": "done"
+      }
+    }
+  ]
+}

@@ -4,7 +4,7 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 import { resolveAgentConfig, skillToolIssue, type AgentConfig } from "./catalog.js";
 import { compileWorkflow, compilerVersion, type CompilerVersion } from "./compiler.js";
-import { assertParallelWriterIsolation } from "./workspaces.js";
+import { assertParallelWriterIsolation } from "./parallel-isolation.js";
 import { runtimeVersion, type ExecutionPlan, type FrozenAgent, type SkillSnapshot } from "./execution-types.js";
 import { assertJson, createOutputValidator, defaultOutputSchema } from "./output-schema.js";
 import { isCompatiblePlanPair, supportsFrozenCapabilities, supportsOutputRepair } from "./compiler-versions.js";
@@ -91,9 +91,10 @@ export function verifyExecutionPlan(value: unknown): ExecutionPlan {
   const plan = object(value, "execution plan");
   keys(plan, ["version", "runtimeVersion", "compilerVersion", "workflow", "source", "sourceHash", "agents", "hash"], "execution plan");
   if (plan.version !== 1 || typeof plan.runtimeVersion !== "string" || typeof plan.compilerVersion !== "string" || !isCompatiblePlanPair(plan.runtimeVersion, plan.compilerVersion)) throw new Error("Unsupported execution plan/compiler/runtime version");
-  const compiled = compileWorkflow(plan.workflow, plan.compilerVersion as CompilerVersion);
-  if (plan.source !== compiled.source || plan.sourceHash !== compiled.hash) throw new Error("Execution plan compiled source or source hash mismatch");
   const agents = object(plan.agents, "agents");
+  // Сохранённый план проверяем с его разрешениями, а не с сегодняшними defaults роли.
+  const compiled = compileWorkflow(plan.workflow, plan.compilerVersion as CompilerVersion, agents as ExecutionPlan["agents"]);
+  if (plan.source !== compiled.source || plan.sourceHash !== compiled.hash) throw new Error("Execution plan compiled source or source hash mismatch");
   keys(agents, Object.keys(compiled.workflow.graphs), "agent graphs");
   for (const [graphId, graph] of Object.entries(compiled.workflow.graphs)) {
     const configs = object(agents[graphId], `agents.${graphId}`);

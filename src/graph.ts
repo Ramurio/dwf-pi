@@ -4,6 +4,8 @@ import { AgentConfigSchema, roleNames, resolveAgentConfig, type AgentConfig, typ
 import { createOutputValidator, defaultOutputSchema } from "./output-schema.js";
 import type { TaskDecision } from "./task-outcome.js";
 import { RetryPolicySchema, type RetryPolicy } from "./retry-policy.js";
+import { parallelWriterIsolationIssues } from "./parallel-isolation.js";
+import type { ExecutionPlan } from "./execution-types.js";
 
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 export type Expr =
@@ -95,7 +97,7 @@ function jsonIssue(value: unknown, path = "$", ancestors = new Set<object>()): V
   }
   ancestors.delete(value);
 }
-export function validateWorkflow(value: unknown): ValidationResult {
+export function validateWorkflow(value: unknown, frozen?: ExecutionPlan["agents"]): ValidationResult {
   const issue = jsonIssue(value);
   if (issue) return { valid: false, issues: [issue] };
   if (!Check(WorkflowSchema, value)) return {
@@ -193,6 +195,8 @@ export function validateWorkflow(value: unknown): ValidationResult {
       bindingIds.add(item.bindingId);
     }
   }
+  // Изоляцию можно проверять только после проверки ссылок, циклов и конфигураций.
+  if (!issues.length) issues.push(...parallelWriterIsolationIssues(value, frozen));
   return issues.length ? { valid: false, issues } : { valid: true, issues: [] };
 }
 function walk(starts: string[], adjacency: Map<string, Set<string>>): Set<string> {
@@ -240,8 +244,8 @@ export class WorkflowValidationError extends Error {
     this.name = "WorkflowValidationError";
   }
 }
-export function parseWorkflow(value: unknown): WorkflowDefinition {
-  const result = validateWorkflow(value);
+export function parseWorkflow(value: unknown, frozen?: ExecutionPlan["agents"]): WorkflowDefinition {
+  const result = validateWorkflow(value, frozen);
   if (!result.valid) throw new WorkflowValidationError(result.issues);
   return freeze(structuredClone(value as WorkflowDefinition));
 }

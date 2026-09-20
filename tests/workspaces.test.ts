@@ -251,14 +251,14 @@ function parallelWriter(isolate: boolean, concurrency?: number): WorkflowDefinit
   });
 }
 test("parallel writer policy requires isolation per fan-out, also for nested forks and tampered frozen permissions", async () => {
-  assert.throws(() => assertParallelWriterIsolation(parallelWriter(false)), /Parallel writer/);
+  assert.throws(() => assertParallelWriterIsolation(parallelWriter(false)), /worker\/writer.*worktree/);
   assert.doesNotThrow(() => assertParallelWriterIsolation(parallelWriter(true)));
   assert.doesNotThrow(() => assertParallelWriterIsolation(parallelWriter(false, 1)));
-  await assert.rejects(prepareExecutionPlan(parallelWriter(false), { cwd: process.cwd(), availableModels: [] }), /Parallel writer/);
+  await assert.rejects(prepareExecutionPlan(parallelWriter(false), { cwd: process.cwd(), availableModels: [] }), /worker\/writer.*worktree/);
   const nested = parallelWriter(true);
   nested.graphs.isolated!.nodes[0] = { id: "branch", kind: "worktree", graphId: "inner", input: ref("input") };
   nested.graphs.inner = graph([{ id: "nested", kind: "map", graphId: "worker", items: literal([1, 2]) }, end(ref("nodes", "nested"))]);
-  assert.throws(() => assertParallelWriterIsolation(nested), /Parallel writer/);
+  assert.throws(() => assertParallelWriterIsolation(nested), /worker\/writer.*worktree/);
   const readOnly = parallelWriter(false);
   const agent = readOnly.graphs.worker!.nodes[0]!;
   if (agent.kind !== "agent") throw Error("test invariant");
@@ -268,7 +268,7 @@ test("parallel writer policy requires isolation per fan-out, also for nested for
   function canonical(value: any): string { return value === null || typeof value !== "object" ? JSON.stringify(value) : Array.isArray(value) ? `[${value.map(canonical).join(",")}]` : `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(",")}}`; }
   const { hash: _, ...data } = plan;
   plan.hash = createHash("sha256").update(canonical(data)).digest("hex");
-  assert.throws(() => verifyExecutionPlan(plan), /Parallel writer/);
+  assert.throws(() => verifyExecutionPlan(plan), /worker\/writer.*worktree/);
 });
 
 

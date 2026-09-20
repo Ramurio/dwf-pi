@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { parseWorkflow, type Graph, type Node, type WorkflowDefinition } from "./graph.js";
+import type { ExecutionPlan } from "./execution-types.js";
 import {
   compilerVersion, isCompilerVersion, supportsFailurePolicy, supportsFinishAwait,
   supportsFrozenCapabilities, supportsGeneratedRouting, supportsOutputRepair, supportsProviderRetry,
@@ -24,8 +25,8 @@ function data(value: unknown): string { return `JSON.parse(${JSON.stringify(cano
 function quote(value: string): string { return JSON.stringify(value); }
 
 /** Compile validated graph structure into TypeScript + Effect control flow, without evaluating author text. */
-export function compileWorkflow(value: unknown, version: CompilerVersion = compilerVersion): CompiledWorkflow {
-  const workflow = parseWorkflow(value);
+export function compileWorkflow(value: unknown, version: CompilerVersion = compilerVersion, frozen?: ExecutionPlan["agents"]): CompiledWorkflow {
+  const workflow = parseWorkflow(value, frozen);
   if (!isCompilerVersion(version)) throw new Error("Unsupported compiler version");
   if (!supportsOutputRepair(version) && Object.values(workflow.graphs).some(g => g.nodes.some(n => n.kind === "agent" && n.config?.outputRepair !== undefined))) throw new Error("outputRepair requires compiler v4");
   if (!supportsFailurePolicy(version) && Object.values(workflow.graphs).some(g => g.nodes.some(n => (n.kind === "map" || n.kind === "parallel") && n.failurePolicy !== undefined))) throw new Error("failurePolicy requires compiler v5");

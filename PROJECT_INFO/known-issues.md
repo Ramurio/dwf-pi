@@ -20,6 +20,7 @@
 | Рёбра графа перекрывались | Отдельные маршруты и корректная геометрия | `graph-layout-overlap` |
 | Обмен с исполнителем терял итог/зависал | Ровно один `result`/`error`; учитывать exit без `close` | `process-client` |
 | Неверная `outputSchema` обнаруживалась слишком поздно | Проверка графа компилирует итоговые схемы `agent`/`await`/`reuse` до исполнителя | `campaign-schema`, `graph`, `execution-plan` |
+| Параллельные исследователи с записью отчётов проходили validate, но падали на prepare | Общая проверка изоляции уже в patch/validate называет узел и нужную обёртку worktree; Bash и разные имена отчётов не обходят правило | `parallel-authoring`, `parallel-reports-recipe`, `workspaces` |
 | Описание смешивало создание валидатора и проверку значения | `createOutputValidator(schema)` возвращает функцию; её вызов проверяет значение без изменения входа и возвращает JSON-копию | `execution-plan`, `campaign-schema` |
 | Отключение повторов сессии оставляло HTTP-повторы SDK | Один запрос провайдера без скрытого повтора, Codex по SSE | `provider-response`, `provider-retry`, `repair-core` |
 | Риск повторной записи ради исправления JSON | Режим `submit-only` не возвращает исходные инструменты и не повторяет задание | `output-repair`, `retry-worker` |
