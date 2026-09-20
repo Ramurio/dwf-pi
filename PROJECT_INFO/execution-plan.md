@@ -1,108 +1,215 @@
-# Frozen execution plans
+# Неизменяемый план и идемпотентный запуск
 
-For the public `workflow.prepare` saved handle and exact/idempotent `run.start`, see
-[prepared-start.md](prepared-start.md). The library function below still returns the
-plan itself; the service response wraps it under `plan` with identity/workspace metadata.
+[Индекс](README.md) · [Модели](models-and-setup.md) · [CLI/MCP](service.md)
 
-`prepareExecutionPlan(workflow, { cwd, defaultModel? })` validates and compiles the
-whole graph before starting any inference. It creates an immutable, JSON-serializable
-`ExecutionPlan`, containing the validated graph, exact generated TypeScript + Effect
-source, compiler/runtime versions, source SHA-256 and an overall SHA-256.
+Оглавление: [подготовка](#prepare) · [ресурсы `skills`](#skills) · [вывод](#output) ·
+[версии](#versions) · [проверка](#verify) · [адресуемый план](#prepared-start) ·
+[доставка](#delivery) · [аварийные окна](#launch-gaps).
 
-Each agent is addressed by `plan.agents[graphId][nodeId]`. Its role configuration is
-resolved once: actual model/provider, actual thinking level, prompt, tools, permission,
-session policy, output schema and skill resources are all frozen. A custom
-`systemPrompt` replaces the role prompt as documented in the authoring contract;
-the worker adds the mandatory result submission protocol separately.
+<a id="prepare"></a>
+## Подготовка конфигурации
 
-The normal model catalog comes from pi `ModelRuntime.getAvailableSnapshot()` after
-local authenticated discovery with network catalog refreshing disabled. An explicit
-node model or installation `defaultModel` must be available. With neither configured,
-prefer available `openai-codex/gpt-5.6-sol`, then the first available model. An empty
-catalog produces an actionable error. Graphs with no agent nodes need no model
-catalog or authentication.
+`prepareExecutionPlan(workflow, {cwd, defaultModel?})` проверяет и компилирует весь граф
+до вызова модели. Возвращает неизменяемый JSON `ExecutionPlan`: граф, точный исходник
+TypeScript + `Effect`, версии компилятора/среды исполнения, SHA-256 исходника и всего плана.
+Библиотечная функция возвращает сам план; сервис `workflow.prepare` — оболочку с `plan`
+и описанной ниже идентичностью рабочего каталога.
 
-Thinking capabilities come from pi's `getSupportedThinkingLevels(model)`. Explicit
-unsupported thinking levels fail before inference. Role default thinking adapts to
-the nearest supported level at or below the default, otherwise the first supported
-level; the resulting concrete level is visible in the plan. It is never left to
-worker startup to silently change an explicit request. Tests inject
-`availableModels: [{ provider, id, thinkingLevels }]`, avoiding authentication and
-provider calls.
+В `plan.agents[graphId][nodeId]` один раз определяются модель/провайдер, уровень рассуждений,
+инструкции, инструменты, разрешения, политика сессии, схема вывода и ресурсы `skills`.
+Явный `systemPrompt` заменяет инструкцию роли; обязательный протокол отправки результата
+исполнитель добавляет отдельно.
 
-## Skills
+Каталог — `ModelRuntime.getAvailableSnapshot()` после локального авторизованного
+обнаружения без обновления по сети. Явная модель узла или `defaultModel` должна быть
+доступна. Без обеих сначала выбирается доступная `openai-codex/gpt-5.6-sol`, затем
+первая доступная модель. Пустой каталог даёт ошибку; графу без узлов `agent` модели
+и авторизация не нужны. Тесты передают `availableModels: [{provider,id,thinkingLevels}]`.
 
-A skill reference is a directory or its `SKILL.md`, absolute or relative to the run's
-`cwd`. Preparation copies every regular file in the skill directory into the plan,
-including supporting scripts and binary resources, encoded as base64. It preserves
-whether a file is executable. File paths are relative to the skill root; snapshots
-have a name and SHA-256 over the name and file contents/modes. Duplicate skill names,
-symlink resources, traversal paths, special files and missing `SKILL.md` fail.
+Уровни рассуждений берутся из pi `getSupportedThinkingLevels(model)`.
+Явный неподдерживаемый уровень отвергается до вызова модели. Значение роли по умолчанию
+адаптируется к ближайшему поддерживаемому уровню не выше исходного, иначе к первому
+поддерживаемому. Получившийся уровень виден в плане и не меняется молча при старте
+исполнителя. Требования модальностей, зафиксированные возможности и различие запрошенного,
+разрешённого и наблюдаемого уровней описаны в [моделях](models-and-setup.md#возможности-и-thinking).
 
-Recognizable credential/private metadata filenames (`.env`, `auth.json`, credentials,
-private-key formats, `.ssh`, `.aws`, `.git`) fail preparation instead of being copied.
-This filename exclusion is not a content-level secret scanner: skill authors must
-keep credentials outside skill resources. Model credentials are never included in
-execution plans. Workers materialize the frozen resources, so editing or removing
-the original skill cannot change an already prepared run.
+<a id="skills"></a>
+## Снимки `skills`
 
-## Structured output
+Ссылка на skill — каталог или его `SKILL.md`, абсолютный либо относительно `cwd` запуска.
+Подготовка копирует все обычные файлы каталога, включая вспомогательные скрипты и бинарные
+ресурсы, в base64; сохраняет право исполнения. Пути относительны корню skill, снимок
+имеет имя и SHA-256 имени/содержимого/режимов. Повторяющиеся имена, символические ссылки
+в корне или ресурсах, выход за пределы каталога через путь, специальные файлы и отсутствие
+`SKILL.md` отвергаются. Имя из заголовка Markdown (или имени каталога) должно соответствовать
+правилам pi; непустое `description` ограничено 1024 символами.
 
-`createOutputValidator(schema)` returns a synchronous validator that either throws
-or returns a cloned JSON result. It uses pinned Ajv 8.20.0 with strict schema checking,
-without type coercion, default insertion or additional-property removal. Root type
-must be `object`, because the schema is also the `submit_result` tool-argument schema.
-JSON Schema 2020-12 is the default; explicit draft-07 is also supported. Local
-references work; remote/external references, async schemas, unsupported dialects,
-unknown keywords and unknown formats fail during preparation. Schema metadata and
-literal values are preserved without interpreting `$ref` keys inside `const` data.
+Имена вроде `.env`, `auth.json`, `credentials`, форматов приватных ключей, `.ssh`, `.aws`,
+`.git` вызывают отказ вместо копирования. Это фильтр имён, не сканер секретов внутри
+контента: автор обязан держать учётные данные вне skill. Учётные данные моделей в план
+не входят. Исполнитель разворачивает зафиксированные байты, поэтому последующие правки
+или удаление исходного skill не меняют подготовленный запуск. Общего снимка произвольных
+файлов проекта эта функция не делает.
 
-The default schema is:
+<a id="output"></a>
+## Строгий структурированный вывод
+
+`createOutputValidator(schema)` проверяет и компилирует схему, затем возвращает
+синхронную функцию-валидатор типа `(value: unknown) => Json`. Некорректная схема вызывает
+ошибку уже при создании валидатора. **Вызов полученной функции с данными** возвращает
+их независимую JSON-копию либо выбрасывает ошибку; исходные данные не меняются.
+Реализация — `src/output-schema.ts`.
+
+Закреплён Ajv 8.20.0 со строгой проверкой схем: без приведения типов, вставки значений
+по умолчанию и удаления лишних полей. Корневой тип — `object`, поскольку та же схема
+описывает аргументы `submit_result`. По умолчанию JSON Schema 2020-12, поддерживается
+явно заданный draft-07. Локальные ссылки разрешены; внешние/удалённые ссылки,
+асинхронные схемы, неподдерживаемые диалекты, ключевые слова и форматы отвергаются
+до запуска исполнителя. Метаданные и литералы сохраняются: `$ref` внутри данных `const`
+не интерпретируется как ссылка схемы.
 
 ```json
 {"type":"object","properties":{"result":{}},"required":["result"],"additionalProperties":false}
 ```
 
-Reviewers retain the catalog's structured verdict schema. The JSON boundary rejects
-NaN, undefined, bigint, getters, cycles, unusual object prototypes, symbols, and sparse
-or extended arrays before schema validation can coerce or inspect them.
+Это общая схема по умолчанию; ревьюер использует строгий вердикт каталога.
+Проверка JSON до Ajv отвергает `NaN`, `undefined`, `BigInt`, свойства-геттеры, циклы,
+необычные прототипы, символьные ключи, разреженные массивы и массивы с дополнительными
+полями. Проверка графа уже компилирует итоговую `outputSchema` агента, `responseSchema`
+узла `await` и `outputSchema` узла `reuse`. Подготовка дополнительно определяет модели,
+ресурсы `skills` и рабочий каталог.
 
-## Loading a persisted plan
+<a id="versions"></a>
+## Версии и совместимость
 
-New plans use `dynamicwf-effect-v9` / `dynamicwf-runtime-v9` with reuse nodes, frozen effective capabilities, optional agent image requirements, adapter identity and distinct available/requested/resolved thinking. This runtime also
-verifies and executes paired v1–v8 plans by regenerating their
-byte-identical source. The v8 golden fixture `tests/fixtures/legacy-v8-plan.json` keeps frozen capability keys without reuse semantics. The v2 golden fixture predates routing (`034b270`).
-The golden fixture `tests/fixtures/legacy-v1-plan.json` was produced by the compiler
-at commit `4b4ae53`; it guards source/hash compatibility. V1 rejects new finish/await
-nodes. V1/v2 plans do not gain fabricated historical routing records. This is
-explicit compatibility for these versions, not arbitrary rollback. The v3 golden
-agent fixture was generated at `a05b3ef`, before output repair. V1–v3 plans retain
-their exact eight frozen agent fields and disable repair; v4 and newer plans require
-`outputRepair` explicitly, including `{ "mode": "disabled" }` for the default.
-Older compilers reject authored output repair configuration.
-The v4 golden map/parallel fixture was generated with the compiler from `f933bd9`;
-it still returns unwrapped child values. V5 and newer support authored `failurePolicy`.
-The golden v5 collect fixture was generated at `6dcafc3`; v6 adds node-level
-`retryPolicy` on agent/check. Older compilers reject authored retry policies.
-See [retry-policy.md](retry-policy.md) for admission and persistence semantics.
-The golden v7 fixture `tests/fixtures/legacy-v7-plan.json` was captured before the v8 capability fields; v7 agents keep eight frozen keys plus `outputRepair` and do not gain retrospective capabilities.
-The golden v6 retry fixture was generated at `61fdb9a`; it retains original
-code-family selection and delay. V7 adds explicit provider HTTP filtering and
-Retry-After policy; v6 and older compilers reject those provider options.
+Текущая пара — `dynamicwf-effect-v9` / `dynamicwf-runtime-v9`, `schemaVersion` графа — 1.
+Среда исполнения проверяет и исполняет согласованные пары v1–v8, регенерируя **те же
+байты** исходника и хеш. Это явная совместимость перечисленных версий, не произвольный
+откат версий. Старому плану не добавляют новые поля или вымышленные исторические наблюдения.
 
-`verifyExecutionPlan(value)` checks JSON structure, exact field sets, graph validity,
-agent coverage/configuration, output schemas, safe skill resource paths and hashes,
-supported versions, regenerated source equality, source hash and overall plan hash.
-It returns a deeply frozen independent copy. It does not rediscover models, reread
-skills, refresh credentials, or apply updated role defaults. Consequently a stored
-run can be inspected even when its provider authorization is unavailable.
+| Версия | Добавленный контракт | Совместимый эталонный план |
+| --- | --- | --- |
+| v1 | Исходный граф; `finish`/`await` запрещены | `tests/fixtures/legacy-v1-plan.json`, компилятор `4b4ae53` |
+| v2 | `finish`/`await` | `legacy-v2-plan.json`, `034b270`, до сохраняемой маршрутизации |
+| v3 | Сохраняемая маршрутизация | `legacy-v3-plan.json`, `a05b3ef`, до исправления формата вывода |
+| v4 | Явное зафиксированное `outputRepair`, в том числе `{mode:"disabled"}` | `legacy-v4-plan.json`, `f933bd9`, ещё обычные выходы `map`/`parallel` |
+| v5 | `failurePolicy` для `map`/`parallel` | `legacy-v5-plan.json`, `6dcafc3` |
+| v6 | `retryPolicy` узла `agent`/`check` | `legacy-v6-plan.json`, `61fdb9a`, исходный выбор семейства кодов и задержки |
+| v7 | HTTP-фильтр и Retry-After в политике повторов | `legacy-v7-plan.json`, до полей возможностей модели |
+| v8 | Зафиксированные `requirements`/`capabilities`/`adapterIdentity`/`reasoning` | `legacy-v8-plan.json`, без `reuse` |
+| v9 | `reuse` для связанного продолжения задачи | Текущая версия |
 
-Hashes detect accidental or unacknowledged content changes; they are not signatures
-against an attacker who can replace both the plan and its hashes. Actual provider
-availability and credentials are checked again by the worker at execution time;
-that check must fail explicitly if the frozen request cannot be fulfilled.
+Все перечисленные эталонные планы лежат в `tests/fixtures/`. V1–v3 сохраняют ровно
+восемь зафиксированных полей агента; исправление формата вывода для них отключено.
+V4–v7 добавляют `outputRepair`, но сведения о возможностях модели задним числом не появляются.
+Старые компиляторы отвергают настройки, которых ещё не было в соответствующей версии:
+v1–v3 — `outputRepair`, v1–v4 — `failurePolicy`, v1–v5 — `retryPolicy`,
+v1–v6 — параметры провайдера в политике повторов, v1–v8 — узлы `reuse`.
+V1/v2 сохраняют прежний `chooseEdge` без вымышленных записей маршрутизации.
 
-Validation: `node --import tsx --test tests/execution-plan.test.ts` covers freezing,
-model/thinking selection, no-agent execution planning, explicit overrides, skill
-version changes/removal, binary/executable files, unsafe resources, schema dialects,
-strict output validation, and tampered persisted plans.
+<a id="verify"></a>
+## Чтение сохранённого плана
+
+`verifyExecutionPlan(value)` проверяет JSON и точные наборы полей, валидность графа,
+соответствие набора агентов графу и их настройки, схемы вывода, безопасные пути/хеши `skills`,
+версии, равенство регенерированного исходника, хеш исходника и плана. Возвращает глубокую
+независимую неизменяемую копию. Повторно не ищет модели, не читает `skills`, не обновляет
+учётные данные и настройки по умолчанию. Поэтому старый запуск можно инспектировать
+и без доступной авторизации провайдера.
+
+Хеши обнаруживают изменения, но не являются подписями против того, кто может заменить
+и план, и хеши. Исполнитель снова проверяет реальную доступность выбранного провайдера/
+модели, учётных данных и возможностей. Невозможность исполнить зафиксированный запрос —
+явная ошибка, не разрешение выбрать другую модель.
+
+<a id="prepared-start"></a>
+## Адресуемый план и рабочий каталог
+
+`workflow.prepare {id,cwd?,model?}` проверяет канонический рабочий каталог и сохраняет
+`{preparedId,planHash,cwd,createdAt,plan}`. `workflow.prepared {preparedId}` читает его
+из **того же журнала**. `run.start {preparedId,input?,idempotencyKey?}` исполняет именно
+этот снимок, не перечитывая черновик, настройки ролей/моделей по умолчанию и исходные
+файлы `skills`. Подготовка и инспекция не вызывают модели.
+
+Идентификатор подготовленного плана — хеш версионированной пары хеша плана и
+канонического пути рабочего каталога. Одинаковый план в том же каталоге даёт тот же
+идентификатор и исходный `createdAt`; другой канонический каталог — другой идентификатор.
+Символическая ссылка рабочего каталога разрешается при подготовке. Байты плана
+сохраняются один раз на `planHash`; подготовленные записи ссылаются на них.
+
+Нельзя совместить запуск подготовленного плана с `id`, `cwd` или `model`: для изменений
+подготовьте новый план. Первый запуск требует существующего каталога, разрешающегося
+в тот же канонический путь; перенаправление новой символической ссылкой отвергается.
+Содержимое `cwd`, Git `head` и inode каталога **не заморожены**. Подтверждение версии
+артефакта — отдельная граница.
+
+Инспекция проверяет план, исходник, ресурсы и привязку идентификатора, но не требует
+наличия рабочего каталога, исходных `skills` или авторизации. Это адрес внутри журнала,
+не токен импорта и не подпись. Подготовка возможна с `:memory:` на срок жизни сервиса;
+запуск отдельного процесса требует файлового журнала.
+
+<a id="delivery"></a>
+## Один ключ на один намеренный запуск
+
+Выберите и сохраните уникальный `idempotencyKey` **до отправки**. Пространство ключей —
+весь выбранный журнал, не клиент/черновик/проект. `run.continue` использует то же
+пространство, сравнивая весь канонический запрос продолжения. Ключ `start` нельзя
+перепривязать к continuation, и наоборот; конфликт не создаёт запуск.
+
+```json
+{"preparedId":"prepared-<returned 64 hex characters>","idempotencyKey":"repair-issue-42-attempt-1","input":{"task":"Fix issue 42"}}
+```
+
+При потерянном ответе отправьте тот же `preparedId`, вход и ключ: получите тот же ID
+запуска и его текущее публичное состояние. Порядок ключей JSON неважен; порядок массива
+и значения важны. Отсутствующий вход — `null`. JSON-нормализация превращает -0 в 0
+и не сохраняет прототипы JS. Другой план, каталог или вход с тем же ключом — конфликт.
+Связь ключа и событие `run.created` фиксируются атомарно: конкурирующие клиенты не создают
+два запуска.
+
+Новое намеренное выполнение требует нового ключа. Без ключа каждый вызов создаёт
+новый запуск. Совместимая форма `run.start {id,cwd?,model?,input?}` заново готовит текущий
+черновик, всегда создаёт новый запуск и отвергает `idempotencyKey`; она не обещает
+исполнить ранее просмотренный подготовленный план. `preset.run` также создаёт новый запуск.
+
+Подготовка не является тестированием и не публикует пресет. Подготовленные данные и
+связи ключей не имеют автоматического срока хранения; очистка — отдельная задача.
+Удаление журнала теряет историю дедупликации.
+
+<a id="launch-gaps"></a>
+## Аварийные окна и намерение управления
+
+Поиск дубликата происходит до чтения ресурсов/рабочего каталога: завершённый запуск
+вернётся даже после их удаления. Запуски со статусом `failed`/`cancelled`/`paused`/`interrupted`
+сохраняют исходы и намерение управления. Повтор доставки — не повтор исполнения.
+
+Если создание уже зафиксировано, но резервирование supervisor ещё не выполнено,
+повторная доставка может завершить первоначальный запуск. Атомарная проверка владения
+допускает только одного запускающего клиента. В окне резервирования/создания процесса/
+привязки PID резервирование не перехватывается. Если процесс позже подтверждённо
+отсутствует, наблюдение показывает прерывание; повтор `start` не перезапускает его.
+Для восстановления остаётся явный `run.resume` с обычными проверками неопределённых
+эффектов. Дедупликация команды запуска не обещает однократность всех внешних действий
+и не меняет активный граф.
+
+## Наблюдение и проверки
+
+Статус, инспекция и событие `run.created` показывают `preparedId`, если он записан,
+но не ключ идемпотентности. «План запуска» в браузере показывает версию графа, SHA-256
+и идентификатор подготовленного плана, в том числе для старого снимка после изменения
+черновика. Отсутствие идентификатора явно отмечается. Исходные инструкции и ресурсы
+не добавляются в обычный снимок браузера; полный план читайте через `workflow.prepared`.
+
+- `tests/execution-plan.test.ts`: неизменяемость плана, выбор моделей и уровня `thinking`,
+  граф без агентов, явное переопределение настроек, бинарные и исполняемые ресурсы,
+  удаление/изменение `skills`, небезопасные пути, диалекты схем, строгий вывод и повреждённые планы.
+- `tests/prepared-start.test.ts`: независимость от последующих изменений черновика,
+  настроек по умолчанию и `skills`; привязка к рабочему каталогу; совместное хранение снимков;
+  четыре конкурентные CLI-доставки с одной записью; потерянный ответ; откат и конфликты;
+  промежутки между созданием запуска и резервированием процесса; сохранение паузы и
+  конечного состояния; SIGKILL после внешних действий; JSON-эквивалентность; обнаружение
+  подмены снимка; согласованность проверок сервиса и MCP.
+- `tests/mcp.test.ts`: переподключение и повтор запроса запуска подготовленного плана
+  на паузе. API браузера проверяет безопасное представление идентичности плана.
+  `spikes/ui-prepared-smoke.ts` — временный проверочный сценарий с изменённым черновиком
+  и одним запуском старого плана, несмотря на повторную доставку запроса.

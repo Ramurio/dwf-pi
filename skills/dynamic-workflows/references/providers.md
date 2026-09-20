@@ -1,31 +1,45 @@
-# Providers, catalog, and thinking
+# Провайдеры, каталог и уровень рассуждений
 
-Read this when choosing models, diagnosing local prerequisites, or interpreting capabilities and thinking. The model in the caller's harness does not determine the pi worker's model. Explicit node provider/id/thinking is not silently substituted.
+Читай при выборе модели, диагностике локальных предпосылок или трактовке возможностей.
+Модель вызывающего приложения не определяет модель исполнителя pi. Явные `provider`/`id`/`thinking`
+не подменяются молча.
 
-## Catalog and doctor
+## Каталог и диагностика
 
-Inspect the actual interface with `catalog.list`, `catalog.describe {"name":"reviewer"}`, and `catalog.models {}`. Prefer concrete available provider/model identifiers; product subscription names are not model IDs. An explicitly unavailable model/thinking configuration is an error, not permission to silently downgrade.
+Изучи `catalog.list`, `catalog.describe {"name":"reviewer"}` и `catalog.models {}`.
+Предпочитай конкретные доступные ID моделей, не названия подписок. Недоступная явно
+заданная модель или `thinking` — ошибка, не разрешение понизить уровень.
+`system.doctor {}` проверяет локальные предпосылки, не запускает модели.
 
-`system.doctor {}` diagnoses local prerequisites without inference. It does not run models.
+Grok использует встроенный провайдер pi xai, авторизация: `/login xai` → **Use a subscription**.
+Выбирай `xai/grok-4.6`, если он есть в каталоге. `catalog.models {"refresh":true}` явно
+обновляет встроенный каталог xAI по сети; обычный запуск использует только кэш.
+Наличие модели в списке не доказывает права аккаунта на каждый запрос.
 
-Grok uses pi's built-in `xai` provider, authenticated through `/login xai` → **Use a subscription**. Use `xai/grok-4.6` when present in the catalog; no `pi-xai-oauth` plugin is required. `catalog.models {"refresh":true}` explicitly refreshes the native xAI catalog. Ordinary startup stays cache-only. A listed model is not proof of account entitlement to every request.
+## Возможности и модальности
 
-The retired `xai-auth` provider is not silently aliased. Historical frozen runs remain readable but require an explicit continuation to change provider; inspect partial effects before resuming work.
+Различай исходные возможности входа модели и эффективные возможности входа/результатов
+инструментов графа: `supported`/`unsupported`/`unknown`. Отсутствие метаданных модальности
+означает `unknown`, не запрет. Поддержка изображений моделью не подтверждает активный
+инструмент/транспорт. Необязательные `config.requirements` с `inputModalities`/`toolResultModalities`
+позволяют подготовке отвергнуть неизвестные/неподдерживаемые потребности в изображениях.
+Обычным текстовым графам дополнительные поля не нужны. Исполнитель проверяет безопасное
+пересечение зафиксированных и текущих возможностей.
 
-## Capabilities and modalities
+## Запрошенный, разрешённый и наблюдаемый `thinking`
 
-Treat raw model input separately from effective workflow input/tool-result capabilities (`supported` / `unsupported` / `unknown`). Missing modality metadata is unknown, not denial. Model-advertised vision does not certify the active adapter or tool route.
+Способность модели принимать изображения, текущие транспорт/инструменты, настроенный
+`thinking` и наблюдаемый уровень в запросе — разные сведения. Не переименовывай xhigh
+в high; молчаливого понижения нет. Явный `thinking` должен поддерживаться моделью,
+иначе подготовка ошибается. Значение роли по умолчанию может адаптироваться только
+когда `thinking` не задан; разрешённое значение затем фиксируется. Наблюдаемый уровень
+доказывает конкретный запрос, но не разрешает переписать настройку или выдать её за наблюдение.
 
-Optional `config.requirements` with `inputModalities` / `toolResultModalities` make prepare reject unknown or unsupported image needs. Ordinary text workflows need no extra ceremony.
+## Авторизация и границы SDK
 
-## Thinking: requested, resolved, observed
-
-Native image ability, current transport/tool support, configured thinking, and observed payload reasoning are distinct. Do not relabel `xhigh` as `high`. There is no silent `xhigh` downgrade.
-
-An explicit thinking value must be supported by the chosen model or prepare fails. Role defaults may adapt thinking only when you did not set it; after prepare, the resolved value is frozen. Observed provider thinking on a payload is evidence of that request, not a license to rewrite the configured value.
-
-## Credentials and adapter boundaries
-
-Worker models and authentication come from the local provider setup, independently of the calling harness. Installing the command or skill does not turn a chat subscription name into an API model or transfer credentials between products.
-
-No credential enters the graph, worker request, or public model catalog. Adapter identity, version, and content checks belong to the runtime boundary; missing or unsupported optional adapters produce catalog diagnostics and do not silently select a different provider. An explicitly requested adapter that cannot load fails; it is not replaced by another product.
+Модели и авторизация исполнителей берутся из локальной настройки провайдеров независимо
+от вызывающего приложения. Установка команды/skill не превращает подписку чата в модель
+API и не переносит учётные данные между продуктами. Секреты не входят в граф, запрос
+исполнителя или публичный каталог. Dynamicwf использует встроенных провайдеров SDK,
+не загружая пользовательские расширения. Невыполнимый зафиксированный запрос должен
+завершиться явной ошибкой, не выбором другого продукта.

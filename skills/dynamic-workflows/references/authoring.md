@@ -1,101 +1,166 @@
-# Authoring
+# Создание графа
 
-Use this when the task is not the shipped [research-trio](../recipes/research-trio/README.md) recipe, or when you need expressions, roles, collect, reviews, snapshots, or worktrees. Get exact fields and expression forms from `workflow.schema {}` rather than inventing block types. The graph remains the orchestration artifact; do not write scheduler code, JS loops, generated TypeScript, worker-spawning scripts, or a second execution engine.
+Читай для нестандартного графа, выражений, ролей, сбора ветвей, ревью, снимков или рабочих
+деревьев. Для готового [research-trio](../recipes/research-trio/README.md) достаточно рецепта.
+Точные поля бери из `workflow.schema`, не выдумывай виды блоков. Граф — артефакт оркестрации:
+не пиши планировщик, циклы JS, генерируемый TS, скрипты создания исполнителей или второй движок.
 
-## Discover, then patch
+## Каталог, затем изменение
 
-Inspect the actual interface with `catalog.list`, `catalog.describe {"name":"reviewer"}`, `catalog.models {}`, and `workflow.schema {}`. Model catalog, capabilities, and thinking belong to [providers.md](providers.md).
+Изучи `catalog.list`, `catalog.describe {"name":"reviewer"}`, `catalog.models` и `workflow.schema`.
+Модели, возможности и уровни рассуждений — в [провайдерах](providers.md).
+Создай `workflow.create`, затем `workflow.patch` с `id`/`expectedRevision`/`operations`.
+Изменение добавляет/заменяет/удаляет графы/узлы, задаёт вход и рёбра; `revision` увеличивается
+один раз. При конфликте прочитай новый черновик и перенеси свои изменения, не затирай чужие.
 
-Use `workflow.create`, then `workflow.patch` with `id`, `expectedRevision`, and an `operations` array. Operations add/replace/remove blocks and graphs, set an entry, and connect/disconnect edges. A patch increments the revision once. On a revision conflict, inspect the latest draft and rebase the intended changes; do not overwrite another editor's changes blindly.
+`create` уже создаёт пустой входной граф (обычно `main`); добавляй узлы прямо в него.
+`addGraph` нужен только дополнительным графам. У результата `patch` есть `workflow` и `validation`;
+следующий `expectedRevision` — `result.workflow.revision`. Для блока задай работу, вход,
+структурированный выход и следующие переходы:
 
-`workflow.create` already creates the empty entry graph (normally `main`); add its nodes directly. Add only additional graphs with `addGraph`. The successful patch envelope contains `result.workflow` and `result.validation`; take the next expected revision from `result.workflow.revision`.
+| Блок | Назначение |
+| --- | --- |
+| `agent` | Рассуждение/работа исполнителя |
+| `check` | Фиксированная программа и аргументы без неявной оболочки |
+| `transform` | Декларативное выражение |
+| Условные рёбра | Ветвления и циклы |
+| `parallel` | Именованные независимые ветви |
+| `map` | Массив, полученный во время исполнения |
+| `subworkflow` | Композиция графов |
+| `await` | Сохраняемый ответ, см. [операции](operations.md) |
+| `finish` | Исход задачи |
+| `worktree`/`integrate` | Изолированные записи Git и явное слияние |
+| `reuse` | Только происхождение завершённых выходов при [продолжении](continuation.md) |
 
-Define each block's job, input, structured output, and next transitions:
+Среда исполнения создаёт области/посещения вложенной работы. Ребёнок `map` получает
+**сам элемент** как `input`; результаты возвращаются в порядке входа. Ребёнок `parallel`
+получает своё выражение входа и возвращает под своим ID.
 
-- `agent` for reasoning/work
-- `check` for a fixed command and argument array without a shell
-- `transform` for declarative expressions
-- conditional edges for branches and cycles
-- `parallel` for named branches
-- `map` for runtime-derived arrays
-- `subworkflow` for composition
-- `await` for a durable answer (see [operations.md](operations.md))
-- `finish` for the task outcome
-- `worktree` / `integrate` for isolated Git writers
-- `reuse` only for continuation provenance of already completed outputs (see [continuation.md](continuation.md))
+### Минимальные примеры
 
-The runtime supplies scopes and visit identities for nested work. Each `map` child receives the raw array item as its `input`; its outputs return in input order. Each `parallel` child receives its configured input expression and returns under its child ID.
-
-### Minimal node and entry examples
-
-A `transform` evaluates its `value` expression; `expr` is not a node field. For example, this patch operation returns the input unchanged:
+У `transform` поле `value`, не `Expr`:
 
 ```json
 {"op":"addNode","graphId":"main","node":{"id":"echo","kind":"transform","value":{"op":"ref","path":["input"]}}}
 ```
 
-A `map` names the child graph with `graphId` and the array expression with `items`. Create and populate the child graph `item` before validating the complete workflow:
+`map` указывает дочерний граф через `graphId`, массив через `items`. Создай и наполни `item`
+до полной проверки:
 
 ```json
 {"op":"addNode","graphId":"main","node":{"id":"each","kind":"map","graphId":"item","items":{"op":"ref","path":["input"]}}}
 ```
 
-Set an explicit entry with `nodeId`, not `entry`:
+Вход задаётся `nodeId`, не `entry`:
 
 ```json
 {"op":"setEntry","graphId":"main","nodeId":"echo"}
 ```
 
-These are individual operations for `workflow.patch.operations`, not complete workflows. Connect the nodes to a `finish` and validate the whole graph. When saving a large CLI schema response for read/grep tools, format it as multiline JSON; a single long line can be truncated. Keep the complete schema available and read the relevant node/operation definitions.
+Это отдельные `workflow.patch.operations`, не готовые графы. Соедини узлы с `finish` и
+проверь весь граф. Большой ответ схемы CLI сохраняй как многострочный JSON для `read`/`grep`:
+одна длинная строка может оказаться недоступной. Сохраняй полную схему и читай нужные
+определения, не подменяй их усечённым выводом.
 
-## Finish versus legacy end
+## Завершение и выражения
 
-`finish` returns `value` and declares `decision` (`accepted`, `rejected`, `inconclusive`), a nonempty `reason` expression, and an `evidence` expression producing an array. The root finish determines the task outcome; child decisions remain local. Legacy `end` returns data; only its explicit `accepted` boolean supplies legacy acceptance. Technical `succeeded` is not acceptance.
+`finish` возвращает `value` и объявляет `decision` `accepted`/`rejected`/`inconclusive`, непустую
+`reason` и `evidence`, вычисляемое в массив. Корневой `finish` определяет `taskOutcome`,
+дочерние решения локальны. Старый `end` возвращает данные; только булев `accepted` даёт
+совместимую приёмку. `succeeded` сам по себе не `accepted`.
 
-## Expressions and lazy feedback
-
-Expressions read `input` and completed node outputs through `nodes`. Output references can be absent on the first visit. Select feedback lazily, so a first iteration uses the original input and later iterations use the review result:
+`Expr` читает `input` и завершённые выходы через `nodes`. На первом посещении обратная связь
+может отсутствовать: используй ленивый `select`, чтобы сначала взять исходную задачу,
+затем ревью:
 
 ```json
 {"op":"select","when":{"op":"exists","value":{"op":"ref","path":["nodes","review"]}},"then":{"op":"ref","path":["nodes","review"]},"otherwise":{"op":"ref","path":["input"]}}
 ```
 
-Wire the selected value into the implementer's input alongside the task as needed. `select` evaluates only the chosen branch. Ordinary `ref` to missing data fails; an unconditional feedback reference is not a valid first iteration.
+Передай выбранное значение во вход `implementer` вместе с задачей. `select` вычисляет
+только выбранную ветвь; обычный `ref` на отсутствующие данные — ошибка. Безусловная
+ссылка на review не подходит первому проходу.
 
-## Collect
+## Сбор ветвей с `collect`
 
-For independent fan-out where one failure should not interrupt peers, set `failurePolicy:"collect"` on `map` or `parallel`. Default `fail-fast` keeps ordinary unwrapped outputs. Collect wraps each child as `{"status":"succeeded","value":...}` or `{"status":"failed","failure":...}`; parallel keeps child IDs and map keeps input order. Check status before reading value/decision. A successful execution may still contain `request_changes` or `inconclusive`; a technical failure is not a vote. Author downstream routing explicitly.
+Чтобы отказ не прервал независимых соседей, задай `failurePolicy` `collect` у `map`/`parallel`.
+`fail-fast` по умолчанию сохраняет выходы без оболочек. `collect` даёт
+`{"status":"succeeded","value":...}` либо `{"status":"failed","failure":...}`;
+`parallel` сохраняет ID детей, `map` — входной порядок. Проверяй `status` до `value`/`decision`.
+Успешное исполнение может вернуть `request_changes`/`inconclusive`; технический отказ
+не голос. Последующие переходы должны быть явными.
 
-Collected results survive supervisor recovery without replaying settled child graphs. Cancellation, cleanup failure, and unresolved side-effect recovery still stop execution. `run.collections {"id":"run-...","key":"parent-activation-key","after":0}` pages durable items and totals. This policy neither retries a failed child nor approves its work. Collect preserves ordinary typed failures; it does not rewrite `failure.effects`, including conservative `unknown` on the collected envelope.
+Сохранённые результаты переживают восстановление supervisor без повторного входа
+в завершённый дочерний граф. Отмена, ошибка очистки и неопределённые эффекты всё ещё
+останавливают исполнение. `run.collections {"id":"run-...","key":"parent-activation-key","after":0}`
+читает сохранённые элементы/итоги. `collect` не повторяет ребёнка и не принимает работу,
+сохраняет обычные типизированные ошибки; `effects` оболочки консервативно `unknown`,
+факты листьев доступны отдельно.
 
-## Roles and agent config
+## Роли и конфигурация
 
-Inspect role defaults and override only what the task needs. The current catalog includes general, researcher, planner, implementer, reviewer, verifier, synthesizer, arbiter, and orchestrator. Do not invent catalog role names. The orchestrator role returns planning/routing data for the fixed graph; it does not gain runtime graph-editing powers.
+Каталог: `general`, `researcher`, `planner`, `implementer`, `reviewer`, `verifier`, `synthesizer`,
+`arbiter`, `orchestrator`. Не выдумывай имена ролей. `orchestrator` возвращает **данные**
+планирования/переходов фиксированному графу, не редактирует его при исполнении.
 
-Each agent block can select model provider/id, thinking, system prompt, tool allowlist, skills, output schema, session policy, and permission profile. A custom system prompt replaces the role prompt. `fresh` isolates a visit; `continue-node` continues successful prior visits of that node within its invocation scope. Prefer concrete available provider/model identifiers; product subscription names are not model IDs. An explicitly unavailable model/thinking configuration is an error, not permission to silently downgrade. The model selected in the caller's harness does not determine the pi worker's model. Role defaults may adapt thinking when you did not set it; an explicit thinking value must be supported by the chosen model.
+`config` выбирает `model` `provider`/`id`, `thinking`, `systemPrompt`, `tools`, `skills`, `outputSchema`,
+`session`/`permission`. Собственный `systemPrompt` **заменяет** инструкцию роли. `fresh`
+изолирует посещение; `continue-node` продолжает успешные посещения в той же области.
+Используй конкретные доступные ID моделей, не подписки. Модель вызывающего приложения
+не определяет модель исполнителя. Явный недоступный выбор — ошибка, не разрешение
+понизить уровень; только неявный `thinking` роли по умолчанию может адаптироваться.
 
-Use explicit structured output contracts for routing. The default reviewer requires a real `artifactRevision` in its input and returns that revision with `decision` (`approve`, `request_changes`, or `inconclusive`), summary, and findings. When acceptance criteria have a revision, carry that identity as well. Obtain revision identity from the actual artifact or producer output; do not fabricate it. An `approve` verdict for an old artifact cannot approve new work.
+Для переходов нужны структурированные выходы. `reviewer` по умолчанию требует реальный
+`artifactRevision` во входе и возвращает его с `decision` `approve`/`request_changes`/`inconclusive`,
+`summary`/`findings`. Если критерии версионированы, передай `acceptanceCriteriaRevision`.
+Бери идентичность из реального артефакта/выхода производителя, не выдумывай.
+Старый `approve` не одобряет новое дерево.
 
-Read-only profiles deny mutation tools. `workspace-write` and `unrestricted` are tool/prompt profiles, not OS sandboxes; a granted shell can access more than the working directory. Choose permissions within the user's authorized task. A `check` command also has the local process account's privileges. Merely giving a researcher role does not grant web access; use only actually available tools.
+`read-only` запрещает изменение. `workspace-write`/`unrestricted` — профили инструментов/
+инструкций, не изоляция ОС; оболочка/`check` имеют права локального аккаунта шире `cwd`.
+Выбирай разрешения в пределах поручения. `researcher` не получает веб-доступ по имени роли.
+Нет автоматических лимитов итераций/токенов/времени/параллелизма и обязательного
+человеческого согласования. Не добавляй произвольных пределов, выражай критерии и
+ограничения пользователя. При недостатке доказательств остановись/запроси вмешательство
+вместо ложного успеха цикла. Исправление формата и повтор включаются только явно:
+читай [восстановление](recovery.md), не добавляй их автоматически.
 
-There are no automatic iteration, token, wall-time, or concurrency limits and no mandatory human approval gate. Do not add arbitrary caps or approval steps. Express the user's actual completion criterion and honor requested limits when applicable. Pause if evidence shows the workflow needs intervention rather than pretending that an exhausted/unproductive loop succeeded.
+## Циклы ревью
 
-Output-repair and retry policies are opt-in and belong in [recovery.md](recovery.md). Do not add them unless they are the intended policy.
+Большую работу разделяй на реализацию/проверку/ревью с привязкой к версии; малой
+достаточно нескольких блоков. Внешние исследования/проверки передавай как внешние
+входы/доказательства, не подразумевая, что исполнитель собирал их сам. На `request_changes`
+верни производителю реальные замечания. `accepted` разрешай только по настроенному
+успешному вердикту. `inconclusive` требует конкретного недостающего доказательства,
+арбитража или `await`. `inconclusive` `finish` заканчивает задачу без принятия, `await` оставляет
+открытой; ни то ни другое не `approve`. Совет требует независимых ветвей и явной политики
+«все/любой/кворум/арбитраж» под задачу; сохраняй несогласие и доказательства в результате.
 
-## Review loops
+## Снимки и ресурсы
 
-Substantial work should be decomposed into verifiable implementation, check, and review stages with revision-bound reviews. Small workflows may stay a handful of blocks. Surface externally supplied research or independent QA in node input/evidence instead of implying workers gathered it themselves.
+Перед запуском `workflow.validate` не должен иметь ошибок. `workflow.prepare` с `id`/`cwd`
+фиксирует модели, уровни рассуждений, настройки по умолчанию, `skills`, схемы и исходник;
+возвращает `{preparedId,planHash,cwd,createdAt,plan}`. Изучи plan, сохрани `preparedId`.
+`workflow.prepared` читает его из того же журнала без перечитывания черновика/`skills`.
+`workflow.compile` показывает исходник для инспекции, не требует ручного сопровождения
+генерируемого TS. Активный запуск сохраняет план при правках черновика; живые `cwd`-файлы
+не заморожены.
 
-For review loops, return to the producer on `request_changes` and pass the findings. Declare acceptance only on the configured successful verdict. Handle `inconclusive` explicitly by gathering missing evidence, arbitration, or an `await` block. An inconclusive finish ends execution without acceptance; await keeps it open for an answer. Do not equate either with approval. For a reviewer council, create independent branches and an explicit all/any/quorum/arbitration policy, selected for the user's task. Keep dissent and evidence in the result.
+`config.skills` включает реальные каталоги `skills`, вложенные исследовательские материалы,
+файлы/хеши и имеющиеся записи URL/дат источников. Общего снимка ресурсов проекта и
+подразумеваемого веб-доступа нет. Проверки секретов, ссылок и небезопасных путей сохраняются.
+Установочная ссылка может подходить для обнаружения skill приложением, но для снимка
+`config.skills` нужен реальный каталог или его SKILL.md: ссылка в корне отвергается.
+Скопируй **всё дерево skill**, если оно нужно исполнителю.
 
-## Snapshots and resources
+## Изоляция worktrees и `integrate`
 
-Before launch, use `workflow.validate {"id":"..."}` and resolve every issue. `workflow.prepare {"id":"...","cwd":"/absolute/workspace"}` resolves concrete models, thinking, role defaults, skill snapshots, schemas, and generated code, then persists an immutable execution plan. `config.skills` snapshots the selected skill directories, including supported research-resource subtrees that actually live in those directories, with their files, hashes, and any source URL/date notes present in the skill files. There is no generic project-resource snapshot feature and no implied web access for read-only researchers. Credential, symlink, and unsafe path checks still apply. The result is `{preparedId,planHash,cwd,createdAt,plan}`; inspect `plan` and retain `preparedId` for the exact launch. `workflow.prepared {"preparedId":"..."}` reads it again from the same journal without rereading the draft or skills. `workflow.compile` exposes generated source for inspection; it is not a request to maintain that source manually. Active runs retain their launch snapshot even if the authoring draft changes.
-
-A harness may discover this skill through a setup symlink. Snapshotting a skill for `config.skills` requires a real directory (or its `SKILL.md`); a symlink root is rejected. Copy the skill tree when a worker must receive these files.
-
-## Worktrees and integrate
-
-Use explicit workspaces or independent worktrees when parallel writers need isolation. Wrap each concurrent coding branch in a `worktree` block whose child graph performs its changes. The source Git workspace must be clean; the runtime creates a run-owned branch, supplies that worktree as the child's cwd, and commits successful changes. The output is `{result, workspace:{path,branch,base,head}}`. Nested concurrent writers need separate worktrees as well. Review the actual returned commit and integrate approved branches through an explicit `integrate` block with an array of these workspace records or complete worktree results. Integration refuses dirty targets and mismatched sources; a conflict is a failure, never an approval. Shared `check` commands remain the author's explicit responsibility. Worktrees coordinate files; they do not confine a granted shell.
-
-Owned Git worktree recovery limits are in [recovery.md](recovery.md).
+Каждую параллельную ветвь записи кода оберни собственным `worktree`, где дочерний граф
+делает правки. Исходный каталог Git должен быть чистым; среда создаёт собственную ветку
+запуска, передаёт `cwd` детям и коммитит успешные изменения. Выход —
+`{result,workspace:{path,branch,base,head}}`. Вложенные параллельные записи тоже требуют
+своих деревьев. Проверь фактический возвращённый коммит; `integrate` принимает массив
+записей `workspace` либо полных выходов только после одобрения. Грязное назначение/
+несоответствующие источники отвергаются; конфликт — ошибка, не приёмка.
+Эффекты общих `check` остаются ответственностью автора. Worktrees координируют файлы,
+но не ограничивают оболочку. Восстановление собственного Git — в [recovery](recovery.md).
