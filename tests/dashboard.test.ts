@@ -55,7 +55,7 @@ test("stable bookmark establishes a local session; foreign pages cannot read or 
     assert.equal((await fetch(url + "runs")).status, 401);
     const page = await document(url + "?run=run-bookmark");
     assert.equal(page.status, 200);
-    assert.match(page.body, /Workflow|Workflows/);
+    assert.match(page.body, /<section id="workspace" hidden>/);
     assert.ok(page.cookie);
     assert.equal((await document(url, { ...navigation, "Sec-Fetch-Site": "cross-site" })).status, 200); // An ordinary link is safe.
     const headers = { Cookie: page.cookie };
