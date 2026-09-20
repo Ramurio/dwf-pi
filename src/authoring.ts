@@ -151,7 +151,10 @@ function assertJson(value: unknown, path = "$", ancestors = new Set<object>()): 
   if (ancestors.has(value)) throw new AuthoringError(`${path}: cyclic object is not JSON`);
   if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) throw new AuthoringError(`${path}: expected plain JSON object`);
   if (Object.getOwnPropertySymbols(value).length) throw new AuthoringError(`${path}: symbol keys are not JSON`);
-  if (Array.isArray(value) && Object.keys(value).length !== value.length) throw new AuthoringError(`${path}: sparse or extended arrays are not JSON`);
+  if (Array.isArray(value)) {
+    const keys = Object.keys(value);
+    if (keys.length !== value.length || keys.some((key, index) => key !== String(index))) throw new AuthoringError(`${path}: sparse or extended arrays are not JSON`);
+  }
   ancestors.add(value);
   for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
     if (Array.isArray(value) && key === "length") continue;

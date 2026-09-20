@@ -10,7 +10,10 @@ export function assertJson(value: unknown, path = "$", ancestors = new Set<objec
   if (ancestors.has(value)) throw new Error(`${path}: cyclic JSON value`);
   if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) throw new Error(`${path}: expected plain JSON object`);
   if (Object.getOwnPropertySymbols(value).length) throw new Error(`${path}: symbol keys are not JSON`);
-  if (Array.isArray(value) && Object.keys(value).length !== value.length) throw new Error(`${path}: sparse or extended array`);
+  if (Array.isArray(value)) {
+    const keys = Object.keys(value);
+    if (keys.length !== value.length || keys.some((key, index) => key !== String(index))) throw new Error(`${path}: sparse or extended array`);
+  }
   ancestors.add(value);
   for (const [key, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
     if (Array.isArray(value) && key === "length") continue;
