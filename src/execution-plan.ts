@@ -40,15 +40,16 @@ export async function prepareExecutionPlan(workflow: unknown, options: PrepareEx
     agents[graphId] = Object.create(null);
     for (const node of graph.nodes) {
       if (node.kind !== "agent") continue;
+      const at = `${graphId}/${node.id}`;
       const config = resolveAgentConfig(node.role, node.config);
       const requestedModel = config.model ?? options.defaultModel;
       const model = requestedModel
         ? models.find((candidate) => candidate.provider === requestedModel.provider && candidate.id === requestedModel.id)
         : models.find((candidate) => candidate.provider === "openai-codex" && candidate.id === "gpt-5.6-sol") ?? models[0];
-      if (!model) throw new Error(requestedModel ? `Model unavailable: ${requestedModel.provider}/${requestedModel.id}` : "No authenticated pi models available");
-      if (!model.thinkingLevels.length || model.thinkingLevels.some((level) => !levels.includes(level))) throw new Error(`Invalid thinking capability catalog for ${model.provider}/${model.id}`);
+      if (!model) throw new Error(`${at}: ${requestedModel ? `Model unavailable: ${requestedModel.provider}/${requestedModel.id}` : "No authenticated pi models available"}`);
+      if (!model.thinkingLevels.length || model.thinkingLevels.some((level) => !levels.includes(level))) throw new Error(`${at}: Invalid thinking capability catalog for ${model.provider}/${model.id}`);
       const requestedThinking = config.thinking ?? "medium";
-      if (node.config?.thinking !== undefined && !model.thinkingLevels.includes(requestedThinking)) throw new Error(`Unsupported thinking ${requestedThinking} for ${model.provider}/${model.id}; supported: ${model.thinkingLevels.join(", ")}`);
+      if (node.config?.thinking !== undefined && !model.thinkingLevels.includes(requestedThinking)) throw new Error(`${at}: Unsupported thinking ${requestedThinking} for ${model.provider}/${model.id}; supported: ${model.thinkingLevels.join(", ")}`);
       // Defaults adapt to actual model capabilities; explicit requests above never silently fall back.
       const thinking = model.thinkingLevels.includes(requestedThinking) ? requestedThinking
         : [...levels].reverse().find((level) => levels.indexOf(level) <= levels.indexOf(requestedThinking) && model.thinkingLevels.includes(level)) ?? model.thinkingLevels[0]!;
@@ -60,7 +61,7 @@ export async function prepareExecutionPlan(workflow: unknown, options: PrepareEx
       const capabilities = structuredClone(model.capabilities ?? noneAdapterCapabilities());
       const requirements = structuredClone(config.requirements ?? {});
       if (!requirementsSatisfied(requirements, capabilities)) {
-        throw new Error(`Unsupported or unknown required image capability for ${model.provider}/${model.id}`);
+        throw new Error(`${at}: Unsupported or unknown required image capability for ${model.provider}/${model.id}`);
       }
       agents[graphId]![node.id] = {
         model: { provider: model.provider, id: model.id }, thinking,

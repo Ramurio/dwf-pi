@@ -59,7 +59,7 @@ async function seedQueuedSuccessor(
   const source = await s.dispatch("run.start", { preparedId: sourcePlan.preparedId, idempotencyKey: ids.sourceKey, input: null }) as { id: string };
   await wait(c, source.id, "succeeded");
   await author(s, ids.targetWorkflow, [
-    { id: "write", kind: "check", command: process.execPath, args: ["-e", "require('node:fs').writeFileSync('WRITER_RAN','gap-writer')"] },
+    { id: "write", kind: "check", command: process.execPath, args: ["-e", "const fs=require('node:fs');fs.appendFileSync('WRITER_RAN','gap-writer\\n');const timer=setInterval(()=>{if(fs.existsSync('RELEASE_WRITER'))clearInterval(timer)},20)"] },
     { id: "done", kind: "end", value: { op: "literal", value: { accepted: true } } },
   ]);
   const targetPlan = await s.dispatch("workflow.prepare", { id: ids.targetWorkflow }) as PreparedExecution;
@@ -83,38 +83,56 @@ async function seedQueuedSuccessor(
   return { source, body };
 }
 
-test("queued continue redelivery after create-gap returns the same run without rereading workspace", { timeout: 30_000 }, async () => fixture(async (s, c, directory) => {
+test("queued continue redelivery rejects changed workspace before admission and preserves the same receipt", { timeout: 30_000 }, async () => fixture(async (s, c, directory) => {
   const { source, body } = await seedQueuedSuccessor(s, c, directory, {
     sourceWorkflow: "gapSource", targetWorkflow: "gapTarget", sourceKey: "gap-src", continueKey: "gap-cont", targetRunId: "run-gap-tgt",
   });
   await writeFile(join(directory, "reviewed-input.txt"), "changed AFTER continuation receipt but BEFORE first admission");
-  const redelivered = await s.dispatch("run.continue", body) as { id: string; status: string; desired: string };
-  assert.equal(redelivered.id, "run-gap-tgt");
-  assert.equal(redelivered.status, "queued");
-  assert.equal(redelivered.desired, "running");
+  await assert.rejects(s.dispatch("run.continue", body), /workspace|digest|files.*changed|changed.*files/i);
+  const receipt = c.store.get("run-gap-tgt");
+  assert.equal(receipt.id, "run-gap-tgt");
+  assert.equal(receipt.status, "queued");
+  assert.equal(receipt.desired, "running");
   assert.equal(c.store.get("run-gap-tgt").ownerToken, null);
   assert.equal(c.store.listActivations("run-gap-tgt").length, 0);
   assert.equal(c.store.fence(source.id)?.successorRunId, "run-gap-tgt");
   assert.equal(c.store.listRuns().length, 2);
   await assert.rejects(s.dispatch("run.continue", { ...body, idempotencyKey: "gap-cont-other" }), /successor-admitted|already has an admitted/);
   await assert.rejects(s.dispatch("run.resume", { id: "run-gap-tgt" }), /workspace|digest|files.*changed|changed.*files/i);
-  const again = await s.dispatch("run.continue", body) as { id: string; status: string };
-  assert.equal(again.id, "run-gap-tgt");
-  assert.equal(again.status, "queued");
+  await assert.rejects(s.dispatch("run.continue", body), /workspace|digest|files.*changed|changed.*files/i);
+  assert.equal(c.store.listRuns().length, 2);
+  assert.equal(c.store.get("run-gap-tgt").status, "queued");
   await assert.rejects(readFile(join(directory, "WRITER_RAN"), "utf8"), /ENOENT/);
 }));
 
-test("queued continue redelivery without file change does not auto-launch; resume is first admission", { timeout: 30_000 }, async () => fixture(async (s, c, directory) => {
+test("queued continue redelivery closes the create-gap once and later replay ignores mutable workspace", { timeout: 30_000 }, async () => fixture(async (s, c, directory) => {
   const { body } = await seedQueuedSuccessor(s, c, directory, {
     sourceWorkflow: "gapSource2", targetWorkflow: "gapTarget2", sourceKey: "gap-src-2", continueKey: "gap-cont-2", targetRunId: "run-gap-tgt2",
   });
-  const redelivered = await s.dispatch("run.continue", body) as { id: string; status: string };
-  assert.equal(redelivered.id, "run-gap-tgt2");
-  assert.equal(redelivered.status, "queued");
-  assert.equal(c.store.get("run-gap-tgt2").ownerToken, null);
-  assert.equal(c.store.listActivations("run-gap-tgt2").length, 0);
-  await assert.rejects(readFile(join(directory, "WRITER_RAN"), "utf8"), /ENOENT/);
-  await s.dispatch("run.resume", { id: "run-gap-tgt2" });
+  const deliveries = await Promise.all([s.dispatch("run.continue", body), s.dispatch("run.continue", body)]) as { id: string }[];
+  assert.deepEqual(deliveries.map(value => value.id), ["run-gap-tgt2", "run-gap-tgt2"]);
+  const deadline = Date.now() + 10_000;
+  for (;;) {
+    try { if (await readFile(join(directory, "WRITER_RAN"), "utf8")) break; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+    if (Date.now() > deadline) throw new Error("Writer did not reach its barrier");
+    await sleep(40);
+  }
+  try {
+    assert.equal(c.store.get("run-gap-tgt2").status, "running");
+    const owner = c.store.get("run-gap-tgt2").ownerToken;
+    assert.ok(owner);
+    await writeFile(join(directory, "reviewed-input.txt"), "changed AFTER first admission");
+    const runningReplay = await s.dispatch("run.continue", body) as { id: string };
+    assert.equal(runningReplay.id, "run-gap-tgt2");
+    assert.equal(c.store.get("run-gap-tgt2").ownerToken, owner);
+    assert.equal(await readFile(join(directory, "WRITER_RAN"), "utf8"), "gap-writer\n");
+  } finally { await writeFile(join(directory, "RELEASE_WRITER"), "release"); }
   await wait(c, "run-gap-tgt2", "succeeded");
-  assert.equal(await readFile(join(directory, "WRITER_RAN"), "utf8"), "gap-writer");
+  const terminalReplay = await s.dispatch("run.continue", body) as { id: string; status: string };
+  assert.equal(terminalReplay.id, "run-gap-tgt2");
+  assert.equal(terminalReplay.status, "succeeded");
+  assert.equal(await readFile(join(directory, "WRITER_RAN"), "utf8"), "gap-writer\n");
+  assert.equal(c.store.listRuns().length, 2);
+  assert.equal(c.store.listActivations("run-gap-tgt2").filter(value => value.context.nodeId === "write")[0]?.attempt, 1);
 }));

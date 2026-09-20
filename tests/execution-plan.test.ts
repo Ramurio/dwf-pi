@@ -107,12 +107,12 @@ test("explicit prompt replaces role prompt and output schema is frozen", async (
   assert.deepEqual(plan.agents.main!.work!.outputSchema.required, ["answer"]);
 });
 test("unavailable explicit node/default models fail with no fallback", async () => {
-  await assert.rejects(prepareExecutionPlan(workflow({ model: { provider: "xai", id: "grok-heavy" } }), options), /Model unavailable: xai\/grok-heavy/);
+  await assert.rejects(prepareExecutionPlan(workflow({ model: { provider: "xai", id: "grok-heavy" } }), options), /main\/work: Model unavailable: xai\/grok-heavy/);
   await assert.rejects(prepareExecutionPlan(workflow(), { ...options, defaultModel: { provider: "missing", id: "missing" } }), /Model unavailable/);
   await assert.rejects(prepareExecutionPlan(workflow(), { ...options, availableModels: [] }), /No authenticated/);
 });
 test("unsupported explicit thinking fails, while role default adapts before freezing", async () => {
-  await assert.rejects(prepareExecutionPlan(workflow({ thinking: "max" }), options), /Unsupported thinking max/);
+  await assert.rejects(prepareExecutionPlan(workflow({ thinking: "max" }), options), /main\/work: Unsupported thinking max/);
   const plan = await prepareExecutionPlan(workflow(), { ...options, defaultModel: { provider: "example", id: "basic" } });
   assert.equal(plan.agents.main!.work!.thinking, "off");
   const first = await prepareExecutionPlan(workflow(), { ...options, availableModels: [models[0]!] });
