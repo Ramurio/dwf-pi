@@ -474,3 +474,22 @@ test("duplicate nullable submission and invalid repair cannot reuse an accepted 
   assert.deepEqual((await executePiWorker(f.request, f.options)).output, { answer: "fresh" });
   assert.deepEqual(f.events.filter((e: any) => e.type === "output.repair").map((e: any) => [e.progress.status, e.progress.cause]), [["running", "duplicate"], ["invalid", "duplicate"], ["running", "schema"], ["succeeded", "schema"]]);
 });
+
+for (const disabled of [undefined, false, true]) test(`frozen manual-only skill visibility follows SDK metadata (${disabled})`, async t => {
+  const f = await fixture(t, [context => {
+    if (disabled === true) assert.doesNotMatch(context.systemPrompt ?? "", /MANUAL_SKILL_DESCRIPTOR/);
+    else assert.match(context.systemPrompt ?? "", /MANUAL_SKILL_DESCRIPTOR/);
+    return submit();
+  }]);
+  const directory = join(f.request.cwd, "manual-boundary"); await mkdir(directory);
+  const content = `---\nname: manual-boundary\ndescription: MANUAL_SKILL_DESCRIPTOR\n${disabled === undefined ? "" : `disable-model-invocation: ${disabled}\n`}---\nBody`;
+  await writeFile(join(directory, "SKILL.md"), content);
+  const { prepareExecutionPlan } = await import("../src/execution-plan.js");
+  const plan = await prepareExecutionPlan({ schemaVersion: 1, id: "manual", name: "Manual", revision: 1, entryGraph: "main", graphs: { main: { entry: "work", nodes: [
+    { id: "work", kind: "agent", role: "general", task: { op: "literal", value: "Submit" }, config: { skills: [directory], thinking: "off", tools: ["read"], permission: "read-only", outputSchema: f.request.config.outputSchema } },
+    { id: "done", kind: "end", value: { op: "ref", path: ["nodes", "work"] } },
+  ], edges: [{ from: "work", to: "done" }] } } }, { cwd: f.request.cwd, availableModels: [{ provider, id: modelId, thinkingLevels: ["off"] }] });
+  f.request.config = plan.agents.main!.work!;
+  assert.deepEqual((await executePiWorker(f.request, f.options)).output, { answer: 42 });
+  assert.equal(await readFile(join(f.request.resourceDirectory, "manual-boundary", "SKILL.md"), "utf8"), content);
+});
