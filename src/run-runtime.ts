@@ -48,8 +48,8 @@ export class JournalRuntime implements WorkflowRuntime {
     this.plan = run.plan;
     this.workspaces = new GitWorkspaces(run.id, directory);
   }
-  private current(): RunRecord {
-    const current = this.store.get(this.run.id);
+  private current() {
+    const current = this.store.controlState(this.run.id);
     if (current.ownerToken !== this.token) throw new Error("Supervisor ownership lost");
     return current;
   }
@@ -95,7 +95,7 @@ export class JournalRuntime implements WorkflowRuntime {
       const manual = this.store.pendingReconciliation(this.run.id, activationKey(context));
       if (manual) {
         const selected = this.store.getActivation(this.run.id, activationKey(context))!;
-        const roots = recoveryRoots(this.current(), selected), gitDirectories = (await Promise.all(roots.map(recoveryGitDirectories))).flat();
+        const roots = recoveryRoots(this.store.get(this.run.id), selected), gitDirectories = (await Promise.all(roots.map(recoveryGitDirectories))).flat();
         const workspace = await observeRecoveryFiles([...roots, ...gitDirectories], manual.workspace.excluded);
         if (workspace.digest !== manual.request.workspaceDigest) throw executionFailure("uncertain-effect", "recovery", "unknown", "Workspace changed after retry authorization; inspect and supersede the decision");
         return manual.request.decisionId;
@@ -191,7 +191,7 @@ export class JournalRuntime implements WorkflowRuntime {
         (record, exit) => Effect.sync(() => {
           if (record.status === "succeeded") return;
           const latest = runtime.store.getActivation(runtime.run.id, record.key);
-          if (latest?.status === "running" && runtime.store.get(runtime.run.id).ownerToken === runtime.token) {
+          if (latest?.status === "running" && runtime.store.controlState(runtime.run.id).ownerToken === runtime.token) {
             const failure = Exit.isFailure(exit) ? describeFailureCause(exit.cause) : executionFailure("unknown","execution","unknown","Activation finished without a checkpoint").failure;
             const causes=Exit.isFailure(exit)?Array.from(Cause.failures(exit.cause),error=>describeFailureCause(Cause.fail(error))):[];
             const policy=node.kind === "agent" || node.kind === "check" ? node.retryPolicy : undefined;
@@ -203,7 +203,7 @@ export class JournalRuntime implements WorkflowRuntime {
           }
         }),
       ).pipe(Effect.catchAll(error => {
-        const current = runtime.store.get(runtime.run.id);
+        const current = runtime.store.controlState(runtime.run.id);
         // A pause can race the outer gate and resume before this handler runs.
         // Retry admission only, never work that has already started.
         if (error instanceof RunNotAcceptingWork && executedAttempt === undefined && current.ownerToken === runtime.token && current.desired !== "cancelled") return runtime.step(context, work);
@@ -286,12 +286,7 @@ export class JournalRuntime implements WorkflowRuntime {
     });
   }
   private workspaceCwd(context: RuntimeContext): string {
-    const parents = this.store.listActivations(this.run.id).filter(item => {
-      const scope = item.metadata.childScope;
-      return item.kind === "worktree" && Array.isArray(scope) && scope.length <= context.scope.length && scope.every((segment, index) => segment === context.scope[index]);
-    }).sort((a, b) => (b.metadata.childScope as Json[]).length - (a.metadata.childScope as Json[]).length);
-    const workspace = parents[0]?.metadata.workspace;
-    return workspace && typeof workspace === "object" && !Array.isArray(workspace) && typeof workspace.path === "string" ? workspace.path : this.run.cwd;
+    return this.store.workspaceCwd(this.run.id, context, this.run.cwd);
   }
   private gitOptions(context: RuntimeContext, signal: AbortSignal): GitOperationOptions {
     const key = activationKey(context);
@@ -346,7 +341,7 @@ export class JournalRuntime implements WorkflowRuntime {
     });
   }
   private clearPid(key: string): void {
-    if (this.store.get(this.run.id).ownerToken === this.token && this.store.getActivation(this.run.id, key)?.status === "running") {
+    if (this.store.controlState(this.run.id).ownerToken === this.token && this.store.getActivation(this.run.id, key)?.status === "running") {
       const metadata = this.store.getActivation(this.run.id, key)!.metadata;
       if (metadata.workerGroupState === "pending" && typeof metadata.workerGroupPid === "number") {
         const remaining = groupMembers(metadata.workerGroupPid);

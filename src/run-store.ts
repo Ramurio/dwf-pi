@@ -52,6 +52,8 @@ export interface RunRecord {
   failure?: ExecutionFailureRecord;
   lineage?: RunLineage;
 }
+type ControlRecord = Pick<RunRecord, "id" | "cwd" | "status" | "desired" | "ownerToken" | "supervisorPid">;
+type ExecutionRecord = ControlRecord & Pick<RunRecord, "plan">;
 export type ActivationStatus = "running" | "succeeded" | "failed" | "interrupted";
 export interface PreparedStart { preparedId: string; idempotencyKey?: string; operation?: "start" | "continue" }
 export type { RunLineage, TaskMembershipRecord, ContinuationReceiptRecord, ReusedOutputRecord } from "./lineage.js";
@@ -247,8 +249,23 @@ export class RunStore {
     this.database.prepare("INSERT INTO workflow_run_events(run_id,type,payload,at) VALUES(?,?,?,?)")
       .run(id, type, JSON.stringify(payload), Date.now());
   }
-  private owned(id: string, token: string): RunRecord {
-    const run = this.get(id);
+  /** Свежие поля допуска без разбора больших input/output и публичной истории. */
+  controlState(id: string): ControlRecord {
+    const row = this.database.prepare("SELECT id,cwd,status,desired,owner_token,supervisor_pid FROM workflow_runs WHERE id=?").get(id);
+    if (!row) throw new Error(`Run not found: ${id}`);
+    return { id: String(row.id), cwd: String(row.cwd), status: row.status as RunStatus, desired: row.desired as DesiredRunStatus,
+      ownerToken: row.owner_token === null ? null : String(row.owner_token), supervisorPid: row.supervisor_pid === null ? null : Number(row.supervisor_pid) };
+  }
+  private executionState(id: string): ExecutionRecord {
+    const control = this.controlState(id), database = this.database;
+    return { ...control, get plan() {
+      const row = database.prepare("SELECT plan FROM workflow_runs WHERE id=?").get(id);
+      if (!row) throw new Error(`Run not found: ${id}`);
+      return JSON.parse(String(row.plan)) as ExecutionPlan;
+    } };
+  }
+  private owned(id: string, token: string): ExecutionRecord {
+    const run = this.executionState(id);
     if (!token || run.ownerToken !== token || !active.has(run.status)) throw new Error(`Stale run owner: ${id}`);
     return run;
   }
@@ -500,17 +517,27 @@ export class RunStore {
       return this.getActivation(id, key)!;
     });
   }
+  /** Точные worktree-предки: сложность зависит от глубины scope, а не от всех visits. */
+  workspaceCwd(id: string, context: RuntimeContext, fallback: string): string {
+    const scope = context.scope;
+    for (let i = scope.length - 7; i >= 2; i--) {
+      if (scope[i] !== "node" || scope[i + 2] !== "visit" || scope[i + 4] !== "worktree" || scope[i + 5] !== "graph" || scope[i - 2] !== "graph") continue;
+      const visit = Number(scope[i + 3]);
+      if (!Number.isSafeInteger(visit) || visit < 0) continue;
+      const parent = this.getActivation(id, activationKey({ scope: scope.slice(0, i), graphId: scope[i - 1]!, nodeId: scope[i + 1]!, visit }));
+      const childScope = parent?.metadata.childScope;
+      if (parent?.kind !== "worktree" || !Array.isArray(childScope) || childScope.length !== i + 7 || !childScope.every((segment,index) => segment === scope[index])) continue;
+      const workspace = parent.metadata.workspace;
+      return workspace && typeof workspace === "object" && !Array.isArray(workspace) && typeof workspace.path === "string" ? workspace.path : fallback;
+    }
+    return fallback;
+  }
   /** Check/worktree intent is known from the frozen node; persist it with admission so a crash before work() is still recoverable. */
-  private admitFrozenWriterIntent(run: RunRecord, id: string, context: RuntimeContext, kind: string, metadata: ActivationMetadata): void {
+  private admitFrozenWriterIntent(run: ExecutionRecord, id: string, context: RuntimeContext, kind: string, metadata: ActivationMetadata): void {
     if (kind !== "check" && kind !== "worktree") return;
     const node = run.plan.workflow.graphs[context.graphId]?.nodes.find(item => item.id === context.nodeId);
     if (!node || node.kind !== kind) return;
-    const parents = this.listActivations(id).filter(item => {
-      const scope = item.metadata.childScope;
-      return item.kind === "worktree" && Array.isArray(scope) && scope.length <= context.scope.length && scope.every((segment, index) => segment === context.scope[index]);
-    }).sort((a, b) => (b.metadata.childScope as Json[]).length - (a.metadata.childScope as Json[]).length);
-    const recorded = parents[0]?.metadata.workspace;
-    const source = recorded && typeof recorded === "object" && !Array.isArray(recorded) && typeof recorded.path === "string" ? recorded.path : run.cwd;
+    const source = this.workspaceCwd(id, context, run.cwd);
     if (node.kind === "check") {
       const operation = parseOperation({ kind: "check", cwd: node.cwd ? resolve(source, node.cwd) : source, command: node.command, args: [...node.args] });
       if (operation) metadata.operation = JSON.parse(JSON.stringify(operation)) as Json;
@@ -687,7 +714,7 @@ export class RunStore {
   }
   failActivation(id: string, token: string, key: string, error: string, failure?: ExecutionFailureRecord, options: { retryEligible?: boolean; retryCauses?: ExecutionFailureRecord[] } = {}): void {
     this.transaction(() => {
-      const activation = this.runningActivation(id, token, key), run = this.get(id);
+      const activation = this.runningActivation(id, token, key), run = this.executionState(id);
       const detail = failure ?? executionFailure("unknown","execution","unknown",error).failure;
       if (!parseExecutionFailure(detail)) throw new Error("Invalid structured execution failure");
       const causes=options.retryCauses??[detail];
@@ -714,9 +741,9 @@ export class RunStore {
     return row ? this.decodeRetry(row) : undefined;
   }
   scheduledRetry(id: string, key: string): RetryRecord | undefined {
-    return this.plannedRetry(this.get(id),this.getActivation(id,key));
+    return this.plannedRetry(this.executionState(id),this.getActivation(id,key));
   }
-  private plannedRetry(run: RunRecord, activation: ActivationRecord | undefined): RetryRecord | undefined {
+  private plannedRetry(run: Pick<RunRecord, "id" | "plan">, activation: ActivationRecord | undefined): RetryRecord | undefined {
     if (!activation || activation.status !== "failed") return;
     const decision = this.retry(run.id,activation.key,activation.attempt), progress = parseRetryProgress(activation.metadata.retry);
     if (!decision || !progress || !isDeepStrictEqual(progress,retryProgress(decision,"scheduled"))) return;
@@ -786,7 +813,7 @@ export class RunStore {
       collections: this.database.prepare("SELECT * FROM workflow_collections WHERE run_id=? ORDER BY seq").all(id).map(row => this.decodeCollection(row)) };
   }
   reconciliations(id: string, key?: string): ReconciliationRecord[] {
-    this.get(id);
+    this.controlState(id);
     return this.database.prepare(`SELECT d.*, a.attempt AS applied_attempt, a.at AS applied_at, s.decision_id AS superseded_by
       FROM workflow_reconciliations d LEFT JOIN workflow_reconciliation_applications a USING(run_id,decision_id)
       LEFT JOIN workflow_reconciliations s ON s.run_id=d.run_id AND s.supersedes=d.decision_id
@@ -861,7 +888,7 @@ export class RunStore {
   recordCollection(id: string, token: string, key: string, itemId: string, result: CollectedResult): CollectionRecord {
     const valid = validateCollectedResult(result);
     return this.transaction(() => {
-      const activation = this.runningActivation(id,token,key), run = this.get(id);
+      const activation = this.runningActivation(id,token,key), run = this.executionState(id);
       const node = run.plan.workflow.graphs[activation.context.graphId]?.nodes.find(n=>n.id===activation.context.nodeId);
       if (!node || (node.kind !== "map" && node.kind !== "parallel") || node.failurePolicy !== "collect") throw new Error("Activation does not collect child results");
       if (node.kind === "parallel" ? !node.children.some(child=>child.id===itemId) : !/^(0|[1-9][0-9]*)$/.test(itemId) || !Number.isSafeInteger(Number(itemId))) throw new Error("Invalid collection item identity");
