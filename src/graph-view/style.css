@@ -789,12 +789,18 @@ dialog .controls {
   #runs {
     display: flex;
     gap: 7px;
-    max-height: 100px;
     overflow: auto;
   }
   .run-item {
     min-width: 210px;
     width: 210px;
+  }
+  .run-item strong {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    overflow-wrap: anywhere;
   }
   .search {
     margin-bottom: 8px;

@@ -242,6 +242,7 @@ function renderRuns() {
       () => selectRun(run.id),
       `run-item${run.id === state.id ? " selected" : ""}`,
     );
+    item.title = run.name;
     item.append(
       el("strong", "", run.name),
       el(
