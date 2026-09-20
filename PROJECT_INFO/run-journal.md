@@ -1,72 +1,233 @@
-# Durable run journal
+# Журнал, исполнители и история попыток
 
-`RunStore` in `src/run-store.ts` persists an immutable `ExecutionPlan`, input and working directory, plus mutable run control state, node activations and ordered events. It uses separate tables from `DraftStore`, so both may share a database file without coupling draft revisions to active runs. Every process opens its own SQLite connection. Initialization sets `busy_timeout` before WAL; commits use `synchronous=FULL`.
+[Индекс](README.md) · [Восстановление](reconciliation.md) · [Наблюдение](observation.md)
 
-Both stores use `openWorkflowDatabase`: connection/WAL setup gets short busy waits,
-and a failed BUSY attempt closes its connection before retrying within a five-second
-initialization window. Schema creation is transactional; successful connections
-retain the existing 5000ms busy timeout for ordinary operations. Application writes
-are never retried by this helper. SQLite can decline to invoke a busy handler when
-waiting would cause a lock-promotion deadlock; a long busy timeout alone does not
-cover every initialization race. [SQLite busy handler contract](https://www.sqlite.org/c3ref/busy_handler.html).
+Оглавление: [SQLite](#sqlite) · [владение](#ownership) · [контрольные точки](#checkpoints) ·
+[исполнитель](#worker) · [попытки](#attempts).
 
-Validation includes 24 simultaneous CLI initializations, an actual competing
-exclusive transaction, WAL/FULL/FK settings, preservation of committed data and
-rollback after invalid schema SQL. The fix does not establish general safe retries
-for workflow operations or resolve the separate incomplete-stdin process timeout.
+<a id="sqlite"></a>
+## Постоянный журнал
 
-## Launch ownership and control
+`RunStore` в `src/run-store.ts` хранит неизменяемый `ExecutionPlan`, `input`/`cwd`, изменяемое
+состояние управления, активации и упорядоченные события. Таблицы отделены от `DraftStore`:
+общий файл БД не связывает правки черновика с активным запуском. У каждого процесса
+своё соединение; busy_timeout устанавливается до WAL, фиксация использует synchronous=FULL.
 
-`create({id, plan, input, cwd})` creates a queued run. `reserveLaunch(id)` atomically returns `{token, run}` and changes a queued/interrupted run with desired `running` and no owner to `running`. A second launcher fails. The launcher passes this token to its supervisor, which calls `attachPid(id, token, pid)`. Attaching a different PID to the same reservation fails. The reservation-to-attach gap is still owned: a missing PID alone does not authorize a second launch.
+Оба хранилища используют `openWorkflowDatabase`: короткие ожидания занятости при настройке
+соединения/WAL, закрытие соединения после BUSY перед повтором в пределах пяти секунд.
+Создание схемы транзакционно. После успеха ожидание занятости обычных операций — 5000 мс;
+записи приложения этот помощник **не повторяет**. SQLite может не вызвать обработчик
+занятости при потенциальной взаимной блокировке повышения уровня блокировки: долгий
+таймаут не решает все гонки. [Контракт SQLite](https://www.sqlite.org/c3ref/busy_handler.html).
 
-All supervisor writes require the current owner token. Ownership checks and writes happen within `BEGIN IMMEDIATE` transactions. Terminal completion and verified interruption clear ownership, fencing late messages. `heartbeat` records telemetry, not proof of process death.
+`tests/sqlite.test.ts`: 24 одновременные инициализации CLI, конкурирующая эксклюзивная
+транзакция, WAL/FULL/FK, сохранение зафиксированных данных и откат неверного SQL схемы.
+Это не разрешение повторять операции графа. Отмена исполнителя с незавершённым stdin —
+отдельная регрессия `tests/pi-worker.test.ts`. Для активного WAL используйте
+[согласованный снимок](development.md#sqlite-backup).
 
-Launch reservations also persist `supervisorLaunch`: the owner token, supervisor script path and journal path passed to the process. Observers use this launch provenance, rather than their own installation path, to check the PID and discover a supervisor before its PID checkpoint. Thus a dashboard can observe a supervisor from another checkout without interrupting it or launching a duplicate. Process arguments must match the script, owner token, run ID and journal path. Legacy reservations without matching provenance use the `supervisor.ts` role plus owner/run/journal arguments; a PID or heartbeat alone is never sufficient. The nullable journal column is migrated automatically, and a new reservation replaces the previous launch identity. An older observer still needs upgrading: this change cannot correct liveness decisions made by already-running old code.
+<a id="ownership"></a>
+## Владение запуском и управление
 
-`requestControl(id, "pause" | "resume" | "cancel")` persists an idempotent request and event. It never spawns a process. With a supervisor owner, pause changes status to `pausing`, resume changes it to `running`, and cancel changes it to `cancelling`. Cancellation is monotonic. Terminal runs never resurrect. Ownerless queued/paused runs can pause, queue for resume, or cancel immediately because they have no active execution owner.
+`create({id,plan,input,cwd})` создаёт запуск `queued`. `reserveLaunch(id)` атомарно возвращает
+`{token,run}` и переводит `queued`/`interrupted` с `desired` `running` и без `owner` в `running`.
+Второй запускающий клиент отвергается. Supervisor получает токен и вызывает
+`attachPid(id,token,pid)`; другой PID к той же резервации привязать нельзя. Окно
+reserve→attach уже имеет владельца: отсутствие PID не разрешает второй запуск.
 
-The supervisor lets active leaves finish, then calls `markPaused(id, token)`. The store requires desired `paused` and no running leaf rows. Structural `map`, `parallel` and `subworkflow` activations may remain running while the live supervisor waits; their token and PID remain intact. Resume reuses this supervisor and token. An admission transaction checks both status and desired `running`, so a racing pause cannot start a new activation after the request commits.
+Все записи supervisor требуют текущий токен владельца внутри BEGIN IMMEDIATE.
+Окончательное завершение и подтверждённое прерывание очищают владельца и отсекают поздние
+сообщения. Heartbeat — телеметрия, не доказательство смерти.
 
-`worktree` is structural only during its `children` phase; allocating and committing
-remain active work. `admitWorkspaceCommit` atomically checks the running/desired
-state before admitting commit. A superseded pause request does not abort a run
-that another client has already resumed. Worktree/integrate activations retain
-side-effect classification for crash recovery even though their children use
-ordinary structural checkpoints.
+Резервирование сохраняет `supervisorLaunch`: токен владельца, скрипт supervisor и путь
+журнала. Наблюдатель использует эти данные, а не путь своей установки, для проверки PID
+и поиска supervisor до записи PID. Другая панель/копия репозитория не должна прервать
+живой запуск. Аргументы должны совпасть по скрипту, владельцу, ID запуска и журналу.
+Старая резервация без происхождения проверяется по роли supervisor.ts и аргументам
+`owner`/`run`/journal, не по одному PID. Допускающий `null` столбец мигрируется автоматически;
+новое резервирование заменяет прежнюю идентичность. Уже работающий старый наблюдатель
+нужно обновить/перезапустить отдельно.
 
-`finish(id, token, outcome)` accepts `{status:"succeeded", output}`, `{status:"failed", error}`, or `{status:"cancelled"}`. It rejects running activation rows. Success requires desired `running`; cancellation requires a persisted cancellation request. Final result, status and event commit together. A worker that actually completes during cancellation may commit its successful activation checkpoint, but that does not turn the cancelled run into success.
+`requestControl(id,"pause"|"resume"|"cancel")` сохраняет идемпотентное намерение/событие,
+но не запускает процесс. При наличии владельца состояния — `pausing`/`running`/`cancelling`.
+Отмена монотонна, завершённые запуски не возрождаются. Без владельца `queued`/`paused`
+могут сразу перейти на паузу, в очередь продолжения либо отмениться.
 
-## Activations and replay
+После завершения активных листьев supervisor вызывает `markPaused(id,token)`:
+нужны `desired` `paused` и отсутствие `running` у листовых записей. `map`/`parallel`/`subworkflow`
+могут оставаться `running` как структурные родители с прежними токеном/PID; продолжение
+использует того же supervisor. Транзакция допуска проверяет `status` и `desired` `running`,
+поэтому ранее зафиксированная пауза не пропускает новую активацию.
 
-Identity is exactly `JSON.stringify([context.scope, context.graphId, context.nodeId, context.visit])`. Scope remains an array, avoiding delimiter collisions between nested invocations. `beginActivation(id, token, context, {kind, sideEffect})` records running work before execution; `completeActivation` records output and success atomically with the corresponding event. `failActivation` records an error. Optional metadata holds a worker PID, pi session file, or other JSON fields.
+`worktree` структурный только в `children`; `allocating`/`committing` — активная работа.
+`admitWorkspaceCommit` атомарно проверяет `running`/`desired`. Устаревший запрос паузы
+не обрывает уже возобновлённый другим клиентом запуск. `worktree`/`integrate` остаются
+узлами с внешними эффектами для аварийного восстановления, несмотря на структурные
+дочерние контрольные точки.
 
-`completed(id, key)` returns `{output}` only for succeeded rows, including explicit `null` output. A resumed scheduler can replay those outputs without executing the work again. Retrying an interrupted or failed pure/structural activation increments its attempt. Existing activation kind and side-effect classification cannot change.
+`finish(id,token,outcome)` принимает `{status:"succeeded",output}`, `{status:"failed",error}`
+либо `{status:"cancelled"}` и запрещает `running`-активации. Успех требует `desired` `running`,
+отмена — сохранённого запроса `cancel`. Результат/статус/событие атомарны. Исполнитель,
+успевший завершиться при отмене, может записать успешную активацию, но не превратить
+отменённый запуск в успех.
 
-An interrupted or failed side-effect activation is never implicitly repeated: its external operation may have happened even when its result was not journaled. A worktree in the children phase can reattach to its verified allocation and replay child checkpoints; uncertain child operations and allocation/commit phases still block recovery. There is deliberately no automatic exactly-once claim. This version provides no retry-authorization mutation.
+<a id="checkpoints"></a>
+## Активации и повторное чтение
 
-## Outcomes and waits
+Ключ ровно `JSON.stringify([context.scope,context.graphId,context.nodeId,context.visit])`.
+`scope` — массив, не строка с неоднозначным разделителем.
+`beginActivation(id,token,context,{kind,sideEffect})` пишет `running` до исполнения;
+`completeActivation` атомарно сохраняет выход/успех/событие, `failActivation` — ошибку.
+Метаданные могут хранить PID, файл сессии и другие наблюдения JSON.
 
-Additive `workflow_task_outcomes` and `workflow_waits` tables preserve compatibility
-with existing journal rows. Root finish metadata, terminal run state and outcome
-event commit together; legacy end output is classified only by its accepted boolean.
-An arbitrary legacy value is unclassified and cannot become a tested preset.
+`completed(id,key)` возвращает `{output}` только для `succeeded`, включая явный `null`.
+Планировщик восстанавливает локальный порядок исполнения из выходов без повторения
+работы. Новая попытка чистой/структурной активации `failed`/`interrupted` увеличивает `attempt`,
+но `kind` и классификация внешних эффектов прежней активации не меняются.
 
-Await records bind request/reason/schema and response to one activation identity.
-`openWait` is owner-fenced, `resolveWait` is a client action validated against the
-persisted schema, and duplicate identical responses produce no second event.
-Response and resolution event commit atomically. Waiting leaves do not prevent
-operator pause; other admitted leaves keep running. `waiting` is observed when
-there are open await leaves and no executing leaves, while desired stays running.
-See [outcomes-and-waits.md](outcomes-and-waits.md) for resolution and recovery.
+Неопределённое внешнее действие нельзя молча повторить: операция могла завершиться
+до записи журнала. `worktree` `children` может подключиться к проверенному дереву и
+восстановить детей из записей; неопределённые действия ребёнка/выделение дерева/коммит
+требуют явного восстановления. [Reconciliation](reconciliation.md) принимает проверенный
+результат или разрешает одну новую попытку; [автоматический повтор](retry-and-failures.md#retry)
+требует зафиксированной политики и подтверждённых безопасных эффектов. Ни один механизм
+не обещает однократность всех внешних действий.
 
-## Crash recovery responsibilities
+Добавочные `workflow_task_outcomes`/`workflow_waits` сохраняют совместимость старых записей.
+Корневой `finish`, конечное состояние и событие исхода атомарны; старый `end` классифицируется
+только по булевому `accepted`. `await` связывает `reason`/`input`/`schema`/response с активацией;
+`openWait` защищён владельцем, `resolveWait` — клиентское действие со строгой сохранённой
+схемой. Ответ и событие атомарны, одинаковый повтор не создаёт второе событие.
+Ожидающие листья не мешают паузе; [контракт исходов/ожиданий](outcomes-and-waits.md).
 
-`markInterrupted(id, token, error)` is a recovery fence, not a liveness check. The caller must first confirm the supervisor and its workers are dead. It converts every running activation to interrupted, preserves completed checkpoints, clears run ownership, and records an interruption event atomically. It preserves desired state: an interrupted pause can be resumed explicitly; an interrupted cancellation can be finalized with `requestControl(id,"cancel")` after process death has been established.
+`markInterrupted(id,token,error)` — защита восстановления от старых записей, **не**
+проверка живости. Вызывающая сторона сначала доказывает отсутствие supervisor/исполнителей
+и разрешает наблюдения групп. Хранилище атомарно переводит `running`-активации в `interrupted`,
+сохраняет завершённые, очищает владельца и пишет событие. `desired` сохраняется:
+пауза требует явного продолжения; прерванную отмену можно завершить
+`requestControl(id,"cancel")` после проверки смерти. Таймаут опроса, старый heartbeat,
+отсутствующий или запомненный PID не разрешают захват владельца: защита журнала
+не останавливает внешние эффекты старого процесса.
 
-Do not infer death from a stale heartbeat, elapsed polling timeout, a missing database PID during launch, or a remembered PID alone. The service layer owns OS process inspection, launch handshakes and worker cleanup. Reclaiming an uncertain live launch reservation is unsafe even though token fencing prevents later journal writes: it cannot prevent an old process from producing external side effects.
+Основные API чтения: `get`, `listRuns`, `getActivation`, `listActivations`, `completed`,
+`events(id,afterSeq)`. `seq` глобально возрастает, поэтому у одного запуска возможны
+пробелы. `appendEvent` и обновления метаданных защищены владельцем. Чтение возвращает
+независимые десериализованные копии. Публичные постраничные API — в [сервисе](service.md#tools).
+`tests/run-store.test.ts` проверяет конкурирующие процессы/соединения, устаревшие токены,
+управление, контрольные точки `null`, идентичность областей и откат выхода/итогового
+результата вместе с событием при намеренном отказе триггера SQLite.
 
-## Query and test surface
+<a id="worker"></a>
+## Изолированный исполнитель pi
 
-Read APIs are `get`, `listRuns`, `getActivation`, `listActivations`, `completed` and `events(id, afterSeq)`. Event sequence numbers are global and increasing; a per-run cursor may have gaps. `appendEvent` is fenced, as are metadata updates. Read calls return deserialized copies and cannot mutate the immutable stored plan.
+`src/pi-worker.ts` выполняет один вызов агента настоящим закреплённым pi SDK.
+Дочерний вход `src/pi-worker-process.ts` читает один PiWorkerRequest до EOF, пишет NDJSON
+ready, отобранные event, затем ровно один `result` либо `error`. Дополнительные метаданные
+идентичности CLI принимаются без интерпретации. Сырые ошибки провайдера не копируются
+в публичный протокол: они могут содержать приватные данные.
 
-`tests/run-store.test.ts` checks competing connections and processes, stale tokens across all writer APIs, pause/resume and monotonic cancellation, persistent checkpoints including `null`, ambiguous scope identities, and failure injection into event insertion. SQLite triggers deliberately abort completion-event insertion to prove that both activation output and final run result roll back with their event.
+Исполнитель использует внутренний `ModelRuntime` для авторизации; учётные данные не идут
+в запрос/результат. Требуется точная зафиксированная пара провайдер/модель. После создания
+сессии проверяются модель, `thinking` и список инструментов; молчаливое понижение уровня
+SDK не принимается. Тесты подставляют детерминированный транспорт, оставляя настоящие
+сессию, цикл инструментов, события и сохранение.
+
+Повторы HTTP и сессии отключены; каждый запрос получает `maxRetries`:0. Codex использует
+SSE, обходя отдельные повторы/запасной путь WebSocket SDK. [Наблюдения HTTP](retry-and-failures.md#provider)
+сохраняют только доступные числовые факты. Проверки чтения изображений — в
+[моделях](models-and-setup.md#возможности-и-thinking).
+
+Загрузка глобальных и проектных настроек, расширений, файлов контекста AGENTS.md,
+SYSTEM.md, APPEND_SYSTEM.md, шаблонов запросов и автоматически обнаруженных `skills`
+отключена. Настройки в памяти отключают повторы SDK, автоматическое сжатие контекста
+и телеметрию. Только явно выбранные и зафиксированные в плане файлы `skills` разворачиваются
+в уникальном каталоге вызова. Запрещены выход за пределы каталога через путь, пустые
+компоненты пути, уже существующий путь назначения и символическая ссылка вместо него.
+Загрузчик проверяет идентичность skill, права на исполнение файлов сохраняются.
+Это граница воспроизводимости, не защита от враждебного локального процесса:
+каталог состояния должен контролироваться средой исполнения.
+
+К системной инструкции добавляется обязательный протокол submit_result; задание и
+JSON-вход идут как сообщение пользователя. Исходные аргументы проверяются **до**
+приведения типов SDK. Отсутствие, невалидность или несколько отправок результата
+по умолчанию проваливают вызов даже при завершённом ходе SDK.
+Явный [режим `submit-only`](retry-and-failures.md#output-repair) разрешает форматирование
+в той же сессии с одним инструментом результата. Принятый результат останавливает
+дальнейшие ходы модели; последующая ошибка/отмена ответа его инвалидирует. Учёт считает
+только ответы этого вызова, включая исправление формата/продолженную сессию, а не всю историю снова.
+
+`continue-node` открывает точный переданный файл сессии в том же рабочем каталоге;
+режим `fresh` отвергает продолжение. Новый вызов требует нового каталога ресурсов,
+путь истории при продолжении сохраняется. Supervisor обеспечивает единственного
+владельца продолжаемой сессии. Истории содержат приватные задания/данные инструментов;
+публичные события — только типы жизненного цикла, известные имена инструментов/статусы,
+не аргументы/выходы/учётные данные.
+
+Отмена сначала закрывает допуск, очищает очереди управляющих и последующих сообщений,
+прерывает сессию, ждёт полного завершения запроса/сессии и освобождает ресурсы.
+SIGTERM/SIGINT/отключение IPC идут тем же путём; при незавершённом stdin закрывается
+и ввод. На выходе IPC отключается. Node может дать exit без `close` после отключения IPC:
+supervisor не полагается только на `close`. `read-only` запрещает `bash`/`edit`/`write`;
+остальные профили и `cwd` — не изоляция ОС. SDK `read` не гарантирует доступ к огромной
+строке: [подготовка данных](authoring.md#read-boundaries).
+
+`tests/pi-worker.test.ts` проверяет строгую однократную отправку результата, ошибку
+после отправки, ожидание полного асинхронного завершения, отмену с очисткой очередей,
+продолжение сессии, изоляцию ресурсов/небезопасные пути, несоответствие модели/`thinking`,
+формат сообщений дочернего процесса и завершение при отключении родителя — без реальных моделей.
+
+<a id="attempts"></a>
+## История попыток
+
+Посещение (`visit`) и попытка (`attempt`) различаются: ключ включает граф, область, узел
+и нулевой `visit`. Восстановление может создать попытку той же активации, следующий
+проход цикла — новое посещение. `workflow_activations` хранит текущую контрольную точку.
+Перед заменой неудачной точки `beginActivation` вставляет полную прежнюю запись в
+`workflow_activation_history` одной транзакцией с заменой и activation.started.
+Любая ошибка откатывает всё. Успешная точка используется без новой попытки.
+Наличие истории не разрешает повтор.
+
+Архив сохраняет `attempt`/`status`/`error`, исходные времена, выход при наличии,
+метаданные операции/сессии/каталога. Обновления `current` не меняют архив.
+
+`run.attempts {id,key,after?,limit?}` (MCP run_attempts) читает одну активацию;
+`key` копируйте из `run.inspect`, не собирайте из отображаемой подписи. Ответ:
+
+- `records` — архив по номеру попытки;
+- `current` — отдельная текущая контрольная точка этого чтения;
+- `totalAttempts`, `archived`, `missingArchived` — объём и известные пробелы;
+- `nextAfter`, `hasMore` — исключающий уже прочитанные записи курсор архива.
+
+Размер страницы по умолчанию 100, максимум 1000 — граница ответа, не лимит повтора.
+Пустая страница сохраняет курсор; `current` выдаётся каждый раз и не продвигает его.
+`current` позже может стать архивным, поэтому его нельзя кэшировать как неизменяемую строку.
+Страница, текущая точка, счётчики и расход берутся одним снимком чтения SQLite.
+Чтение не инспектирует ОС и не запускает восстановление. Старые потерянные попытки явно
+отмечаются; события не превращаются в выдуманную полную историю. Следующая замена
+сохраняет доступный `current`, оставляя старый пробел.
+
+`accounting` каждой попытки: `recorded`, `complete`, `responses` и допускающий `null` `usage`,
+только из учётных записей SDK точного `run`/`key`/`attempt`. Отсутствующие данные остаются
+неизвестными даже при расходе другой попытки; неполный отчёт сохраняет известную сумму.
+Итоги запуска считают ответы один раз независимо от архива. Из публичных метаданных
+убраны токены владельца/исполнителя и накопительные проекции расхода. Явная инспекция
+может показывать пути/ошибки/выходы, но не читает файлы сессий и не публикует исходные
+инструкции в обычном снимке графа.
+
+Новая попытка архивирует и очищает прежние наблюдения операции/сессии/исполнителя/модели.
+Контрольные точки каталога/ожидания/расхода сохраняют семантику восстановления.
+«Операция этой попытки» показывает намерение/прогресс, `task`/`input` агента раскрываются
+отдельно. [Восстановление](reconciliation.md) объясняет, почему намерение не доказывает
+завершённые эффекты.
+
+В браузере «Попытки» разделяет архив/`current`, статус/время/ошибку/выход/расход.
+«Обновить попытки» читает `current` и новые архивы; «Ещё попытки» продолжает страницы.
+Данные помечены временем чтения, переживают перерисовку, смену вкладок/запуска и ошибку
+загрузки без дубликатов. «Данные попытки» раскрываются по запросу.
+
+`tests/attempt-history.test.ts` проверяет откат, сохранение исходных ошибок/метаданных,
+неизменяемые страницы отдельно от изменяемого `current`, учёт каждой попытки, пробелы
+старой истории, области/посещения, удаление внутренних токенов, согласованность
+браузера/API и постраничное чтение. Настоящий SIGKILL с восстановлением сохраняет точку
+`await` без повторения предшествовавшей записи файла. Историю используют реализованные
+повтор по политике, исправление формата и явное восстановление; одно чтение их не разрешает.

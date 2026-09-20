@@ -1,8 +1,14 @@
 # Разработка и проверки
 
+[Индекс](README.md) · [Инварианты](known-issues.md)
+
+Оглавление: [проверки](#проверки-по-областям) · [исправление SDK](#локальный-sdk-patch) ·
+[явные проверки](#явные-probes) · [эксперименты](#experiments) · [снимок БД](#sqlite-backup).
+
 Команды выполняются из корня репозитория. Нужны Node >=22.19.0, Git и POSIX-среда.
-Точные версии SDK/Effect/TypeScript закреплены в `package.json` и `package-lock.json`.
-`tsx` и TypeScript нужны в runtime для generated modules, поэтому это dependencies.
+Точные версии SDK/`Effect`/TypeScript закреплены в `package.json` и `package-lock.json`.
+`tsx` и TypeScript нужны для исполнения сгенерированных модулей, поэтому относятся
+к обычным зависимостям, а не только к средствам разработки.
 
 ```sh
 npm ci
@@ -10,35 +16,35 @@ npm run typecheck
 npm test
 ```
 
-`npm test` запускает `tests/*.test.ts` и `spikes/*.test.ts` с concurrency 4.
+`npm test` запускает `tests/*.test.ts` и `spikes/*.test.ts` с параллелизмом 4.
 Это регрессии с реальным SDK, SQLite, временными Git-репозиториями и процессами,
-но подставным inference. Они не требуют квот подписки. Смотрите skips и ограничения
-конкретной среды. Тест выбора transition использует изолированный Chrome fixture;
+но подставными ответами моделей. Квоты подписки не нужны. Учитывайте пропуски тестов
+и ограничения среды. Тест выбора перехода использует изолированный пример в Chrome;
 прочитайте `tests/graph-transition-scope.test.ts` при диагностике браузера.
 
 ## Проверки по областям
 
-| Область | Основные suites в `tests/` |
+| Область | Основные наборы в `tests/` |
 | --- | --- |
-| Graph/authoring | `graph`, `authoring`, `compiler`, `public-patch-schema`, `council` |
-| Plan/start | `execution-plan`, `prepared-start`, `service`, `mcp`, `skill-handoff` |
-| Processes/journal | `run-controller`, `run-store`, `run-runtime`, `process-client`, `process-groups` |
-| SDK/providers | `pi-worker`, `native-xai`, `image-boundary`, `capabilities`, `provider-response` |
-| Recovery/Git | `recovery-inspection`, `reconciliation`, `continuation`, `allocation-recovery`, `git-recovery-crash`, `workspaces` |
-| Usage/attempts | `usage-pages`, `attempt-history`, `task-usage` |
-| UI | `dashboard`, `graph-view`, `graph-view-task-scope`, `graph-transition-scope`, `monitor`, `terminal` |
+| Граф и редактирование | `graph`, `authoring`, `compiler`, `public-patch-schema`, `council` |
+| План и запуск | `execution-plan`, `prepared-start`, `service`, `mcp`, `skill-handoff` |
+| Процессы и журнал | `run-controller`, `run-store`, `run-runtime`, `process-client`, `process-groups` |
+| SDK и провайдеры | `pi-worker`, `native-xai`, `image-boundary`, `capabilities`, `provider-response` |
+| Восстановление и Git | `recovery-inspection`, `reconciliation`, `continuation`, `allocation-recovery`, `git-recovery-crash`, `workspaces` |
+| Расход и попытки | `usage-pages`, `attempt-history`, `task-usage` |
+| Интерфейсы | `dashboard`, `graph-view`, `graph-view-task-scope`, `graph-transition-scope`, `monitor`, `terminal` |
 
-Названия в таблице — basename; запускайте нужные файлы через
+В таблице указаны основы имён файлов; запускайте нужные файлы через
 `node --import tsx --test tests/<name>.test.ts`. Полный набор нужен после изменений
 общих контрактов/процессов; для текста достаточно проверить ссылки и команды.
 
-## Локальный SDK patch
+<a id="локальный-sdk-patch"></a>
+## Локальное исправление SDK
 
-Pi-coding-agent 0.85.1 может принять Bash exit с потерянным signal за успех.
-`patches/pi-coding-agent-0.85.1-bash-signal.patch` и
-`scripts/apply-sdk-bash-signal.mjs` исправляют waiter и Bash backend только внутри
-локального `node_modules`. `npm ci` применяет patch через postinstall.
-Если lifecycle scripts отключены, выполните:
+Pi-coding-agent 0.85.1 может принять выход `bash` с потерянным сигналом завершения за успех.
+`patches/pi-coding-agent-0.85.1-bash-signal.patch` и `scripts/apply-sdk-bash-signal.mjs`
+исправляют ожидание процесса и обработку `bash` только внутри локального `node_modules`.
+`npm ci` применяет исправление через postinstall. Если установочные скрипты отключены:
 
 ```sh
 node scripts/apply-sdk-bash-signal.mjs
@@ -47,37 +53,179 @@ node scripts/apply-sdk-bash-signal.mjs
 Установщик требует точную версию и SHA256 исходных/исправленных файлов, проверяет
 весь набор до записи и отказывается от неизвестного/смешанного состояния.
 Не правьте глобальный SDK и не обходите проверку версии. При обновлении зависимости
-сначала проверьте signal-регрессии на чистом upstream; только затем удаляйте patch,
-установщик, postinstall и соответствующий lockfile metadata.
-Проверки: `bash-signal`, `bash-signal-worker`, `pi-worker`, `process-client`.
+сначала проверьте регрессии сигналов на чистой версии SDK без локальных изменений;
+только затем удаляйте исправление, установщик, postinstall и соответствующие
+метаданные lockfile. Проверки: `bash-signal`, `bash-signal-worker`, `pi-worker`, `process-client`.
 
-## Явные probes
+<a id="явные-probes"></a>
+## Явно запускаемые проверки
 
-`spikes/` содержит воспроизводимые эксперименты и ручные UI fixtures, а не второй
-scheduler. `npm run test:spikes` запускает только offline `*.test.ts`.
-Live команды требуют доступной модели и тратят квоту:
+`spikes/` содержит воспроизводимые эксперименты и примеры ручной проверки интерфейса,
+а не второй планировщик. `npm run test:spikes` запускает только `*.test.ts` без моделей.
+Следующие команды требуют доступной модели и тратят квоту:
 
 ```sh
 npm run probe:pi -- --provider openai-codex --model MODEL_FROM_CATALOG
 npm run probe:workflow -- --provider openai-codex --model MODEL_FROM_CATALOG
 ```
 
-`npm run test:repair:live` — отдельный native xAI probe; по умолчанию пишет
-игнорируемый `scratch/repair-live-latest.json`. Не запускайте его ради документации.
+`npm run test:repair:live` — отдельная проверка встроенного xAI; по умолчанию пишет
+игнорируемый `scratch/repair-live-latest.json`. Не запускайте её ради документации.
 `npm run probe:sdk-clean-import` проверяет импорт SDK в чистой установке и может
 потребовать сеть для установки пакетов. Результаты экспериментов и их границы —
-в [experiments.md](experiments.md).
+в [разделе ниже](#experiments).
 
 ## Состояние и документация
 
-Не храните credentials, SQLite journals, сырые логи, model transcripts, screenshots
-и campaign packets в Git. Рабочее состояние — `$DYNAMICWF_HOME` / `~/.dynamicwf`;
-локальные disposable результаты — игнорируемый `scratch/` или внешний каталог.
-Не удаляйте живые worktrees, journals или пользовательские данные при уборке.
+Не храните учётные данные, журналы SQLite, сырые логи, переписку с моделями, снимки
+экрана и материалы отдельных прогонов в Git. Рабочее состояние — `$DYNAMICWF_HOME` /
+`~/.dynamicwf`; временные результаты — игнорируемый `scratch/` или внешний каталог.
+Не удаляйте живые рабочие деревья, журналы или пользовательские данные при уборке.
 
 README — для пользователя, AGENTS — краткая карта агенту, PROJECT_INFO — контракты
 и поддержка. При изменении поведения обновляйте профильный документ и
 [known-issues.md](known-issues.md), если меняется важный инвариант.
-Работающий dashboard загружает код при запуске: после runtime-обновления его
-нужно перезапустить, сохранив настройки и адрес. Старые frozen runners не обновляются
-из-за коммита в основной checkout.
+Работающая панель загружает код при запуске: после обновления среды исполнения её
+нужно перезапустить, сохранив настройки и адрес. Уже запущенные исполнители со старым
+кодом не обновляются из-за коммита в основной копии репозитория.
+
+<a id="experiments"></a>
+## Эксперименты и отложенные направления
+
+Это не список обещанных функций и не альтернативная рабочая среда исполнения.
+Рабочая реализация запускает отдельный процесс на исполнителя pi.
+
+### Несколько SDK-сессий в одном Node
+
+`spikes/session-pool-benchmark.ts` сравнивает N=1,4,8,16 сессий в одном процессе
+с отдельными дочерними Node. Используются реальные `createAgentSession`/`prompt`/`abort`/`dispose`
+и детерминированный подставной поток ответов, без пользовательских учётных данных.
+
+```sh
+node --import tsx spikes/session-pool-benchmark.ts
+node --import tsx --test tests/campaign-sdk-pool.test.ts spikes/session-pool-benchmark.test.ts
+node --import tsx --test tests/session-pool-tools.test.ts tests/session-pool-lifecycle.test.ts
+```
+
+Измеряются подготовка сессии, создание общего `ModelRuntime`, готовность всего пула и RSS
+родителя плюс его детей. Суммарный RSS может повторно учитывать общие отображения памяти;
+это не уникальная физическая память. Подготовка/RSS не доказывают пропускную способность
+моделей, квоты провайдера или допустимый параллелизм рабочей реализации.
+
+Тесты без моделей проверяют независимые каталоги/истории, чтение/запись, ошибку и отмену
+одной сессии, освобождение ресурсов и общее подставное обновление OAuth под файловой
+блокировкой. Это не изоляция ОС и не реальная серверная ротация токенов.
+
+**Препятствие внедрению общего пула:** после SIGKILL общего Node независимые `bash`-команды
+могут продолжать внешние действия. `session-pool-lifecycle` воспроизводит это и завершает
+только собственные проверочные процессы. Нужны внешний контроль команд, связь с попытками,
+проверка через настоящий `RunStore`/`reconcile`, сложные деревья потомков, обновление токенов
+между процессами/при отмене и длинные ходы со сжатием контекста/исправлением вывода.
+Успешное измерение не разрешает заменять текущую модель исполнителей.
+
+### Идеи из исследований, не отдельные готовые продукты
+
+- Общий рецепт «реализация → проверка → ревью» с точной версией артефакта и отрицательными сценариями.
+- Единый набор проверки совместимости SDK/провайдеров поверх специализированных тестов.
+- Воспроизводимое измерение качества ревью и корпус известных дефектов.
+- Более понятные причины остановки и карточки результатов в существующем интерфейсе.
+- Индекс «утверждение → доказательство → исправление → проверка» без отдельного сервиса.
+
+Части этих направлений уже есть в коде/skill. Перед новой задачей сверяйте разницу
+с текущей реализацией; не внедряйте весь старый исследовательский отчёт целиком.
+Миграция планировщика, широкое обновление зависимостей и отдельные новые продукты
+не являются необходимым продолжением уборки репозитория.
+
+<a id="sqlite-backup"></a>
+## Согласованный снимок SQLite в WAL-режиме
+
+Это ручная процедура снимка журнала, не продуктовый сервис резервного копирования/
+восстановления. Нужен Node.js >=22.19.0 с `node:sqlite.backup`. Копирование одного `.sqlite`
+при активном WAL может дать целостную, но устаревшую БД: последние зафиксированные строки
+находятся в `-wal`. Последовательное копирование `.sqlite`, `-wal` и `-shm` во время
+записи также не гарантирует согласованный снимок.
+
+### Создание и проверка снимка
+
+Не открывайте источник через `RunController`, `WorkflowService` или `openWorkflowDatabase`:
+они не являются просмотрщиками только для чтения и могут выполнять подготовку/восстановление.
+Не создавайте схему, не выполняйте контрольную точку SQLite и не меняйте `journal_mode`
+живого источника ради снимка. Используйте существующий файл и прямое соединение только
+для чтения. Нужен доступ SQLite к WAL и служебным файлам; при ошибке доступа остановитесь,
+не удаляйте их и не обходите ошибку копированием одного файла.
+
+Пример самостоятельного `backup.mjs` не импортирует приложение. Задайте абсолютный
+путь существующего источника и каталог для **нового** снимка. `mkdtemp` создаёт отдельный
+приватный каталог, поэтому назначение не заменит существующий журнал. Не используйте
+путь рабочего журнала как назначение.
+
+```js
+import assert from 'node:assert/strict';
+import { mkdtemp, stat } from 'node:fs/promises';
+import { join } from 'node:path';
+import { backup, DatabaseSync } from 'node:sqlite';
+
+const sourcePath = '/absolute/path/to/existing/journal.sqlite';
+const backupRoot = '/absolute/path/to/backups'; // существующий каталог
+assert.ok((await stat(sourcePath)).isFile());
+const directory = await mkdtemp(join(backupRoot, 'snapshot-'));
+const destination = join(directory, 'journal.sqlite');
+const source = new DatabaseSync(sourcePath, { readOnly: true });
+try {
+  await backup(source, destination); // настоящий async API; дождаться Promise
+} finally {
+  source.close();
+}
+// backup сам управляет соединением назначения. Проверяем только копию.
+const copy = new DatabaseSync(destination, { readOnly: true });
+try {
+  assert.deepEqual(
+    copy.prepare('PRAGMA integrity_check').all().map(row => row.integrity_check),
+    ['ok'],
+  );
+  // Замените SQL и ожидания на известные committed строки вашего журнала.
+  // Пример для fixture из regression test, НЕ схема рабочего приложения:
+  const ids = copy.prepare('SELECT id FROM backup_probe ORDER BY id')
+    .all().map(row => row.id);
+  assert.deepEqual(ids, ['baseline', 'post-checkpoint']);
+} finally {
+  copy.close();
+}
+console.log(destination);
+```
+
+Перед применением адаптируйте проверку ожидаемых строк к реальной схеме и известным
+идентификаторам: `integrity_check=ok` сам по себе не доказывает полноту данных.
+При продолжающейся записи не ожидайте, что снимок включает все изменения вплоть до
+последующей проверки. При отказе backup не считайте частичный файл пригодным:
+сохраните ошибку, повторяйте только с новым назначением. Не используйте управляющую
+панель для просмотра живого журнала или копии без изменений: контроллер может
+запустить восстановление и изменить состояние.
+
+### Ограничения восстановления из снимка
+
+Восстановление рассматривается только в отдельном изолированном окружении, без
+автоматического возобновления задач и запуска восстановленных процессов. Не подменяйте
+живой журнал снимком. Сначала проверяйте копию напрямую только для чтения, затем
+отдельно согласуйте план восстановления и побочные эффекты. Эта инструкция не
+разрешает запуск контроллера над восстановленным журналом.
+
+Журнал не включает сессии, ресурсы `skills`, рабочие каталоги/деревья, прочие внешние
+файлы и эффекты (например, уже отправленные запросы или изменения репозитория).
+Их согласованное сохранение — отдельная задача. PID/владелец из снимка не доказывают
+живость или идентичность процессов: PID может быть переиспользован. Снимок SQLite
+не доказывает безопасность повторного выполнения задач и не восстанавливает процессы.
+
+### Проверка без сети
+
+```sh
+node --import tsx --test tests/sqlite-backup.test.ts tests/sqlite.test.ts
+npm run typecheck
+```
+
+Тест использует только временную БД через `openWorkflowDatabase`, отключает автоматическую
+контрольную точку, выполняет её явно, затем добавляет строку при открытом WAL.
+Копия одного файла теряет строку, хотя проходит `integrity_check`; согласованный backup
+сохраняет её. Обе копии проверяются через `readOnly`, включая отказ записи. Живые журналы
+и провайдеры не затрагиваются. `src/sqlite.ts` и управление восстановлением остаются
+без изменений: новая подсистема резервного копирования/восстановления не добавляется.

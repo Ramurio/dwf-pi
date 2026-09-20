@@ -1,44 +1,53 @@
-# Usage accounting
+# Учёт токенов и стоимости
 
-Read this when reporting tokens, cost, or completeness of usage. Token totals come from recorded worker reports. SDK cost is an estimate, not a subscription invoice.
+Читай перед отчётом о токенах, стоимости и полноте данных. Суммы берутся из записанных
+отчётов исполнителей; стоимость SDK — оценка, не счёт подписки.
 
-## Per-response records
+## Отчёты ответов
 
-Use `run.usage {"id":"...","after":0,"limit":100}` to inspect token totals and the original per-response SDK reports; paginate with `nextAfter` while `hasMore`. Page size 1–1000 is an API response limit, not a workflow budget.
+`run.usage {"id":"...","after":0,"limit":100}` даёт итоги и исходные числовые отчёты SDK.
+Передавай `nextAfter` пока `hasMore`. Размер страницы 1–1000 — граница API, не бюджет графа.
+Новый запуск записывает каждый завершённый ответ модели **до** проверки результата
+исполнителя, сохраняя известный расход после ошибки/отмены. Чтение/запись кэша отдельны,
+`reasoning` уже входит в `output`. Отменённый/несообщённый ответ остаётся неполным.
+Старые запуски сохраняют суммы исполнителей без выдуманных записей ответов/деталей кэша.
 
-New runs record each completed model response before validating the worker result, preserving known usage after failure/cancellation. Cache read/write is separate; reasoning is already part of output. A cancelled or unreported response remains partial. Older runs retain their worker totals without invented per-response records or cache detail.
+Поля: `input`, `output`, итог провайдера, `cacheRead`/`cacheWrite`, `reasoning` при наличии и
+стоимость SDK. Не вычисляй `total` сложением частичных полей разных провайдеров.
+Отсутствующая детализация — неизвестность, не известный ноль. Если разбивка есть лишь
+для части ответов, сохраняются известная сумма и `partialFields`. Признаки сводки
+`cacheReadPartial`/`cacheWritePartial`/`reasoningPartial`/`costPartial` независимы:
+полный итог не означает полную разбивку. Неполнота, неизвестность и ноль различаются.
 
-Stored fields include input, output, provider total, cacheRead/cacheWrite, reasoning when present, and SDK cost. Do not derive a total by adding partial fields from different providers. Unknown detail stays unknown. A missing field does not become a known zero.
+`usage.settled` сообщает полноту независимо от успеха задания. Завершённый ответ с неверным
+результатом может иметь полный учёт; отменённый поток сохраняет известные числа, оставаясь неполным.
 
-If breakdown exists for only some responses, the known sum is kept with `partialFields` naming incomplete fields. Summary flags such as `cacheReadPartial`, `cacheWritePartial`, `reasoningPartial`, and `costPartial` are independent. A complete total does not mean a complete breakdown. Partial, unknown, and zero are distinct.
+## Учёт всей задачи
 
-`usage.settled` reports accounting completeness independently of task success. A completed response with an invalid result can have complete usage; a cancelled stream leaves partial usage while keeping numbers already received.
+`task.inspect`/`task.usage` показывают исходные запуски/продолжения, изменения планов и
+суммарный расход SDK. Нельзя одновременно складывать отчёты, архивные попытки и
+накопительные метаданные. `reuse` не делает вызов модели и не считается отсутствующим
+отчётом агента. Неизвестная стоимость не становится нулём. [Связи продолжения](continuation.md).
 
-## Task-level totals
+## Сохранение старых сумм
 
-`task.inspect` and `task.usage` show linked original/continuation runs, plan change, and aggregated SDK usage. Do not add report rows, archived attempts, and cumulative metadata together. Reused outputs add no model call and are not missing agent reports. Unknown cost does not become zero.
+При первой проекции нового учёта сохраняется `metadata.usageLegacyBaseline` версии 1:
+`{ version: 1, throughAttempt, subtotal }`. Источник — последняя валидная контрольная
+точка до нового поответного учёта в неизменной истории попыток, а не сумма накопительных
+архивов. При повторе `beginActivation` сначала архивирует точку. Проекция добавляет
+исходную базу ровно один раз, только если все попытки поответного учёта строго позже
+границы. Архив позволяет восстановить базу и для ранее смешанной проекции при следующем
+старте/записи/завершении учёта; история не меняется. `accept` сохраняет базу.
 
-Reuse adds no tokens. Details of continuation linkage: [continuation.md](continuation.md).
+Если происхождение неизвестно или поответные записи пересекают границу, выводится
+только их сумма. Отсутствующие попытки остаются неизвестными. Старая сумма не доказывает
+полноту: `partial`, `earlierAttempts` и частичная необязательная детализация сохраняются.
+База не создаёт строки ответов/отчётов SDK; `reuse` расхода не добавляет.
+Стоимость SDK — известная оценка/частичная сумма, **не счёт подписки**; неизвестная
+стоимость не означает нулевую.
 
-### Legacy subtotal (D03)
-
-При первой ledger-проекции сохраняется `metadata.usageLegacyBaseline` версии 1:
-`{ version: 1, throughAttempt, subtotal }`. Источник — последний валидный
-pre-ledger checkpoint в immutable attempt history, а не сумма cumulative архивов.
-При retry `beginActivation` сначала архивирует checkpoint. Проекция добавляет
-baseline ровно один раз, только если все ledger attempts строго позже границы.
-Архив позволяет восстановить baseline и для ранее смешанной проекции при следующем
-start/record/settle; история при этом не изменяется. Accept сохраняет baseline.
-
-Если происхождение неизвестно или ledger пересекает границу, выводится только
-ledger subtotal. Отсутствующие attempts остаются неизвестными. Legacy subtotal
-не доказывает полноту: `partial`, `earlierAttempts` и частичные optional breakdown
-сохраняются. Baseline не создаёт SDK response/report rows; reuse расхода не добавляет.
-SDK cost — известная оценка/subtotal, **не счёт подписки**; неизвестная стоимость
-не означает нулевую стоимость.
-
-Признак `metadata.usageLegacyIncomplete=true` устойчиво фиксирует наличие legacy
-расхода, даже когда его subtotal отклонён из-за неизвестного происхождения или
-пересечения. Полностью settled ledger не снимает этот признак. Повторная проекция,
-reopen, retry и accept сохраняют неполноту; all-ledger usage без legacy-признака
-сохраняет прежнюю семантику complete.
+Признак `metadata.usageLegacyIncomplete=true` устойчиво фиксирует наличие старого
+расхода, даже когда его сумма отвергнута из-за неизвестного происхождения/пересечения.
+Полностью завершённый поответный учёт не снимает признак. Повторная проекция, открытие,
+`retry` и `accept` сохраняют неполноту; учёт только из новых записей без старого признака
+сохраняет прежнюю семантику `complete`.

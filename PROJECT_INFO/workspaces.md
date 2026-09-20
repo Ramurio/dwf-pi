@@ -1,25 +1,34 @@
-# Git worktree and integration blocks
+# Рабочие деревья Git и явная интеграция
 
-`worktree` allocates a run-owned Git branch and linked working tree, invokes a child
-graph there, and commits its successful result. `integrate` explicitly merges
-completed workspace artifacts into the current workspace. Both are graph data;
-the compiler generates their TypeScript + Effect control flow.
+[Индекс](README.md) · [Граф](graph-contract.md) · [Восстановление Git](reconciliation.md#git-recovery)
+
+Оглавление: [выделение](#allocation) · [коммит](#commit) · [интеграция](#integrate) ·
+[параллельные записи](#writers) · [управление и границы](#control).
+
+<a id="allocation"></a>
+## Выделение рабочего каталога
+
+`worktree` создаёт принадлежащую запуску ветку и связанное рабочее дерево, исполняет
+там дочерний граф и фиксирует его успешные изменения. `integrate` явно сливает завершённые
+артефакты в текущий рабочий каталог. Оба — данные графа, компилятор генерирует управление
+на TS + `Effect`.
 
 ```json
 {"id":"candidate","kind":"worktree","graphId":"implement","input":{"op":"ref","path":["input"]}}
 ```
 
-A worktree node accepts `graphId`, `input`, and optional `base` (a Git commit-ish).
-Its source is the nearest containing allocated workspace, otherwise the run's root
-working directory. Source/target cwd must be the canonical Git repository root; subdirectory runs are rejected before allocation rather than silently changing relative-file meaning. Source Git state must be clean, including untracked files, and
-have no merge/rebase/cherry-pick/revert/bisect in progress. Explicit worktree creation
-never silently excludes a user's uncommitted source changes. `base` defaults to
-`HEAD` and resolves to one actual commit before allocation; Git receives the value
-after `--end-of-options`, so option-looking strings are not executed as options.
+Поля: `graphId`, `input`, необязательный `base` (ссылка Git, разрешаемая в коммит).
+Источник — ближайший выделенный рабочий каталог, содержащий узел, иначе корневой `cwd`
+запуска. `cwd` источника/назначения должны быть каноническим корнем репозитория Git:
+подкаталог отвергается до выделения дерева, чтобы не менять смысл относительных путей.
+Источник должен быть чистым, **включая неотслеживаемые файлы**, без незавершённых
+merge/rebase/cherry-pick/revert/bisect. Нельзя молча отбросить незафиксированные правки
+пользователя. `base` по умолчанию `head`, разрешается в конкретный коммит до выделения дерева;
+Git получает его после `--end-of-options`, не как параметр команды.
 
-The resulting branch is `dynamicwf/<run-id>/<activation-hash>`; files are retained
-beneath the run directory's `worktrees/<activation-hash>/`. Each activation gets its
-own branch, including separate dynamic map items and loop visits. The output is:
+Ветка: `dynamicwf/<run-id>/<activation-hash>`; файлы остаются в
+`runs/<run-id>/worktrees/<activation-hash>/` рядом с журналом. У каждой активации,
+элемента `map` и прохода цикла своя ветка. Выход:
 
 ```json
 {
@@ -28,40 +37,35 @@ own branch, including separate dynamic map items and loop visits. The output is:
 }
 ```
 
-Git linked worktrees share repository objects while keeping separate working trees
-and branch checkouts. The implementation uses Git's documented worktree mechanism.
-[Git worktree documentation](https://git-scm.com/docs/git-worktree).
+Связанные деревья разделяют объекты Git, но не рабочие файлы и выбранную ветку.
+[Документация Git](https://git-scm.com/docs/git-worktree).
 
-## Workspace scope and commits
+<a id="commit"></a>
+## Область выполнения и коммит
 
-The runtime records each allocated path and child scope in the activation journal.
-An agent or check resolves its working directory from the longest matching ancestor
-scope. There is no globally mutable current directory, so sibling branches cannot
-change each other's implicit cwd. A nested worktree gets a new scope. A check's
-explicit `cwd` still overrides the implicit directory; this feature is workspace
-allocation, not filesystem containment.
+Выделенный путь и область дочернего графа сохраняются в журнале активации. `agent`/`check`
+берут `cwd` из самой длинной подходящей области предка; глобального изменяемого `cwd` нет,
+соседи не меняют директории друг друга. Вложенный `worktree` создаёт новую область.
+Явный `cwd` команды `check` всё ещё переопределяет неявную директорию: это выделение
+рабочего каталога, не ограничение доступа файловой системы.
 
-After the child graph succeeds, the runtime checks that the allocated branch is
-still checked out and descends from the recorded base. It stages ordinary changes
-with `git add --all`, respecting Git ignore rules, and commits when the index has a
-change. Existing commits made by the child are retained. A clean unchanged child
-produces no empty commit. Completion requires clean resulting Git state; dirty
-submodule contents, changed branch identity, unresolved Git operations or ancestry
-changes fail instead of publishing a misleading artifact head.
+После успеха ребёнка среда исполнения проверяет исходную выделенную ветку и происхождение
+от `base`, делает `git add --all` с соблюдением правил игнорирования и коммит только при
+изменениях индекса. Коммиты ребёнка сохраняются, пустой коммит не создаётся.
+Для завершения нужен чистый Git: изменённые подмодули, смена ветки, незавершённые
+операции или нарушенное происхождение — ошибка вместо ложного хеша артефакта.
+Неудачный/отменённый ребёнок автоматически не коммитится и не возвращает успешный
+артефакт; ветка, файлы и существующие коммиты сохраняются для инспекции.
 
-Runtime-owned Git commands disable repository hooks and signing and pass the local
-identity `Dynamic Workflow <dynamicwf@localhost>` through command arguments. They do
-not modify local/global Git identity settings. A failed/cancelled child is not
-committed automatically and returns no successful workspace artifact. Its branch,
-files and any already-existing commits remain available for inspection.
+Команды Git среды исполнения отключают хуки/подпись и передают локальное авторство
+`Dynamic Workflow <dynamicwf@localhost>` через аргументы, не меняя настройки Git.
+Наследованные переменные окружения Git, переопределяющие пути, индекс, объекты,
+конфигурацию или авторство (`GIT_INDEX_FILE`, `GIT_DIR` и подобные), отвергаются до
+команд, чтобы не перенаправить операцию в другой репозиторий. Ошибка показывает имя
+переменной, не значение.
 
-Inherited Git environment overrides for repository paths, index/object storage,
-configuration or identity are rejected before runtime-owned Git commands. This
-prevents a parent shell's `GIT_INDEX_FILE`, `GIT_DIR` or similar override from
-redirecting these operations outside the selected repository. Errors identify
-variable names without exposing their values.
-
-## Explicit integration
+<a id="integrate"></a>
+## Явная интеграция
 
 ```json
 {
@@ -73,71 +77,70 @@ variable names without exposing their values.
 }
 ```
 
-`sources` evaluates to a nonempty array of workspace records, or worktree outputs
-containing a `workspace` record. A dynamic `map`'s output can therefore be passed
-directly. Source ordering is merge ordering. Integration requires each exact
-path/branch/base/head tuple to match a completed worktree activation in this run;
-foreign or fabricated sources fail. It verifies the source's actual current HEAD,
-branch, clean state and shared repository identity before merging. A source modified
-after its successful result is rejected.
+`sources` должны вычислиться в непустой массив записей `workspace` либо полных выходов
+`worktree` с `workspace`. Можно передать выход `map` напрямую. Порядок `sources` — порядок
+слияния. Каждый точный `path`/`branch`/`base`/`head` должен совпасть с завершённой активацией
+`worktree` **этого запуска**. Чужие/выдуманные источники отвергаются; проверяются реальные
+`head`/ветка, чистое состояние и общий репозиторий. Изменённый после успеха источник
+не принимается.
 
-The target is the current allocated workspace, otherwise the root run directory.
-It must be clean and on a named branch; detached targets are rejected. Sources merge
-sequentially with `--no-ff --no-edit --no-overwrite-ignore`, preserving explicit merge commits. Before each merge, an additional path check rejects collisions between source tracked files and target ignored local files, including file/directory ancestor collisions. Matching uses conservative Unicode NFC normalization and lowercase comparison to protect case-insensitive filesystems; it may refuse a case-only collision even on a case-sensitive filesystem. This preserves ignored local content even with Git merge strategies where the flag alone is insufficient. The result
-contains `{workspace:{path,branch,base,head},merged:[sourceHeads...]}`. A successful
-Git merge is not a review approval: route to integration only after your graph's
-review policy passes.
+Назначение — текущий выделенный рабочий каталог, иначе корневой `cwd` запуска; нужны
+чистое состояние и именованная ветка, отсоединённый `head` запрещён. Последовательное
+слияние использует `--no-ff --no-edit --no-overwrite-ignore`, сохраняя явные коммиты
+слияния. Перед каждым слиянием дополнительная проверка защищает игнорируемые локальные
+файлы от коллизий с отслеживаемыми файлами источника, включая родительские пути
+файлов/каталогов. Сравнение консервативно использует Unicode NFC и нижний регистр:
+коллизия только по регистру может быть отвергнута и на чувствительной к нему файловой
+системе. Это защищает игнорируемые данные там, где одного флага Git недостаточно.
+Результат: `{workspace:{path,branch,base,head},merged:[sourceHeads...]}`.
+Успешное слияние не является одобрением ревью: допуск интеграции задаёт политика графа.
 
-A conflict fails integration and aborts only the merge just admitted, after checking
-its `MERGE_HEAD`, target branch and pre-merge HEAD. It never hard-resets the target or
-removes user files. Earlier successful merges in the same integration node remain
-committed; integration is a sequence of commits, not an all-or-nothing Git transaction.
-If merge ownership changed or cleanup fails, state is preserved with a reconciliation
-error. Git documents that merge abort attempts to reconstruct pre-merge state; this
-runtime requires a clean target before admission to avoid mixing pre-existing edits
-with merge changes. [Git merge documentation](https://git-scm.com/docs/git-merge).
+Конфликт проваливает `integrate` и отменяет только **текущее допущенное слияние** после
+сверки MERGE_HEAD, целевой ветки и `head` до слияния. Жёсткого сброса и удаления
+пользовательских файлов нет. Ранние успешные слияния остаются зафиксированными: узел
+не является общей транзакцией Git «всё или ничего». Изменённое владение/ошибка очистки
+сохраняет состояние и даёт ошибку восстановления. Git merge `abort` пытается восстановить
+состояние до слияния; поэтому заранее требуется чистое назначение, чтобы не смешивать
+старые правки со слиянием. [Git merge](https://git-scm.com/docs/git-merge).
 
-## Parallel writers
+<a id="writers"></a>
+## Параллельные записи
 
-Execution preparation rejects agents whose effective permission is not `read-only`
-when they are inside a concurrent `map` or `parallel` branch without a worktree
-wrapper inside that fan-out. A worktree surrounding the *entire* fan-out does not
-isolate its individual writers. Nested fan-out requires its own wrappers. Explicit
-`concurrency:1` can keep sequential writers in a shared workspace. Parallel integrate
-blocks likewise require separate target worktrees or sequential execution.
+Подготовка отвергает агентов с итоговым разрешением не `read-only` внутри параллельных
+`map`/`parallel` без обёртки `worktree` **внутри каждой ветки**. `worktree` вокруг всего
+разветвления не изолирует пишущие узлы. Вложенное разветвление требует своих обёрток.
+`concurrency:1` допускает последовательную запись в общий `cwd`. Параллельные `integrate`
+тоже требуют отдельных целевых worktrees либо последовательного исполнения.
 
-Persisted-plan verification repeats this check using frozen permissions, so changing
-a read-only frozen agent into a writer and recomputing the plan hash cannot bypass
-isolation validation. Explicit check commands can still operate on shared workspaces
-as authored; the runtime cannot infer arbitrary command effects. Read-only agents,
-Git worktree directories and tool permissions are not an OS sandbox.
+Проверка сохранённого плана повторяет проверку по зафиксированным разрешениям: смена
+`read-only` на право записи с пересчитанным хешем её не обходит. Явные команды `check` могут
+писать в общий каталог, как указал автор; среда исполнения не выводит эффекты произвольной
+команды. Это ответственность автора, а инструменты чтения/worktrees — не изоляция ОС.
 
-## Pause, cancellation and recovery
+<a id="control"></a>
+## Пауза, отмена и границы
 
-A worktree activation has `allocating`, `children`, `committing` and `complete`
-phases. Allocating/committing count as active work while a pause drains. During the
-children phase it is a structural parent, allowing the run to become paused when
-its child leaves have stopped. Commit admission checks ownership, desired state and
-current state atomically in SQLite. If pause wins between the runtime gate and
-commit admission, the worktree remains parked until resume.
+Фазы `worktree`: `allocating`, `children`, `committing`, `complete`. Выделение дерева/коммит —
+активная работа при ожидании паузы; `children` — структурный родитель. Допуск коммита
+атомарно проверяет `owner`/`status`/`desired`. Если пауза выиграла между проверками допуска,
+`worktree` ждёт продолжения. Каждая Git-команда использует исполнитель `check` с учётом
+групп процессов, журналированием PID/токена и очисткой при отмене. Отмена ждёт завершения
+процессов; прерванное слияние очищается только после проверки владения. Ошибка/отмена
+не утверждает наличие нового зафиксированного артефакта.
 
-Every Git operation uses the existing process-group-aware check-worker plumbing,
-including PID/token journaling and cancellation cleanup. Cancellation waits for
-workers to be reaped; interrupted merges receive ownership-checked cleanup. Failure
-or cancellation does not claim a new committed artifact. Worktree and integrate
-activations are marked as external effects in the journal: completed outputs can
-replay, but an interrupted allocation/commit/merge is not silently rerun. Inspect
-retained Git state and reconcile uncertain effects explicitly.
+`worktree`/`integrate` имеют внешние эффекты: завершённые выходы воспроизводятся из журнала,
+прерванные выделение дерева/коммит/слияние не повторяются молча. [Восстановление](reconciliation.md)
+определяет инспекцию, одноразовые решения и аварийные окна. Повторное подключение в фазе
+`children` сохраняет контрольные точки, но не разрешает неопределённую запись ребёнка.
 
-Within a run, workspace mutations to the same target are serialized. This is not a
-cross-run or cross-user repository lock; independently launched runs or humans can
-still change shared Git state. No worktree/branch auto-deletion or dependency
-installation is performed. Git-ignored/untracked dependencies from the source are
-not copied into new worktrees. Keep state outside the source repository or ignore it
-so the required clean-source check remains meaningful.
+Изменения одного назначения сериализуются **в пределах запуска**, не между запусками/
+пользователями. Другие запуски и люди могут менять общий Git. Автоудаления веток/деревьев
+и установки зависимостей нет; игнорируемые/неотслеживаемые зависимости источника не
+копируются. Держите состояние вне исходного репозитория либо игнорируйте его, чтобы
+проверка чистоты источника оставалась осмысленной.
 
-Validation: `tests/workspaces.test.ts` uses real temporary repositories and generated
-runtime execution. It covers parallel disjoint edits plus integration, source/target
-checks, commit identity, changed source heads, conflict abort, pause/resume,
-cancellation with actual child PID cleanup, atomic commit admission and frozen-plan
-parallel-writer validation. The tests never run Git mutation commands in this project.
+`tests/workspaces.test.ts` использует временные репозитории и сгенерированное исполнение:
+непересекающиеся параллельные правки/слияния, проверку источника/назначения и идентичности,
+изменённые хеши, конфликты, паузу/продолжение, отмену с реальными PID, атомарный допуск
+коммита и изоляцию записи по зафиксированным разрешениям. Тесты не меняют Git этой копии
+репозитория; матрица аварий — в [восстановлении](reconciliation.md#tests).

@@ -1,221 +1,173 @@
-# Reconciliation of interrupted effects
+# Восстановление неопределённых внешних действий
 
-This work implements the recovery scenario in the project audit. Operation capture,
-worker/group observations and public `run.recovery` inspection are implemented below.
-`run.reconcile` now accepts checked results and authorizes one-use retries through
-CLI/MCP and the local browser form. Inspection shows decision provenance and
-application receipts. The remaining Git fault-injection and repair cases are
-distinguished from the implemented allocation recovery below.
+[Индекс](README.md) · [Журнал](run-journal.md) · [Git](workspaces.md) ·
+[Продолжение задачи](../skills/dynamic-workflows/references/continuation.md)
 
-## Persisted operation observations
+Оглавление: [намерение](#intent) · [процессы](#processes) · [группы](#groups) ·
+[инспекция](#inspection) · [инварианты](#invariants) · [решение](#decision) ·
+[восстановление Git](#git-recovery) · [форма](#browser) · [матрица аварий](#tests).
 
-`metadata.operation` is written before dispatching an agent/check or beginning a
-managed workspace operation. Its closed JSON shape depends on `kind`:
+`run.recovery` инспектирует записанные операции, исполнителей/группы и текущий рабочий
+каталог. `run.reconcile` принимает проверенный результат либо разрешает одноразовый
+повтор через CLI/MCP/браузер. Чтение само ничего не разрешает. Изменённый граф той же
+задачи требует `run.continue`, не несвязанного запуска со скопированным результатом.
 
-- `agent`: actual `cwd`, evaluated `task` and `input`, intended session/resource
-  directories, and optional continued session file. The configuration is addressed
-  by the activation's graph/node in the immutable execution plan.
-- `check`: actual `cwd`, command and argv sent to the worker.
-- `worktree`: source workspace, child scope and optional requested base. Once its
-  child graph returns, `childResult` is recorded before parent commit admission.
-- `integrate`: target and evaluated source records. Progress records the target
-  branch/original HEAD, already merged source heads and, before each merge, its
-  source HEAD and target HEAD. `complete` adds the observed final HEAD.
+<a id="intent"></a>
+## Записанное намерение операции
 
-The existing `metadata.workspace` and `workspacePhase` retain allocation ownership
-and allocating/children/committing/complete phases. Intent is not proof that a
-process started or that a write completed. A merge can finish before its next
-journal write; a retained `merging` observation therefore remains uncertain until
-the workspace is inspected. An aborted merge does not erase earlier completed
-merges or the recorded operation intent.
+`metadata.operation` сохраняется **до** отправки `agent`/`check` либо управляемой операции
+Git. Закрытая форма JSON зависит от `kind`:
 
-The operation and its metadata event commit together. A rejected intent checkpoint
-prevents the following external operation from starting. Observation callback
-failure after a Git write retains uncertainty rather than rolling back user files.
+| `kind` | Записанные данные |
+| --- | --- |
+| `agent` | Фактический `cwd`, вычисленные `task`/`input`, намеченные каталоги сессии/ресурсов, необязательный файл продолженной сессии; `config` находится по графу/узлу в неизменном плане |
+| `check` | Фактический `cwd`, команда и аргументы для исполнителя |
+| `worktree` | Исходный каталог, область ребёнка, необязательный запрошенный `base`; после возврата ребёнка — `childResult` до допуска родительского коммита |
+| `integrate` | Назначение и вычисленные `sources`; прогресс хранит целевую ветку/исходный `head`, уже слитые хеши источников, перед каждым слиянием — `head` источника/назначения; `complete` добавляет конечный `head` |
 
-Beginning a new attempt archives the previous operation/session/worker provenance
-and clears it from the new current attempt. Worktree, wait and usage checkpoints
-retain their existing replay semantics. Old records without operation data do not
-gain invented historical inputs or paths. Graph source/hash versions are unchanged
-by these additional observations.
+`metadata.workspace`/`workspacePhase` сохраняют владение и фазы `allocating`/`children`/
+`committing`/`complete`. Намерение не доказывает старт или завершённую запись: слияние
+может закончиться до следующей записи журнала, поэтому `merging` требует проверки Git.
+Отмена текущего слияния не стирает ранние зафиксированные слияния или намерение.
 
-Use existing explicit `run.inspect`, `run.attempts`, or expanded browser attempt
-data to inspect these fields. Ordinary graph snapshots do not include evaluated
-agent tasks, operation inputs or session/resource paths.
+Операция и событие метаданных атомарны; отвергнутая контрольная точка намерения не
+допускает следующую операцию. Ошибка обратного вызова после записи Git оставляет
+неопределённость, а не откатывает файлы. Новая попытка архивирует/очищает старые
+наблюдения операции/сессии/исполнителя; контрольные точки каталога/ожидания/расхода
+сохраняют семантику восстановления. Старым записям без операции не выдумываются входы/
+пути; исходник/хеш от добавочных метаданных не меняются. Поля доступны явно через
+`run.inspect`/`run.attempts`/раскрытие попытки в браузере, не входят в обычный снимок графа.
 
-## Worker launch admission
+<a id="processes"></a>
+## Допуск исполнителя до отправки задания
 
-Every managed agent/check process, including each individual Git command wrapper,
-reserves its random worker identity in activation metadata before spawn. A rejected
-reservation prevents launch. The process client waits for the synchronous PID
-checkpoint callback to finish before sending the execution request over stdin;
-callback failure or cancellation does not send the request. Death of the parent
-in that gap disconnects IPC, so the wrapper stops without receiving its task.
+Каждый управляемый `agent`/`check`, включая обёртку каждой Git-команды, резервирует
+случайную идентичность исполнителя в метаданных активации **до создания процесса**.
+Отказ резервирования предотвращает запуск. Клиент процесса ждёт окончания синхронной
+записи PID прежде, чем отправить запрос в stdin; ошибка записи/отмена не отправляют
+задание. Смерть родителя в этом окне отключает IPC, обёртка останавливается без задания.
 
-`workerLaunch` records `reserved`, `started`, or `settled`. Started means the wrapper
-PID was observed, not that its task began. Settled means the client finished waiting
-for the wrapper and its output pipes, not certification of every descendant or
-external effect. Each subsequent Git command reserves a fresh identity; beginning
-a new activation attempt archives and clears the old launch observation.
+`workerLaunch`: `reserved`/`started`/`settled`. `started` — замечен PID обёртки, не доказано
+начало задания. `settled` — клиент дождался обёртки/каналов вывода, не всех потомков
+или внешних действий. Следующая Git-команда резервирует новую идентичность; новая
+попытка архивирует и очищает прошлую.
 
-Controller observation finds reserved workers lacking a PID by script and exact
-worker-token marker in the OS process list. They count toward orphaned-worker
-liveness, prevent owner release/relaunch, and can receive explicit cancellation.
-Reading does not manufacture a historical PID checkpoint. Reservations with no
-matching process are not themselves evidence of a live worker. Legacy journals do
-not gain missing identities. The inventory is shared within one observation when
-several missing-PID reservations or a supervisor reservation need it.
+Контроллер ищет зарезервированных исполнителей без PID по скрипту и точному маркеру
+worker-token в списке процессов ОС. Найденные учитываются как живые исполнители без
+supervisor, препятствуют освобождению владельца/перезапуску и доступны явной отмене.
+Чтение не создаёт историческую запись PID. Резервация без подходящего процесса сама
+не доказывает жизнь. Отсутствующие старые идентичности не синтезируются. Несколько
+резерваций и supervisor используют один список процессов в рамках наблюдения.
+Покинувшие группу потомки и внешние эффекты всё равно требуют инспекции.
 
-This closes the launch-before-PID tracking gap for new managed workers. Process
-groups have the additional checks below. Escaped descendants and external effects
-still require inspection; recorded-process observation must not be presented as
-proof that all outside effects have settled.
+<a id="groups"></a>
+## Оставшиеся группы процессов
 
-## Remaining process groups
+До отправки задания запись PID сохраняет `workerGroupPid` и `workerGroupState:"pending"`:
+обёртка — лидер отдельной группы процессов. После ожидания обёртки среда исполнения
+проверяет состав группы перед очисткой метаданных/принятием выхода. Непустая группа
+даёт `uncertain-effect`/`cleanup` с сохранением контрольной точки; другая Git-команда не
+может затереть её новой резервацией. Успех, замена попытки и освобождение владельца
+запрещены при неподтверждённой группе.
 
-Before sending the request, the PID checkpoint also records `workerGroupPid` and
-`workerGroupState:"pending"`. Managed wrappers are detached process group leaders.
-Once the process client finishes waiting, the runtime checks OS group membership
-before clearing the worker metadata or accepting its output. A nonempty group
-produces an `uncertain-effect` failure in `cleanup`; the original group checkpoint
-remains. Another Git command cannot overwrite it with a new reservation. Successful completion,
-attempt replacement and owner release reject a pending group.
+Когда supervisor/обёртка отсутствуют, контроллер проверяет номер группы. Живые члены
+публикуются как `unresolvedGroups` в статусе/инспекции/браузере: `key`/`attempt`/PID группы,
+PID/PPID/состояние ОС и `ownership:"unverified"`. Проекция показывает `unresolved-groups`
+даже после завершённого запуска; незавершённый запуск без supervisor требует «Проверки
+процессов», сохраняя намерение паузы/отмены. Панель раскрывает кандидатов и связь с задачей.
 
-When the supervisor and recorded wrapper are gone, controller observation checks
-that group number. Live members are exposed as `unresolvedGroups` in run status,
-inspect and browser snapshots: activation key/attempt, group PID, numeric process
-and parent IDs, OS state, and `ownership:"unverified"`. The shared presentation
-reports `unresolved-groups`, including after an otherwise terminal run. Nonterminal
-execution without a live supervisor is labelled as requiring process inspection, preserving pause
-or cancellation intent. The browser explains the condition and links to the task.
+Номер группы мог быть переиспользован: это **кандидаты**, не доказанные принадлежащие
+запуску потомки. Отмена не сигналит по одному числовому совпадению. Уполномоченный
+участник проверяет происхождение и завершает относящиеся процессы. Когда чтение ОС не
+находит членов, кроме зомби, контроллер пишет worker.group_empty и очищает `pending`
+до освобождения умершего владельца. Защищённое обновление сравнивает исходные токен/
+группу/ключ; устаревшее наблюдение не очищает новую команду. Повторные чтения не
+дублируют событие. Ошибки ОС остаются ошибками; неизвестное состояние потенциально
+активно, включая macOS `?Es`.
 
-The group number may have been reused since the checkpoint. These are candidates,
-not certified owned descendants; cancellation does not signal a group merely from
-this numeric match. An authorized actor can inspect their actual provenance and
-settle the relevant processes. Once an OS read finds no non-zombie members, the
-controller records `worker.group_empty` and clears the pending observation before
-releasing the dead owner. The update compares the original worker token/group/key,
-so a stale observation cannot clear a newer command. Repeated reads add no duplicate
-empty events. Observation errors remain errors; an unknown OS state is treated as
-potentially active, including macOS `?Es`.
+Проверенная пустая группа не опрашивается бесконечно: её позднее переиспользование
+не блокирует запуск. Старые записи не получают выдуманных доказательств групп;
+процессы, покинувшие группу, вне этой проверки. Пустая группа — предпосылка восстановления,
+не `accept`/`retry` и не доказательство завершения всех внешних эффектов.
 
-A group verified empty is not polled indefinitely, so its later reuse does not
-create a false blocker. Old records without a group checkpoint do not gain invented
-proof. Processes that deliberately leave the group are outside this check; resolving
-their effects still requires explicit evidence. Group observation is a prerequisite
-for reconciliation, not an accept/retry decision or a complete resolution protocol.
+<a id="inspection"></a>
+## Явная инспекция
 
-## Explicit recovery inspection
+`run.recovery {id,key}` (MCP run_recovery) выбирает **текущую** активацию; `key` копируйте
+из `run.inspect`, отображаемая подпись не идентичность. Неудачная попытка в браузере
+предлагает «Проверить состояние для восстановления» и явное обновление; обычный опрос
+не сканирует файлы/инструкции операции.
 
-`run.recovery {id,key}` (MCP `run_recovery`) inspects the exact current activation.
-Inspection itself authorizes nothing. Explicit `run.reconcile` is available and
-separately governed. A revised graph for the same user task uses `run.continue`,
-not an automatic replacement and not a silent replay of the failed writer.
-Copy its key from `run.inspect`; a display label is not an identity. Browser failed
-attempts offer **Проверить состояние для восстановления**, with explicit refresh.
-Ordinary graph polling does not scan files or return operation prompts.
+Ответ содержит `version`, ID запуска/`planHash`, `key`/`attempt`, `status`/`desired`,
+`checkpoint`/`eventSeq`/`observedAt`, активацию без токена исполнителя, схему вывода,
+наблюдения процессов, blockers и `workspace`. Контрольная точка покрывает текущие активации
+всего запуска, зафиксированные элементы коллекций и последний `seq` одного снимка чтения
+SQLite. Ответ `await` меняет её даже без смены временных меток.
 
-The response includes `version`, run ID/plan hash, key/attempt, run status/desired,
-`checkpoint`, `eventSeq`, `observedAt`, the recorded activation (without its worker
-fencing token), output schema, process observations, blockers and `workspace`.
-The checkpoint covers the whole run's current activations and committed collection
-items from one SQLite read snapshot, together with the last event sequence. Answers
-to awaits therefore invalidate it even when no activation or run timestamp changes.
+Препятствия различают живой/неподходящий запуск, попытку не в состоянии ошибки,
+структурный контейнер, отсутствующую операцию, завершённого предка, зафиксированный
+элемент коллекции, живые процессы и неразрешённые группы. Дочерняя область включает
+посещение родителя и индекс `map`/ID ребёнка `parallel`; результат соседа не запечатывает
+выбранного ребёнка. Остановленную `failed`/`interrupted`-попытку можно инспектировать
+при сохранённой операторской паузе.
 
-Blockers distinguish a live or unsuitable run, a nonfailed attempt, structural
-container, missing operation data, a completed ancestor, a committed collection
-item, live execution processes and unresolved process groups. Child scope matching
-includes the exact parent visit and map index/parallel child ID; a sibling's result
-does not seal the selected child. A stopped failed/interrupted attempt can be
-inspected while operator pause remains in force.
+При препятствиях `workspace`=`null` и сканирования нет. Иначе хешируются рабочий каталог
+запуска, реальные `cwd`/источник/назначение операции, управляемые деревья и источники
+интеграции, включая административный/общий каталог связанного `worktree` **без команд Git**.
+Повреждённые административные указатели дают ошибку, не «репозитория нет».
 
-When blockers exist, `workspace` is null and no file tree is scanned. Otherwise the
-inspection hashes the run workspace, actual operation cwd/source/target, recorded
-managed worktrees and integration sources. Git administration directories and a
-linked worktree's common directory are included, without running Git commands.
-Broken administrative pointers fail the read rather than becoming a missing repo.
+`workspace` возвращает канонические корни/исключения, общий хеш, число записей/байтов,
+пути вложенных символических ссылок/специальных файлов. Хеш включает имена, байты/размеры,
+тип/режим и цели ссылок, не времена/владение/ACL/расширенные атрибуты/внешнее состояние.
+Файлы читаются потоком SHA-256; сверка inode/размера/времени до и после отвергает замеченную
+замену/изменение, каталоги сверяют имена записей. Открытие без следования ссылкам и
+без блокирования не открывает подставленную ссылку/FIFO. Перекрывающиеся корни читаются
+один раз. Корневые ссылки разрешаются явно, вложенные только записываются без чтения
+целей; сокеты/FIFO не открываются.
 
-`workspace` names its canonical roots and exclusions and returns an aggregate digest,
-entry/byte counts, leaf symlink paths and special-file paths. The digest includes
-names, file bytes/sizes, type/mode and symlink targets. It is a content observation,
-not a snapshot of timestamps, ownership, ACLs, extended attributes or outside state.
-Files stream through SHA-256; before/after inode/size/time checks reject observed
-replacement or modification during a read. Directories check their entry names.
-Files open with no-follow/nonblocking flags, avoiding a substituted symlink/FIFO.
-Overlapping roots are read once. Root symlinks resolve explicitly; nested symlinks
-are recorded without reading their target contents, and sockets/FIFOs are not opened.
+Исключены журнал/WAL/SHM и ресурсы этого запуска. Явно выбранные управляемые деревья
+включаются даже под каталогом запуска. Замена исключённого ресурса символической ссылкой
+не исключает посторонние целевые данные. Исключения видны для проверки; это не полный
+манифест артефакта, не разница и не автоматический снимок/пресет.
 
-The journal, its WAL/SHM and this run's resources are excluded. Explicitly selected
-managed worktree roots remain included even when beneath the run directory. Replacing
-an excluded resource with a symlink does not exclude unrelated target data. Exclusions
-are returned so their scope can be reviewed; this is not a complete artifact manifest
-or a diff between inspections. There is no automatic preset or disk snapshot save.
+После сканирования повторно проверяются наблюдение контроллера и контрольная точка
+журнала: изменённая точка/новый процесс инвалидируют чтение. Файловая система и
+SQLite/редакторы не образуют общую транзакцию; применение решения/допуск перепроверяют
+данные. Внешние эффекты и цели ссылок требуют отдельных доказательств. Повтор инспекции
+не исполняет задание, не меняет попытки/расход. Пустые blockers и валидная схема
+**не разрешают** принять выход, повторить запись или обойти привязку артефакта/критериев.
 
-After scanning, controller observation and the journal checkpoint are checked again.
-A changed checkpoint or newly live process invalidates the inspection. Filesystem
-reads are not an atomic transaction with SQLite or other editors: decision application
-and execution admission recheck these facts. Unknown external effects and link
-targets still need explicit evidence. Repeated inspection does not rerun work, rewrite
-attempts, or alter usage. Read `run.attempts` for per-attempt accounting.
+<a id="invariants"></a>
+## Инварианты разрешения
 
-This command supplies evidence only. Empty blockers and a valid output schema do not
-authorize accepting an output, retrying writes or overriding artifact/criteria bindings.
+1. Решение относится к точным запуску/плану/активации/попытке/контрольной точке,
+   операции, сессии/каталогу/процессам/фактам Git. Хеш журнала один не доказывает неизменность файлов.
+2. Нужны остановленный владелец и подтверждённое отсутствие относящихся исполнителей/
+   групп, включая окно до записи PID. Старый heartbeat, таймаут и закрытое приложение недостаточны.
+3. Неизменяемое решение именует участника, причину, доказательства, действие и условия.
+   Точная доставка идемпотентна; изменённые план/попытка/точка/каталог требуют нового решения.
+   Редактирование SQLite или активного графа не заменяет допуск.
+4. `accept` проверяет действующую схему вывода и вход ревью с артефактом/критериями.
+   Отсутствующие доказательства нельзя выдумать. Выходы Git выводятся/проверяются по
+   владению, репозиторию, ветке, `head` и дочерним контрольным точкам.
+5. `retry` разрешает **одну операцию**, не весь граф и не обещает откат. Безопасное
+   подключение `worktree` сохраняет детей; интеграция учитывает уже зафиксированные источники.
+6. Применение архивирует неудачную попытку/происхождение. Принятый внешний выход явно
+   восстановлен, не является новым ответом модели; расход неизменен. Пауза/отмена сохраняются.
+   Явное восстановление может переоткрыть `failed`-запуск, обычное продолжение не разрешает неопределённые записи.
+7. Завершённые родитель и сохранённые результаты `collect` запечатаны: нельзя изменить
+   использованный результат/доказательство разрешением старой внутренней ошибки.
 
-## Resolution contract
+`evidence` участника — свидетельство об инспекции вне возможностей среды, не автоматическая
+сертификация всех эффектов. Локальные факты отличимы от утверждений участника.
+Участником может быть уполномоченный агент: обязательного человеческого согласования нет.
+Окончательное прекращение работы — отдельный `run.cancel`.
 
-The complete feature must support accepting a checked result, authorizing another
-execution after inspection, and ending the run. It must preserve the following:
+<a id="decision"></a>
+## Применение решения
 
-1. Inspection identifies the run/plan, activation, exact attempt and checkpoint,
-   actual operation, session/workspace and current process/Git observations.
-   A journal digest alone is not proof that the filesystem is unchanged.
-2. Resolution requires a stopped execution owner and verified absence of relevant
-   live workers. Launch-before-PID persistence and orphan process groups must be
-   accounted for before declaring a subject available for resolution. A stale
-   heartbeat, closed harness, or caller timeout is insufficient.
-3. A resolution is immutable and names its actor, reason, evidence, action and
-   application conditions. Repeated delivery of the same decision is idempotent;
-   changed checkpoints, attempts, plans or inspected workspace state invalidate it.
-   No caller edits SQLite or the active graph to bypass admission.
-4. Accept validates the actual node output contract. Reviewer results additionally
-   match the saved artifact/criteria input. Old records lacking required evidence
-   cannot supply invented bindings. Managed workspace outputs are derived or
-   checked against real ownership, repository, branch, HEAD and child checkpoints.
-5. Retry authorizes one new attempt of the selected operation. It does not imply
-   all external writes were rolled back, or authorize repeating a whole graph.
-   Safe worktree reattachment preserves completed children, including allocation
-   and commit gaps after verifying the real Git state. Interrupted integration
-   requires inspection of admitted and already committed sources.
-6. Applying a decision archives the failed attempt and records its provenance.
-   An accepted external result is visibly reconciled, not described as a new model
-   response; existing token reports remain untouched. Operator pause and cancel
-   retain their semantics. An explicit recovery path can reopen a failed run;
-   ordinary resume alone must not bypass unresolved side effects.
-7. Completed parent checkpoints and durable collected child results remain sealed.
-   Resolving an old failure inside an already consumed result cannot silently
-   rewrite the parent or alter the evidence used for a later decision.
-
-Actor evidence can describe checks outside the runtime's local capabilities. It is
-an explicit attestation, not automatic certification of every external effect.
-Local workspace facts must remain distinguishable from those claims. The actor
-can be an authorized agent; this does not introduce mandatory human approval.
-
-## Required acceptance scenarios
-
-Accept a writer result after confirmed writes with no repeated worker; retry after
-inspection with original usage/attempt history; wrong output schema or reviewer
-revision; stale checkpoint/workspace, duplicate/conflicting resolution delivery;
-live owner/worker and process-launch gaps; pause/cancel during resolution; failed
-run recovery; allocation/commit and partially integrated Git gaps; completed parent
-or collected result protection; API/MCP and browser explanation of decisions.
-
-Implemented cases and remaining gaps are distinguished below; the full feature is
-not complete merely because the decision API is available.
-
-## Applying a decision
-
-CLI and MCP expose `run.reconcile`. Supply the exact `id`, activation `key`,
-`attempt`, `checkpoint` and `workspaceDigest` from a fresh `run.recovery`, plus:
+В `run.reconcile` передайте точные `id`/`key`/`attempt`/`checkpoint`/`workspaceDigest` свежего
+`run.recovery` и поля, например:
 
 ```json
 {
@@ -228,144 +180,134 @@ CLI and MCP expose `run.reconcile`. Supply the exact `id`, activation `key`,
 }
 ```
 
-This fragment illustrates a check result, not evidence for any real run. Retry uses
-`action:"retry"` and omits `output`. Choose the decision ID before delivery. Exact
-redelivery returns the persisted decision with its current application/supersession
-receipt, even after the run finishes; different content with the same ID fails.
-Reading `run.reconciliations` optionally filters by activation `key`.
+Это иллюстрация выхода `check`, не доказательство реального запуска. Повтор использует
+`action` `retry` без `output`. ID решения выбирается заранее. Точная повторная доставка
+возвращает сохранённое решение с текущей квитанцией применения/замещения даже после
+окончания запуска; иное содержимое с тем же ID отвергается. `run.reconciliations {id,key?}` читает решения.
 
-New decisions require a fresh stopped/unconsumed checkpoint and filesystem digest.
-The controller validates liveness and Git observations, then the store atomically
-checks the complete journal checkpoint and appends the immutable decision. Actor
-evidence remains an attestation. The SQLite transaction does not lock editors or
-external services; filesystem observation has the limits documented above.
+Новое решение требует свежей контрольной точки остановленной, ещё не использованной
+операции и хеша файлов. Контроллер проверяет живость/Git; хранилище атомарно сверяет
+**всю** точку журнала и добавляет решение. SQLite не блокирует редакторы/внешние сервисы:
+границы наблюдения сохраняются.
 
-Accept validates the frozen output schema and recorded reviewer bindings. It
-archives failed attempt N intact and creates succeeded checkpoint N+1, visibly
-marked `metadata.reconciliation` without a worker/session/model invocation. Existing
-response rows and cumulative spend remain intact; no new SDK response or ledger
-entry is fabricated. History differentiates accepted checkpoints from model calls.
+`accept` проверяет зафиксированную схему и привязки ревью, архивирует `failed` N целиком,
+создаёт `succeeded` N+1 с `metadata.reconciliation` без вызова исполнителя/сессии/модели.
+Старые записи ответов/расход сохраняются, новые отчёты SDK не выдумываются.
+`retry` ожидает повторной проверки корней операции/административных данных Git при допуске;
+решение используется атомарно с N+1, архивом и событием. Авария допущенной попытки требует
+нового решения. Изменённые в ожидании файлы блокируют допуск; свежая инспекция и явный
+`supersedes` заменяют ожидающее решение, не меняя старое. Применённое/постороннее решение
+заменить нельзя. Общие корни могут консервативно инвалидировать решение соседней ветви.
 
-Retry remains pending until the runtime re-observes operation roots and Git
-administration. The journal consumes the decision atomically with attempt N+1,
-its original history and admission event. An admitted attempt that crashes needs
-its own new resolution. Files changed while pending block execution before a new
-attempt; use a fresh inspection and explicit `supersedes` to replace that decision.
-The old decision stays immutable. Applied or unrelated decisions cannot be replaced.
-Broad shared roots can conservatively invalidate another branch's pending decision.
+Обе операции готовят **тот же** запуск как `interrupted`/`paused` и очищают текущую проекцию
+ошибки запуска, сохраняя события/данные попыток. Supervisor не запускается, пауза не
+снимается. После всех решений вызовите `run.resume`. Отменённые и завершённые/собранные
+результаты остаются запечатанными. В браузере «Решения о восстановлении» явно загружает
+участника/причину/доказательства, исходную/применённую попытки и замещение.
 
-Recording either action prepares the same run as interrupted or paused and clears
-its current run-level failure projection; original failure events and attempt data
-remain. It does not launch a supervisor or lift an existing pause. Resolve all
-necessary operations, then call `run.resume`. Ordinary resume of a failed run does
-not authorize uncertain writes. Cancellation and completed/collected results remain
-sealed. Browser **Решения о восстановлении** fetches receipts explicitly and shows
-the actor, reason, source/application attempts, supersession and raw evidence.
+<a id="git-recovery"></a>
+## Проверка и восстановление Git
 
-Managed Git acceptance verifies current ownership, repository, branch and HEAD.
-Worktrees must be clean and match a saved completed child result (or exact child
-root finish/end checkpoint). Integration requires a recorded original HEAD, clean
-named target branch descending from it, unchanged completed owned source worktrees,
-and every source HEAD included in the target ancestry. Git inspection disables
-optional locks so status does not refresh the index between content observations.
-It never commits or merges as part of an acceptance decision.
+`accept` проверяет владение/репозиторий/ветку/`head`. `worktree` должен быть чистым и
+соответствовать сохранённому завершённому `childResult` либо точной корневой точке
+`finish`/`end` ребёнка. Интеграция требует записанный `originalHead`, чистую именованную
+целевую ветку — потомок исходного `head`, неизменные завершённые собственные источники
+и включение каждого `head` источника в историю назначения. Инспекция Git отключает
+необязательные блокировки, чтобы `status` не обновлял индекс между чтениями хеша.
+`accept` сам не делает коммит/слияние.
 
-If completion already recorded a concrete head (`workspacePhase:"complete"` or
-integration progress `phase:"complete"`), recovery requires that exact head to
-remain current for both accept and retry. An additional commit cannot be adopted
-by re-inspecting files and attaching the old child result. A completed worktree
-must also remain clean for retry: new uncommitted content cannot enter a new parent
-commit underneath already completed child checkpoints. Rejection leaves those
-changes untouched. Earlier committing/merging observations still require inspection
-of the actual effect because the final head was not yet recorded.
+Если завершение уже записало конкретный `head` (`workspacePhase:"complete"` либо
+`phase` `complete` в прогрессе интеграции), **оба** `accept`/`retry` требуют тот же текущий
+`head`. Новый коммит нельзя принять свежей инспекцией со старым `childResult`. Завершённое
+дерево должно быть чистым и для `retry`: новые незафиксированные файлы не могут попасть
+в родительский коммит под старыми точками детей. Отказ оставляет файлы. Ранние наблюдения
+`committing`/`merging` требуют проверки фактического эффекта: конечный хеш ещё не записан.
 
-A verified existing worktree can retry allocation/commit gaps by reattaching and
-replaying completed children before ordinary commit admission. Integration retry
-checks a clean settled target and unchanged owned sources; earlier committed merges
-remain and normal Git admission handles the remaining work. No rollback is implied.
-Worktree failures before any allocation was recorded can retry normal allocation.
+Проверенное существующее дерево при повторе после аварийного окна выделения/коммита
+подключается заново и восстанавливает детей из записей до обычного допуска коммита.
+Повтор интеграции требует чистое законченное назначение и неизменные источники;
+ранние слияния остаются, обычный допуск Git обрабатывает остальные. Откат не обещается.
+Без записанного выделения повтор возможен обычным путём.
 
-Initial allocation recovery now handles intent-only, retained-branch and valid
-missing-registration states. It requires phase `allocating` with no admitted child
-activation. The exact run/key path, base commit, branch and every registration using
-that branch are checked. A branch at a different head, moved/locked registration,
-foreign path, unresolved Git operation or malformed registration fails inspection.
-A missing worktree after child checkpoints is not recreated beneath replayed outputs:
-those checkpoints do not prove the missing uncommitted files can be reconstructed.
+### Незавершённое первоначальное выделение
 
-After one-use retry admission, the runtime rechecks allocation ownership. If the
-exact registered path is missing, it copies that administrative directory, including
-its index, into the run's private `recovery/allocation-*` directory. It verifies that
-the source stayed unchanged, flushes archive files/directories and records the
-archive path and source digest before removing that one registration with
-`git worktree remove` without force. It then reuses the preserved branch; intent-only
-recovery creates the branch at the recorded base. No global prune, forced branch
-checkout, reset, or removal of an existing working directory is performed. Sibling
-registrations remain. A rejected pre-removal checkpoint prevents removal; a failure
-after removal retains the archive/branch and a fresh decision can recover the
-branch-only state. Existing valid worktrees reattach with their files preserved.
+Поддерживаются состояния «только намерение», «сохранённая ветка» и корректная регистрация
+с отсутствующим деревом: только `allocating` **без допущенных дочерних активаций**.
+Сверяются точные путь `run`/`key`, базовый коммит, ветка и все регистрации этой ветки.
+Иной `head`, перемещённая/заблокированная регистрация, чужой путь, незавершённая операция
+Git или повреждённая регистрация отвергаются. Пропавшее дерево после точек детей не
+воссоздаётся под старыми выходами: они не восстанавливают потерянные незакоммиченные файлы.
 
-Progress is recorded as `metadata.workspaceRecovery` and metadata events, including
-`registration-archived`, `removing-registration`, `registration-removed`,
-`creating-worktree` and `allocation-restored`. Starting another attempt archives and
-clears the old progress. The original failed attempt and each consumed decision
-remain independently inspectable.
+После допуска одноразового повтора владение проверяется снова. Если точный
+зарегистрированный путь отсутствует, административный каталог с индексом копируется
+в приватный `recovery/allocation-*`. Проверяется неизменность источника, файлы/каталоги
+сбрасываются на диск; путь архива/хеш источника записываются **до** удаления одной
+регистрации через git `worktree` remove без force. Затем используется сохранённая ветка;
+при одном намерении ветка создаётся от записанного `base`. Нет общей очистки prune,
+принудительного переключения, сброса или удаления существующего рабочего каталога.
+Соседние регистрации сохраняются. Отказ точки перед удалением запрещает удаление;
+ошибка после него оставляет архив/ветку, новое решение может восстановить состояние
+«только ветка». Подключение валидного `worktree` сохраняет файлы.
 
-## Browser decision form
+`metadata.workspaceRecovery` и события отражают `registration-archived`, `removing-registration`,
+`registration-removed`, `creating-worktree`, `allocation-restored`. Новая попытка архивирует
+и очищает прогресс; исходная ошибка и использованные решения остаются отдельно доступны.
+Повреждённая частичная регистрация не ремонтируется автоматически. Файлы, потерянные
+после дочерней работы, требуют явного ремонта артефакта и свежей инспекции.
+Интеграция использует **назначение автора**, не создаёт автоматически отдельный каталог.
+`evidence` участника не является машинно подтверждённым доказательством версии артефакта.
 
-Select a failed operation, request fresh inspection, then choose accepting a result
-or authorizing one retry. The form collects the actor, reason and observed evidence;
-accept additionally takes JSON output, checked against the same backend contract.
-An existing pending retry must be explicitly selected for replacement. The form
-keeps text, selection and focus across polls and keys drafts by run/activation/attempt.
-Drafts remain in page memory; reloading does not persist private form text.
+<a id="browser"></a>
+## Форма браузера
 
-Before delivery the form freezes the request and a generated decision ID. A failed
-response offers redelivery of those same bytes or explicit inspection/editing for
-a new decision. It never silently substitutes a fresh checkpoint into an old
-request. Receipts distinguish replaced decisions and pending/applied retries.
-Saving does not start a supervisor or lift pause; continuation is a separate control.
-The POST endpoint requires the local page origin, JSON content type and control
-header, uses the existing private URL/host guard, and limits browser request bodies
-to 1 MiB. The shared control/await/reconciliation body reader bounds raw bytes,
-decodes UTF-8 only after collecting all chunks, and rejects invalid encoding before
-dispatch. A Cyrillic character split between chunks cannot change the stored decision
-or break its identical redelivery. CLI/MCP remain available for direct structured requests.
+Выберите неудачную операцию → свежую инспекцию → `accept` или одноразовый `retry`.
+Нужны `actor`/`reason`/наблюдённое `evidence`; `accept` дополнительно принимает JSON `output`
+по тому же серверному контракту. Замещение ожидающего повтора выбирается явно.
+Текст/выделение/фокус сохраняются между опросами, черновик привязан к запуску/активации/
+попытке и живёт только в памяти страницы, не после полной перезагрузки.
 
-The named allocation/commit and multi-source integration boundaries are covered by
-the real supervisor crash matrix below. Still required: evidence-preserving handling
-of malformed partial registrations. Missing worktree
-files after admitted child work require explicit artifact repair and fresh inspection.
-Isolated integration workspaces and versioned artifact proofs remain separate
-requirements of the overall implementation plan.
+До отправки форма фиксирует запрос и сгенерированный ID решения. Ошибка ответа
+предлагает доставить **те же байты** либо заново инспектировать/редактировать для нового
+решения, не подменяет точку молча. Квитанции различают замещённые/ожидающие/применённые
+решения. Сохранение не запускает supervisor и не снимает паузу; `resume` — отдельное действие.
 
-## Real supervisor crash matrix
+POST требует происхождение локальной страницы, тип содержимого JSON, управляющий
+заголовок и существующую защиту приватного URL/Host; тело до 1 MiB. Общий обработчик
+control/`await`/`reconcile` ограничивает сырые байты, декодирует UTF-8 после сборки частей
+и отвергает неверную кодировку до вызова сервиса. Разрыв кириллического символа между
+частями не меняет решение и его повторную доставку. CLI/MCP остаются прямыми
+структурированными интерфейсами.
 
-`tests/git-recovery-crash.test.ts` launches the normal supervisor as a separate
-detached process with a test-only preload. The preload kills that supervisor with
-SIGKILL at the specified boundary; it does not manufacture a failed activation or
-add a production fault switch. Git commands and child checks are real, all repositories
-are temporary, and no model is invoked. Process death/empty groups are observed
-before any resolution. Ordinary resume is first shown to refuse implicit replay.
+<a id="tests"></a>
+## Регрессии и настоящие аварийные окна
 
-| Killed after | Durable observation | Actual Git state | Verified continuation |
+`tests/reconciliation.test.ts`, `tests/recovery-inspection.test.ts` и
+`tests/allocation-recovery.test.ts` проверяют принятие результата без вызова исполнителя,
+одноразовый повтор с расходом/историей, схемы и привязки ревью, устаревшую точку/
+изменившиеся файлы, одинаковую/конфликтующую доставку, живые процессы, паузу/отмену,
+запечатанные родительские/`collect` результаты и восстановление собственного дерева.
+
+`tests/git-recovery-crash.test.ts` запускает обычный отдельный supervisor с тестовой
+предзагрузкой, убивающей его SIGKILL в конкретной точке. Не подделывает `failed`-активацию
+и не добавляет переключатель сбоев в рабочую реализацию. Git/`check` реальные,
+репозитории временные, без модели. Перед решением проверяются смерть/пустые группы;
+обычное `resume` сначала отказывает неявному повтору.
+
+| После чего SIGKILL | Журнал | Реальный Git | Проверяемое восстановление |
 | --- | --- | --- | --- |
-| Allocation intent | Allocating, exact path/branch/base | No worktree yet | Retry restores allocation, child executes once |
-| `git worktree add` | Allocating, no admitted child | Worktree exists at base | Retry reattaches, child executes once |
-| `git add` | Committing, child result saved | Child changes staged, HEAD still base | Retry commits once without repeating the child |
-| `git commit` | Committing, final head not recorded | New commit already exists | Accept verifies real head/result without another commit |
-| Worktree completion metadata | Complete head saved, activation not completed | Clean committed worktree | Accept or explicit retry preserves the exact commit and child checkpoints |
-| First source merge | Merging first source | Only first source committed | Accept-all rejected; retry adds only the remaining merge |
-| Second source merge | Merging second source, final head not recorded | Both sources committed | Accept verifies both source ancestries and does not merge again |
-| Integration completion metadata | Complete head saved, activation not completed | Both sources committed | Accept or explicit retry preserves the exact head and completed children |
+| Намерение выделения | `allocating`, точные `path`/`branch`/`base` | Дерева ещё нет | `retry` выделяет дерево, ребёнок исполняется один раз |
+| git `worktree` add | `allocating`, без ребёнка | Дерево на `base` | `retry` подключается, ребёнок один раз |
+| git add | `committing`, `childResult` сохранён | Изменения в индексе, `head`=`base` | `retry` коммитит без повтора ребёнка |
+| git commit | `committing`, конечный хеш не записан | Коммит существует | `accept` проверяет хеш/результат без нового коммита |
+| Метаданные завершения `worktree` | `complete` `head`, активация не завершена | Чистое зафиксированное дерево | `accept`/`retry` сохраняют точный коммит и точки детей |
+| Первое слияние источника | `merging` первого | Зафиксирован только первый | Принятие всех отказано, `retry` добавляет оставшееся слияние |
+| Второе слияние источника | `merging` второго, без конечного хеша | Оба зафиксированы | `accept` проверяет происхождение без нового слияния |
+| Метаданные завершения интеграции | `complete` `head`, активация не завершена | Оба зафиксированы | `accept`/`retry` сохраняют точный `head` и детей |
 
-The two complete-head boundaries also inject an extra commit and verify that both
-actions reject it without rewriting Git or recording a decision. The fixture retains
-that extra commit under a separate reference before its explicit repair. A dirty
-completed worktree similarly refuses retry while preserving the added file.
-
-Ten scenarios verify original attempt/operation archival, one-use decisions,
-unchanged child invocation counts and actual Git commit counts. A partially merged
-retry records the head at the start of its own attempt as `originalHead`/output base;
-the interrupted attempt keeps the earlier original head in history. It does not
-claim earlier merges were rolled back or performed again.
+Обе границы записанного конечного хеша дополнительно получают чужой коммит:
+`accept`/`retry` должны отказать без переписывания Git/записи решения. Проверочный сценарий
+сохраняет этот коммит отдельной ссылкой до явного ремонта. Грязное завершённое дерево
+также отказывает повтору, сохраняя файл. Десять сценариев проверяют архив, одноразовые
+решения, неизменное число дочерних вызовов и реальных коммитов. Повтор частичного слияния
+записывает `head` начала **своей** попытки как `originalHead`/`base` выхода; старый `originalHead`
+остаётся в архиве `interrupted`. Это не утверждение отката или повторного выполнения ранних слияний.
