@@ -1146,11 +1146,13 @@ function renderNow() {
     const submit = button(draft.busy ? "Сохраняем…" : "Сохранить ответ", async () => {
       if (draft.busy || state.id !== selectedRun || !state.run || waitResponseBlocker(state.run) ||
           !state.run.waits?.some(current => current.id === wait.id && current.status === "open")) return;
+      const selection = state.runSelection;
+      const current = () => state.id === selectedRun && state.runSelection === selection;
       draft.busy = true; draft.error = null; submit.disabled = true;
       try {
         const response = JSON.parse(draft.text);
-        await api("resolve", { method: "POST", headers: { "Content-Type": "application/json", "X-Dynamicwf-View": "1" }, body: JSON.stringify({ id: selectedRun, waitId: wait.id, response }) });
-        await refreshSnapshot();
+        await api("resolve", { method: "POST", headers: { "Content-Type": "application/json", "X-Dynamicwf-View": "1" }, body: JSON.stringify({ id: selectedRun, waitId: wait.id, response }) }, current);
+        if (current()) await refreshSnapshot();
       } catch (error) { draft.error = error.message; }
       finally { draft.busy = false; if (state.id === selectedRun && state.tab === "now") renderPanel(); }
     }, "child-button");

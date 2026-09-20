@@ -201,6 +201,69 @@ test("a retained answer handler cannot send after its wait becomes unavailable",
     snapshot({}, [{ ...waiting("correctness"), status: "resolved" }])] });
 });
 
+test("a delayed wait response cannot reload another visit or trigger its snapshot request", async () => {
+  for (const mode of ["success", "decoding", "401", "failure"]) for (const returnToSource of [false, true]) await replay(`
+    let finish, fail, decode, bodyStarted, reloads = 0;
+    const requests = [], decoding = new Promise(resolve => { bodyStarted = resolve; });
+    window.location = { reload() { reloads++; } };
+    globalThis.fetch = (path, options) => {
+      requests.push({ path, body: options?.body });
+      if (path === 'resolve') return new Promise((resolve, reject) => { finish = resolve; fail = reject; });
+      return Promise.resolve({ok:true,status:200,json:async()=>path.endsWith(other.id) ? other : base});
+    };
+    renderPanel(); fields()[0].value = '{"answer":"original"}'; fields()[0].dispatchEvent(new Event('input'));
+    const sending = buttons().find(button => button.textContent === 'Сохранить ответ').listeners.get('click')[0](new Event('click'));
+    if (mode === 'decoding') {
+      finish({ok:true,status:200,json:()=>new Promise(resolve=>{decode=resolve;bodyStarted();})});
+      await decoding;
+    }
+    await selectRun(other.id, 'none');
+    if (returnToSource) await selectRun(base.id, 'none');
+    fields()[0].value = 'CURRENT_DRAFT'; fields()[0].dispatchEvent(new Event('input'));
+    notice('CURRENT_MESSAGE'); const beforeReply = requests.length;
+    if (mode === 'failure') fail(new Error('ANSWER_NETWORK_FAILURE'));
+    else if (mode === '401') finish({ok:false,status:401});
+    else if (mode === 'decoding') decode({});
+    else finish({ok:true,status:200,json:async()=>({})});
+    await sending;
+    assert.equal(state.id, returnToSource ? base.id : other.id);
+    assert.equal(reloads, 0);
+    assert.equal(requests.length, beforeReply, 'old submission must not start a read for the current visit');
+    assert.equal(fields()[0].value, 'CURRENT_DRAFT');
+    assert.equal($('notice').textContent, 'CURRENT_MESSAGE');
+    const posts = requests.filter(request => request.path === 'resolve');
+    assert.equal(posts.length, 1); assert.equal(JSON.parse(posts[0].body).id, base.id);
+    assert.equal(JSON.parse(posts[0].body).response.answer, 'original');
+    assert.equal(waitDrafts.get(base.waits[0].id).busy, false);
+  `, { mode, returnToSource, other: snapshot({id:'run-other'}, [{...waiting('other'),runId:'run-other'}]) });
+});
+
+test("a current wait response still refreshes its state and a current 401 still reconnects", async () => {
+  for (const mode of ["success", "401", "failure"]) await replay(`
+    let reloads = 0; const requests = [];
+    window.location = {reload(){reloads++;}};
+    globalThis.fetch = async (path, options) => {
+      requests.push({path,body:options?.body});
+      if (path === 'resolve') {
+        if (mode === '401') return {ok:false,status:401};
+        if (mode === 'failure') throw Error('CURRENT_ANSWER_FAILURE');
+        return {ok:true,status:200,json:async()=>({})};
+      }
+      return {ok:true,status:200,json:async()=>resolved};
+    };
+    renderPanel(); fields()[0].value = '{"answer":"current"}'; fields()[0].dispatchEvent(new Event('input'));
+    await buttons().find(button=>button.textContent==='Сохранить ответ').listeners.get('click')[0](new Event('click'));
+    assert.equal(reloads, mode === '401' ? 1 : 0);
+    assert.equal(requests.length, mode === 'success' ? 2 : 1);
+    if (mode === 'success') { assert.equal(fields().length,0); assert.equal(state.run.waits[0].status,'resolved'); }
+    else {
+      assert.equal(fields()[0].value,'{"answer":"current"}');
+      assert.match($('content-panel').textContent,mode==='401' ? /Восстанавливаем подключение/ : /CURRENT_ANSWER_FAILURE/);
+    }
+    assert.equal(waitDrafts.get(base.waits[0].id).busy,false);
+  `, { mode, resolved: snapshot({}, [{...waiting('correctness'),status:'resolved',response:{answer:'current'},resolvedAt:3}]) });
+});
+
 test("changing runs closes cancellation and an old confirmation cannot cancel the newly selected run", async () => {
   await replay(`
     const mutations = [];
