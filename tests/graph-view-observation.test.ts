@@ -256,6 +256,89 @@ test("a delayed control reply or failure cannot replace the next run's feedback"
   `, { other: snapshot({id:'run-other'}, []), failure });
 });
 
+test("a control follow-up list cannot update another run after a delayed result, failure or 401", async () => {
+  for (const mode of ["success", "decoding", "failure", "401"]) await replay(`
+    let finishList, rejectList, finishBody, startedList, reloads = 0;
+    const listStarted = new Promise(resolve => { startedList = resolve; });
+    const mutations = [];
+    window.location = {reload(){ reloads++; }};
+    globalThis.fetch = (path, options) => {
+      if (path === 'control') {
+        mutations.push(JSON.parse(options.body));
+        return Promise.resolve({ok:true,status:200,json:async()=>({})});
+      }
+      if (path === 'runs') {
+        startedList();
+        return new Promise((resolve,reject)=>{finishList=resolve;rejectList=reject;});
+      }
+      return Promise.resolve({ok:true,status:200,json:async()=>path.endsWith(other.id) ? other : base});
+    };
+    const command = control('pause'); await listStarted;
+    if (mode === 'decoding') {
+      finishList({ok:true,status:200,json:()=>new Promise(resolve=>{finishBody=resolve;})});
+      await Promise.resolve(); await Promise.resolve();
+      assert.equal(typeof finishBody,'function');
+    }
+    await selectRun(other.id,'none');
+    state.runs = [other]; state.listSignature = 'CURRENT_RUN_LIST';
+    state.controlError = 'CURRENT_RUN_MESSAGE'; notice(state.controlError);
+    if (mode === 'failure') rejectList(new Error('PREVIOUS_CONTROL_LIST_FAILURE'));
+    else if (mode === '401') finishList({ok:false,status:401});
+    else if (mode === 'decoding') finishBody({runs:[base]});
+    else finishList({ok:true,status:200,json:async()=>({runs:[base]})});
+    await command;
+    assert.equal(state.id,other.id,mode);
+    assert.equal(state.runs.length,1,mode); assert.equal(state.runs[0].id,other.id,mode);
+    assert.equal(state.listSignature,'CURRENT_RUN_LIST',mode);
+    assert.equal(state.controlError,'CURRENT_RUN_MESSAGE',mode);
+    assert.equal($('notice').textContent,'CURRENT_RUN_MESSAGE',mode);
+    assert.equal($('connection').textContent,'● Данные обновляются',mode);
+    assert.equal(reloads,0,mode); assert.equal(state.busy,false,mode);
+    assert.equal(mutations.length,1,mode); assert.equal(mutations[0].id,base.id,mode);
+  `, { other: snapshot({id:'run-other'}, []), mode });
+});
+
+test("a control follow-up list stays stale after returning to the same run during JSON decoding", async () => {
+  await replay(`
+    let finishBody, startedBody;
+    const bodyStarted = new Promise(resolve=>{startedBody=resolve;});
+    const mutations = [];
+    globalThis.fetch = (path,options) => {
+      if (path === 'control') {
+        mutations.push(JSON.parse(options.body));
+        return Promise.resolve({ok:true,status:200,json:async()=>({})});
+      }
+      if (path === 'runs') return Promise.resolve({ok:true,status:200,json:()=>new Promise(resolve=>{finishBody=resolve;startedBody();})});
+      return Promise.resolve({ok:true,status:200,json:async()=>path.endsWith(other.id) ? other : base});
+    };
+    const command = control('pause'); await bodyStarted;
+    await selectRun(other.id,'none'); await selectRun(base.id,'none');
+    state.runs = [base]; state.listSignature = 'LATEST_VISIT_LIST';
+    state.controlError = 'LATEST_VISIT_MESSAGE'; notice(state.controlError);
+    finishBody({runs:[other]}); await command;
+    assert.equal(state.id,base.id);
+    assert.equal(state.runs.length,1); assert.equal(state.runs[0].id,base.id);
+    assert.equal(state.listSignature,'LATEST_VISIT_LIST');
+    assert.equal($('notice').textContent,'LATEST_VISIT_MESSAGE');
+    assert.equal(mutations.length,1); assert.equal(mutations[0].id,base.id);
+  `, { other: snapshot({id:'run-other'}, []) });
+});
+
+test("an unscoped list refresh still updates the list and handles a current 401", async () => {
+  await replay(`
+    let reloads = 0;
+    window.location = {reload(){reloads++;}};
+    globalThis.fetch = async () => ({ok:true,status:200,json:async()=>({runs:[other]})});
+    await refreshRuns();
+    assert.equal(state.runs.length,1); assert.equal(state.runs[0].id,other.id);
+    assert.equal(state.id,base.id);
+    globalThis.fetch = async () => ({ok:false,status:401});
+    await refreshRuns();
+    assert.equal(reloads,1);
+    assert.match($('notice').textContent,/Восстанавливаем подключение/);
+  `, { other: snapshot({id:'run-other'}, []) });
+});
+
 test("identical wait questions retain visible scope/ID and independent drafts across reordered snapshots", async () => {
   const waits = [waiting("correctness"), waiting("security")];
   waits[0]!.reason = '<img src=x onerror="boom"> Нужны данные';

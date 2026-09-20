@@ -1464,9 +1464,10 @@ async function refreshSnapshot() {
     }
   }
 }
-async function refreshRuns() {
+async function refreshRuns(isCurrent = () => true) {
   try {
-    const data = await api("runs");
+    const data = await api("runs", undefined, isCurrent);
+    if (!isCurrent()) return;
     state.runs = data.runs;
     const signature = JSON.stringify({ ...data, runs: data.runs.map(run => ({ ...run,
       presentation: { ...run.presentation, liveness: { ...run.presentation.liveness, observedAt: null } },
@@ -1487,6 +1488,7 @@ async function refreshRuns() {
       $("connection").textContent = "● Подключено";
     }
   } catch (error) {
+    if (!isCurrent()) return;
     notice(error.message);
     $("connection").textContent = "Нет связи";
   }
@@ -1508,7 +1510,7 @@ async function control(command) {
     notice(null);
     await refreshSnapshot();
     if (!current()) return;
-    await refreshRuns();
+    await refreshRuns(current);
   } catch (error) {
     if (current()) {
       state.controlError = error.message;
