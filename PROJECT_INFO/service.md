@@ -94,7 +94,7 @@ npm run --silent cli -- run.status --store /path/to/state.sqlite <<<'{"id":"run-
 | `run.pause` | `id` | Состояние после запроса паузы |
 | `run.resume` | `id` | Состояние после запроса продолжения |
 | `run.cancel` | `id` | Состояние после запроса отмены |
-| `preset.save` | `id`, `name`, `scope?`, `cwd?` | Пресет неизменного плана принятого успешного запуска |
+| `preset.save` | `id`, `name`, `scope?`, `cwd?` | Пресет неизменного плана принятого успешного запуска без узлов `reuse` |
 | `preset.list` | `scope?`, `cwd?` | Библиотеки `project`/`global` с приоритетом проектного имени |
 | `preset.inspect` | `name`, `scope?`, `revision?`, `cwd?` | Именованная либо выбранная по хешу версия с полным планом |
 | `preset.run` | `name`, `scope?`, `revision?`, `cwd?`, `input?` | Новый запуск, новые сессии, без повторного использования старых выходов |

@@ -79,6 +79,26 @@ test("preset save preserves an existing first timestamp", async () => {
   });
 });
 
+test("historical reuse presets stay readable but cannot silently replay old results", async () => {
+  await fixture(async (directory, store, library) => {
+    const value: WorkflowDefinition = { ...workflow, graphs: {
+      main: { entry: "prior", nodes: [
+        { id: "prior", kind: "reuse", bindingId: "previous", outputSchema: { type: "object" } },
+        workflow.graphs.main!.nodes[0]!,
+      ], edges: [{ from: "prior", to: "done" }] },
+    } };
+    const plan = await prepareExecutionPlan(value, { cwd: directory });
+    // Имитируем уже существующий файл старой версии библиотеки, а не новый save.
+    const legacy = await putPreset(library, "legacy", plan, 100);
+    const path = join(library.root, "legacy", `${plan.hash}.json`);
+    const original = await readFile(path, "utf8");
+    assert.deepEqual(await library.read("legacy"), legacy);
+    assert.deepEqual(await library.list(), [legacy]);
+    assert.throws(() => store.create({ id: "replay", plan, cwd: directory, input: null }), /continuation receipt/);
+    assert.equal(await readFile(path, "utf8"), original);
+  });
+});
+
 test("preset latest follows savedAt then revision regardless of insertion order", async () => {
   await fixture(async (directory) => {
     const plans = await Promise.all([1, 2, 3].map(revision =>

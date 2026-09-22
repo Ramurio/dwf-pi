@@ -83,6 +83,33 @@ test("ordinary start creates a task; unlinked historical rows stay unlinked", as
   } finally { other.close(); }
 }));
 
+test("accepted continuation with reuse cannot be saved as a standalone preset", { timeout: 30_000 }, async () => fixture(async (s, c, directory) => {
+  await author(s, "source", [planNode, done]);
+  const prepared = await s.dispatch("workflow.prepare", { id: "source" }) as PreparedExecution;
+  const source = await s.dispatch("run.start", { preparedId: prepared.preparedId, idempotencyKey: "preset-source", input: null }) as { id: string };
+  await wait(c, source.id, "succeeded");
+  const inspected = await s.dispatch("run.continuation.inspect", { id: source.id }) as {
+    checkpoint: string; planHash: string; workspace: { digest: string }; blockers: unknown[];
+  };
+  assert.deepEqual(inspected.blockers, []);
+  await author(s, "reuse-preset", [reuseNode, { id: "done", kind: "finish", decision: "accepted",
+    reason: { op: "literal", value: "Проверочный результат принят" }, evidence: { op: "literal", value: [] },
+    value: { op: "ref", path: ["nodes", "prior"] } }]);
+  const next = await s.dispatch("workflow.prepare", { id: "reuse-preset" }) as PreparedExecution;
+  const continued = await s.dispatch("run.continue", {
+    preparedId: next.preparedId, idempotencyKey: "preset-continuation", input: null,
+    source: { runId: source.id, checkpoint: inspected.checkpoint, planHash: inspected.planHash },
+    workspaceDigest: inspected.workspace.digest, actor: "tester", reason: "Проверка повторного использования", evidence: ["Исходный выход проверен"],
+    reuse: [{ bindingId: "planner", sourceRunId: source.id, attempt: 1,
+      activationKey: activationKey({ scope: ["graph", "main"], graphId: "main", nodeId: "plan", visit: 0 }) }],
+  }) as { id: string };
+  const finished = await wait(c, continued.id, "succeeded");
+  assert.equal(finished.taskOutcome?.decision, "accepted");
+  await assert.rejects(s.dispatch("preset.save", { id: continued.id, name: "unusable", scope: "global" }), /reuse.*run\.continue/);
+  await assert.rejects(readFile(join(directory, "presets", "unusable", `${finished.plan.hash}.json`)), { code: "ENOENT" });
+  assert.equal(c.store.receiptForTarget(continued.id)?.reused.length, 1);
+}));
+
 test("continue reuses a succeeded planner output, does not replay the writer, and reports the new run id", { timeout: 30_000 }, async () => fixture(async (s, c, directory) => {
   await author(s, "original", [planNode, writeFail, { id: "done", kind: "end", value: { op: "ref", path: ["nodes", "plan"] } }]);
   const originalPrepared = await s.dispatch("workflow.prepare", { id: "original" }) as PreparedExecution;

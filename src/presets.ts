@@ -5,6 +5,7 @@ import { verifyExecutionPlan } from "./execution-plan.js";
 import type { ExecutionPlan } from "./execution-types.js";
 import type { RunRecord } from "./run-store.js";
 import { legacyOutcome } from "./task-outcome.js";
+import { planHasReuse } from "./lineage.js";
 
 export interface PresetRecord {
   version: 1;
@@ -54,6 +55,7 @@ export class PresetLibrary {
     if (run.status !== "succeeded") throw new Error("Only a successful run can be saved as a tested preset");
     if ((run.taskOutcome ?? legacyOutcome(run.output ?? null)).decision !== "accepted") throw new Error("Only an accepted task outcome can be saved as a tested preset");
     const plan = verifyExecutionPlan(run.plan);
+    if (planHasReuse(plan.workflow)) throw new Error("План с reuse нельзя сохранить как самостоятельный пресет: ему нужны подтверждённые результаты исходного запуска. Используйте run.continue либо создайте и проверьте граф без reuse.");
     const record: PresetRecord = { version: 1, name, revision: plan.hash, savedAt: Date.now(), plan };
     await this.directory(this.root, true);
     const directory = join(this.root, name);
