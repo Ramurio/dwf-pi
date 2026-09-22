@@ -21,7 +21,7 @@ const check = (value, message) => { if (!value) throw new Error(message); };
 const descendants = node => Array.from(node.children).flatMap(child => [child, ...descendants(child)]);
 const clicks = (node, text) => descendants(node).find(n => n.tagName.toLowerCase() === 'button' && n.textContent === text).click();
 const scopes = ['A', 'B'].map(branch => [{ graphId: 'main', nodeId: 'fan', branch }]);
-const records = scopes.map((scope, i) => ({ context: { graphId: 'main', scope, visit: 0 }, attempt: 1, at: 0,
+const records = scopes.map((scope, i) => ({ runId: 'fixture', context: { graphId: 'main', scope, visit: 0 }, attempt: 1, at: 0,
   decision: { from: 'route', to: 'end', edgeIndex: 0, reason: 'condition', evaluations: [{ edgeIndex: 0, to: 'end', result: i ? 'fallback' : 'true' }] } }));
 const nodes = ['route', 'end'].map(id => ({ id, kind: 'branch', status: 'succeeded', branches: 2, children: [],
   activations: scopes.map((scope, i) => ({ key: id + i, scope: JSON.stringify(scope), path: 'branch ' + i + ' / ' + id,
@@ -63,6 +63,69 @@ check(!$('inspector').textContent.includes('historical-operand'), 'invented oper
 document.body.setAttribute('data-replay', 'passed');
 `;
 
+const navigationReplay = `
+const originalFetch = globalThis.fetch;
+const runA = state.run;
+const runB = { ...runA, id: 'fixture-B', name: 'B', status: 'succeeded', desired: 'running', createdAt: 0, updatedAt: 1,
+ usage: { totalTokens: 0, input: 0, output: 0, reported: 0, partial: false }, activeKeys: [],
+ presentation: { statusLabel: 'Завершён', liveness: { label: 'Процессы завершены' } },
+ graphs: runA.graphs.map(g => ({ ...g, edges: [...g.edges, { from: 'route', to: 'end', conditional: false }] })) };
+const traceB = { ...records[0], runId: runB.id, decision: { from: 'route', to: 'end', edgeIndex: 1, reason: 'fallback',
+ evaluations: [{ edgeIndex: 0, to: 'end', result: 'false' }, { edgeIndex: 1, to: 'end', result: 'fallback' }] } };
+Object.assign(tracePages.get(runB.id), { opened: true, reports: [traceB], cursor: 2 });
+Object.assign(usagePages.get(runB.id), { opened: true, reports: [{ key: 'route0', runId: runB.id, reportId: 'B', attempt: 1,
+ usage: { totalTokens: 3, input: 1, output: 2 }, stopReason: 'stop' }] });
+globalThis.fetch = async path => {
+ check(path === 'snapshot?id=fixture-B', 'unexpected request ' + path);
+ return { ok: true, status: 200, json: async () => runB };
+};
+try {
+ choose(0);
+ await selectRun(runB.id, 'none');
+ check(state.id === runB.id, 'run B not selected');
+ check(state.transition === null, 'run selection retained trace A before activation navigation');
+ setTab('tokens'); clicks($('content-panel'), 'Открыть route · fixture-B'); setTab('graph');
+ selected(false); check(state.transition === null, 'run/usage navigation retained trace A');
+ // Both render guards must reject stale trace even if navigation state was injected.
+ state.transition = records[0]; renderPanel(); selected(false);
+ state.transition = null;
+ setTab('trace'); clicks($('content-panel'), 'Показать источник на графе'); selected(true);
+ const chosenPath = descendants($('graph')).find(n => (n.getAttribute('class') || '').split(' ').includes('trace-selected'));
+ check(chosenPath.getAttribute('data-edge-index') === '1', 'B did not select its own fallback edge');
+ check($('inspector').textContent.includes('Выбран запасной переход'), 'own B decision missing');
+ renderPanel(); selected(true); check(state.transition === traceB, 'same-run redraw discarded own trace');
+ await selectRun(runB.id, 'none'); selected(true);
+ setTab('tokens'); clicks($('content-panel'), 'Открыть route · fixture-B'); setTab('graph');
+ selected(false); check(state.transition === null, 'same-run usage activation retained trace selection');
+} finally { globalThis.fetch = originalFetch; }
+`;
+
+const historyReplay = `
+const outcomes = [
+ ['rejected', 'rejected: Критерий C1 нарушен'], ['accepted', 'accepted: Проверка C2 завершена'],
+ ['inconclusive', 'inconclusive: Требуется C3'], ['review', 'request_changes: Уточнить C4'],
+ ['command', 'exit 2'], ['failure', '', 'Технический сбой'],
+];
+state.run.graphs = [{ id: 'main', entry: 'rejected', edges: [], nodes: outcomes.map(([id, result, error]) => ({
+ id, kind: ['rejected', 'accepted', 'inconclusive'].includes(id) ? 'finish' : 'check', status: error ? 'failed' : 'succeeded', children: [], branches: 1,
+ activations: [{ key: id, status: error ? 'failed' : 'succeeded', result, error, scope: '[]', path: id,
+ attempt: 1, startedAt: 0, finishedAt: 1, findings: [] }],
+})) }];
+state.graph = 'main'; state.node = null; state.scope = ''; state.transition = null;
+setTab('history');
+const rows = () => descendants($('content-panel')).filter(n => n.className === 'task-row');
+check(rows().length === outcomes.length, 'all-history lost a result');
+const filter = descendants($('content-panel')).find(n => n.getAttribute('aria-label') === 'Фильтр истории');
+filter.value = 'issues'; filter.dispatchEvent(new Event('change'));
+const shown = rows().map(n => n.textContent).join(' ');
+check(shown.includes('rejected: Критерий C1 нарушен'), 'explicit rejected disappeared from issues');
+check(!shown.includes('accepted: Проверка C2 завершена'), 'accepted was incorrectly included in issues');
+for (const text of ['inconclusive:', 'request_changes:', 'exit 2', 'Технический сбой']) check(shown.includes(text), 'existing issue disappeared: ' + text);
+const back = descendants($('content-panel')).find(n => n.getAttribute('aria-label') === 'Фильтр истории');
+back.value = 'all'; back.dispatchEvent(new Event('change'));
+check(rows().length === outcomes.length, 'accepted cannot be restored in full history');
+`;
+
 // Small deterministic DOM adapter; no UI function is mocked. A real browser replay below
 // runs the identical scenario against index.html and native events when Chrome is installed.
 class Element {
@@ -86,7 +149,9 @@ class Element {
   getBoundingClientRect() { return { width: 900, height: 600 }; }
 }
 
-test("app.js DOM replay: trace → scope, graph, all branches, node and redraw", () => {
+for (const [scenario, extra] of [["trace A → run B → usage B", navigationReplay], ["issues сохраняет explicit rejected", historyReplay]]) {
+const scenarioReplay = replay + extra;
+test(`app.js DOM replay: ${scenario}`, async () => {
   const elements = new Map<string, Element>();
   const document = {
     body: new Element("body"), activeElement: null,
@@ -95,7 +160,7 @@ test("app.js DOM replay: trace → scope, graph, all branches, node and redraw",
     createElementNS: (_ns: string, tag: string) => new Element(tag),
     querySelectorAll: () => [],
   };
-  runInNewContext(app.replace(/^import[\s\S]*?from "[^"\n]+";\n/gm, "") + replay, {
+  await runInNewContext(app.replace(/^import[\s\S]*?from "[^"\n]+";\n/gm, "") + `(async () => { ${scenarioReplay} })()`, {
     ...pages, ...taskScope, layoutGraph, document, Event,
     window: { addEventListener() {} }, ResizeObserver: class { observe() {} },
     fetch() { throw new Error("Unexpected network request"); },
@@ -104,7 +169,7 @@ test("app.js DOM replay: trace → scope, graph, all branches, node and redraw",
 });
 
 const chrome = [process.env.CHROME_BIN, "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "/usr/bin/chromium", "/usr/bin/google-chrome"].find(p => p && existsSync(p));
-test("local Chrome fixture QA: native dropdown events and SVG/inspector rendering", { skip: !chrome, timeout: 30000 }, async () => {
+test(`local Chrome fixture QA: ${scenario}`, { skip: !chrome, timeout: 30000 }, async () => {
   let resolveResult!: (value: string) => void;
   let rejectResult!: (error: Error) => void;
   const promise = new Promise<string>((resolve, reject) => { resolveResult = resolve; rejectResult = reject; });
@@ -135,7 +200,7 @@ test("local Chrome fixture QA: native dropdown events and SVG/inspector renderin
       </script><script type="module"`));
       return;
     }
-    res.end(name === "app.js" ? app + `\ntry { ${replay} } catch (error) { document.body.setAttribute('data-replay', String(error.stack)); }
+    res.end(name === "app.js" ? app + `\ntry { ${scenarioReplay} } catch (error) { document.body.setAttribute('data-replay', String(error.stack)); }
 await fetch('/replay-result', { method: 'POST', body: document.body.getAttribute('data-replay') });` : readFileSync(new URL(name, root)));
   });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -187,3 +252,5 @@ await fetch('/replay-result', { method: 'POST', body: document.body.getAttribute
     rmSync(profile, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   }
 });
+
+}

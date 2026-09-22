@@ -339,6 +339,7 @@ async function openActivation(activation) {
   if (!target.runId) return;
   if (target.runId !== state.id) await selectRun(target.runId);
   if (state.id !== target.runId || !state.run) return;
+  state.transition = null;
   if (target.graphId) state.graph = target.graphId;
   if (target.nodeId) state.node = target.nodeId;
   state.scope = target.scope;
@@ -621,7 +622,7 @@ function renderInspector() {
   const outgoing = selectedGraph().edges.filter((e) => e.from === node.id);
   if (node.retryPolicy) aside.append(el("p", "notice", `Повторы по политике: ${node.retryPolicy.codes.join(", ")} · задержка ${number(node.retryPolicy.delayMs)} мс · ${node.retryPolicy.maxAttempts === undefined ? "без лимита попыток" : `всего попыток до ${node.retryPolicy.maxAttempts}`}. Допускаются только подтверждённые not-started / read-only ошибки.`));
   if (node.retryPolicy?.provider) aside.append(el("p","muted",`Ошибки провайдера: ${node.retryPolicy.provider.statuses ? `только HTTP ${node.retryPolicy.provider.statuses.join(", ")}; без HTTP-статуса повтор не допускается` : "без фильтра HTTP-статусов"}. Retry-After: ${node.retryPolicy.provider.retryAfter === "honor" ? "учитывается как минимальная задержка" : "не изменяет задержку политики"}.`));
-  if (state.transition?.context.graphId === state.graph && state.transition.decision.from === node.id && JSON.stringify(state.transition.context.scope) === state.scope) {
+  if (state.transition?.runId === state.id && state.transition.context.graphId === state.graph && state.transition.decision.from === node.id && JSON.stringify(state.transition.context.scope) === state.scope) {
     aside.append(el("h3", "", "ВЫБРАННЫЙ ПЕРЕХОД"), transitionDetails(state.transition));
   }
   if (outgoing.length) {
@@ -1048,7 +1049,7 @@ function renderGraph() {
     // A small background stroke makes a crossing distinguishable from a junction.
     svg.append(svgEl("path", { class: "edge-underlay", d: edge.path }));
     const path = svgEl("path", {
-      class: `edge${edge.loop ? " loop" : ""}${traversalCount ? " traversed" : ""}${state.transition?.context.graphId === state.graph && JSON.stringify(state.transition.context.scope) === state.scope && state.transition.decision.edgeIndex === edge.index ? " trace-selected" : ""}`,
+      class: `edge${edge.loop ? " loop" : ""}${traversalCount ? " traversed" : ""}${state.transition?.runId === state.id && state.transition.context.graphId === state.graph && JSON.stringify(state.transition.context.scope) === state.scope && state.transition.decision.edgeIndex === edge.index ? " trace-selected" : ""}`,
       d: edge.path,
       "data-edge-index": edge.index,
       "marker-end": `url(#${edge.loop ? "loop-arrow" : "arrow"})`,
@@ -1342,7 +1343,7 @@ function renderHistory() {
         (state.filter === "issues" &&
           (a.error ||
             Number(a.collectionSummary?.failed) > 0 ||
-            /request_changes|inconclusive|exit [1-9]|не принят/.test(
+            /request_changes|rejected|inconclusive|exit [1-9]|не принят/.test(
               a.result ?? "",
             ))),
     );

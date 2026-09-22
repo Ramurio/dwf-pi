@@ -15,6 +15,7 @@
  *   graph: string | null,
  *   scope: string,
  *   node: string | null,
+ *   transition?: unknown,
  *   signature: string,
  *   filter: string,
  *   controlError: string | null,
@@ -50,6 +51,7 @@ export function beginRunSelection(state, id) {
   state.graph = null;
   state.scope = "";
   state.node = null;
+  state.transition = null;
   state.signature = "";
   state.filter = "all";
   state.controlError = null;
