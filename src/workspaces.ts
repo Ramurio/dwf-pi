@@ -308,7 +308,7 @@ export class GitWorkspaces {
     const override = Object.keys(process.env).find(name => unsafeGitEnvironment.test(name));
     if (override) throw new Error(`Git environment override is unsupported for managed workspaces: ${override}. Unset it before launching the workflow.`);
     return withProcessCleanup(async () => {
-      const result = await runCheckProcess("git", ["--no-optional-locks", ...gitConfiguration, ...args], cwd, options) as { exitCode: number; stdout: string; stderr: string };
+      const result = await runCheckProcess("git", ["--no-replace-objects", "--no-optional-locks", ...gitConfiguration, ...args], cwd, options) as { exitCode: number; stdout: string; stderr: string };
       if (!expected.includes(result.exitCode)) throw new Error(`git ${args[0]} failed (${result.exitCode}): ${result.stderr.trim() || result.stdout.trim()}`);
       return result;
     }, () => options.onFinished?.());

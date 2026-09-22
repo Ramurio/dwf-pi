@@ -465,6 +465,33 @@ test("guard rejects A to B drift, clean external B, and accepts A including no-o
   } finally { await rm(f.directory, { recursive: true, force: true }); }
 });
 
+for (const mode of ["commit", "recovery"] as const) test(`tree guard ignores replacement objects (${mode})`, async () => {
+  const f = await fixture();
+  try {
+    const manager = new GitWorkspaces("run-replaced", join(f.directory, "run"));
+    const a = await manager.allocate(f.repo, "candidate", undefined);
+    await writeFile(join(a.path, "base.txt"), "A\n"); git(a.path, "add", ".");
+    const expectedTree = git(a.path, "write-tree");
+    const replacement = git(a.path, "commit-tree", expectedTree, "-p", a.base, "-m", "Approved tree A");
+    await writeFile(join(a.path, "base.txt"), "B\n"); git(a.path, "add", "."); git(a.path, "commit", "-m", "Unapproved B");
+    const original = git(a.path, "rev-parse", "HEAD");
+    git(a.path, "replace", original, replacement);
+    // Git по умолчанию теперь считает A содержимым коммита B; настоящий объект B не менялся.
+    git(a.path, "read-tree", "--reset", "-u", "HEAD");
+    assert.equal(git(a.path, "status", "--porcelain"), "");
+    assert.equal(git(a.path, "rev-parse", `${original}^{tree}`), expectedTree);
+    assert.notEqual(git(a.path, "--no-replace-objects", "rev-parse", `${original}^{tree}`), expectedTree);
+    if (mode === "recovery") {
+      await assert.rejects(manager.inspectWorktree(f.repo, "candidate", { ...a }, true, expectedTree), /clean|dirty|mismatch/i);
+    } else {
+      const result = await manager.commit(a, { expectedTree });
+      assert.equal(git(a.path, "--no-replace-objects", "rev-parse", `${result.head}^{tree}`), expectedTree);
+      assert.notEqual(result.head, original);
+    }
+    assert.equal(await readFile(join(a.path, "base.txt"), "utf8"), "A\n");
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
 test("postcheck rejects committed index drift and checks the captured head OID", async () => {
   for (const mode of ["index", "head"] as const) {
     const f = await fixture();
