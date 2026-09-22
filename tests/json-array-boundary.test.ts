@@ -45,6 +45,31 @@ test("output schema JSON data rejects compensated holes", () => {
   assert.throws(() => createOutputValidator({ ...defaultOutputSchema, examples: [{ result: compensated("extra") }] }), /sparse or extended array/);
 });
 
+for (const kind of ["subclass", "custom prototype"]) test(`output rejects ${kind} before inherited schema traversal`, () => {
+  let calls = 0;
+  const inheritedForEach = () => { calls++; throw new Error("inherited forEach executed"); };
+  class SchemaArray extends Array<Record<string, unknown>> {
+    override forEach(): void { inheritedForEach(); }
+  }
+  const values = kind === "subclass" ? new SchemaArray({})
+    : Object.setPrototypeOf([{}], Object.create(Array.prototype, { forEach: { value: inheritedForEach } }));
+  assert.throws(() => createOutputValidator({ type: "object", allOf: values }), /\$\.allOf: expected plain JSON array/);
+  assert.equal(calls, 0);
+  assert.throws(() => validate({ result: values }), /\$\.result: expected plain JSON array/);
+  assert.equal(calls, 0);
+});
+
+for (const frozen of [false, true]) test(`output schema accepts plain dense arrays (frozen=${frozen})`, () => {
+  const allOf = [{ properties: { value: { type: "integer" } } }];
+  const properties = { value: { type: "integer" } };
+  const required = ["value"];
+  const validator = createOutputValidator({ type: "object", properties,
+    allOf: frozen ? Object.freeze(allOf) : allOf,
+    required: frozen ? Object.freeze(required) : required });
+  assert.deepEqual(validator({ value: 1 }), { value: 1 });
+  assert.throws(() => validator({ value: "wrong" }), /Invalid structured output/);
+});
+
 const shared = { nested: [1, null] };
 const accepted: [string, unknown][] = [
   ["empty", []], ["nested dense", [[], [null, true, "", 1.5], { values: [false] }]],

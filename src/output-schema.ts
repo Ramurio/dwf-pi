@@ -8,6 +8,7 @@ export function assertJson(value: unknown, path = "$", ancestors = new Set<objec
   if (typeof value === "number" && Number.isFinite(value)) return;
   if (typeof value !== "object") throw new Error(`${path}: expected JSON value`);
   if (ancestors.has(value)) throw new Error(`${path}: cyclic JSON value`);
+  if (Array.isArray(value) && Object.getPrototypeOf(value) !== Array.prototype) throw new Error(`${path}: expected plain JSON array`);
   if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) throw new Error(`${path}: expected plain JSON object`);
   if (Object.getOwnPropertySymbols(value).length) throw new Error(`${path}: symbol keys are not JSON`);
   if (Array.isArray(value)) {
