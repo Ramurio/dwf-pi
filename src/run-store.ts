@@ -386,6 +386,7 @@ export class RunStore {
       if (command === "pause") status = run.ownerToken ? "pausing" : "paused";
       if (command === "cancel") status = run.ownerToken ? "cancelling" : "cancelled";
       if (command === "resume") status = run.ownerToken ? "running" : "queued";
+      if (status === "cancelled") this.abandonScheduledRetries(id, "cancelled");
       const clearOwner = !run.ownerToken;
       this.database.prepare(`UPDATE workflow_runs SET status=?,desired=?,updated_at=?,
         owner_token=CASE WHEN ? THEN NULL ELSE owner_token END,

@@ -5,7 +5,7 @@ import { parseRetryProgress, retryRemaining } from "./retry-policy.js";
 import type { ActivationRecord, RunEvent, RunRecord } from "./run-store.js";
 import { activationUsage, summarizeUsage, tokenNumber, tokenSummary } from "./usage.js";
 import { renderRun, terminalText } from "./terminal.js";
-import { activationState, projectRun, type RunPresentation } from "./observation.js";
+import { activationState, pendingRetry, projectRun, type RunPresentation } from "./observation.js";
 export { activeWork } from "./observation.js";
 
 export type MonitorView = "overview" | "history" | "graph" | "tokens";
@@ -74,10 +74,10 @@ export function collectionEvidence(a: ActivationRecord): string {
   return `собрано: ${summary.total} · успешно: ${summary.succeeded} · ошибок: ${summary.failed}`;
 }
 const significant = (a: ActivationRecord) => Boolean(collectionEvidence(a)) || !structural.has(a.kind) && (!["transform", "branch", "end"].includes(a.kind) || a.status === "failed" || evidence(a).includes("принят"));
-function historyLine(a: ActivationRecord): string {
+function historyLine(a: ActivationRecord, run: RunRecord): string {
   const result = evidence(a);
   const rejected = result === "request_changes" || result === "inconclusive" || result.includes("НЕ принят") || /^exit (?!0$)/.test(result) || /ошибок: [1-9]/.test(result);
-  const icon = activationState(a) === "retrying" ? "↻" : a.status === "succeeded" && !rejected ? "✓" : a.status === "running" ? "▶" : "!";
+  const icon = activationState(a, run) === "retrying" ? "↻" : a.status === "succeeded" && !rejected ? "✓" : a.status === "running" ? "▶" : "!";
   const usage = activationUsage(a);
   return `${icon}${usage ? ` ${tokenNumber(usage.totalTokens)} ток.` : a.kind === "agent" ? " токены: н/д" : ""} ${activationPath(a)} — ${evidence(a)} · ${duration((a.finishedAt ?? a.startedAt) - a.startedAt)}`;
 }
@@ -96,17 +96,17 @@ export function monitorBody(run: RunRecord, records: readonly ActivationRecord[]
   if (view === "tokens") return tokenDetails(run, records);
   if (view === "graph") return ["Схема: возможные переходы, не история выполнения.", ...renderRun(run, records, options.presentation).split("\n").slice(3)];
   const completed = records.filter(a => a.status !== "running" && significant(a)).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0));
-  if (view === "history") return ["Последние завершённые задачи — новые сверху", "Проход = повтор узла; попытка = восстановление того же прохода.", "", ...completed.map(historyLine), ...(!completed.length ? ["Завершённых задач пока нет."] : [])];
+  if (view === "history") return ["Последние завершённые задачи — новые сверху", "Проход = повтор узла; попытка = восстановление того же прохода.", "", ...completed.map(a => historyLine(a, run)), ...(!completed.length ? ["Завершённых задач пока нет."] : [])];
   const projection = options.presentation ?? projectRun(run, records);
   const active = records.filter(a => projection.activeKeys.includes(a.key));
   const lines = [run.status === "paused" ? "ПАУЗА — новые задачи не запускаются" : "СЕЙЧАС"];
   const taskOutcome = projection.taskOutcome;
   if (taskOutcome) lines.push(`Результат: ${taskOutcome.decision} · ${terminalText(taskOutcome.reason, 500)}`);
-  for (const a of records.filter(a => activationState(a) === "waiting")) {
+  for (const a of records.filter(a => activationState(a, run) === "waiting")) {
     lines.push(`? ${activationPath(a)} — ${terminalText(String(a.metadata.waitReason), 500)}`,
       `  ${a.metadata.waitId} · контракт ответа: dynamicwf run.waits`);
   }
-  for (const a of records.filter(a => activationState(a) === "answered")) lines.push(`✓ ${activationPath(a)} — ответ сохранён${run.desired === "paused" ? " · на паузе" : " · ожидает продолжения"}`);
+  for (const a of records.filter(a => activationState(a, run) === "answered")) lines.push(`✓ ${activationPath(a)} — ответ сохранён${run.desired === "paused" ? " · на паузе" : " · ожидает продолжения"}`);
   if (!active.length) lines.push(terminal.has(run.status) ? "Активных задач нет." : "Ожидание следующего шага.");
   for (const a of records.filter(a=>projection.retryingKeys.includes(a.key))) {
     const retry=parseRetryProgress(a.metadata.retry)!;
@@ -127,7 +127,7 @@ export function monitorBody(run: RunRecord, records: readonly ActivationRecord[]
     if (repair) lines.push(`  исправление формата · раунд ${repair.round} · ${repair.status} · только submit_result`);
   }
   lines.push("", "НЕДАВНО ЗАВЕРШЕНО");
-  lines.push(...(completed.length ? completed.slice(0, 5).map(historyLine) : ["Пока ничего. Долгий первый ответ не означает повторный запуск."]));
+  lines.push(...(completed.length ? completed.slice(0, 5).map(a => historyLine(a, run)) : ["Пока ничего. Долгий первый ответ не означает повторный запуск."]));
   if (completed.length > 5) lines.push(`Ещё ${completed.length - 5} — вкладка 2 «История».`);
   lines.push("", "ДАЛЬШЕ ПО ГРАФУ");
   const next = new Set<string>();
@@ -179,17 +179,17 @@ export class MonitorLog {
       if (presentation.taskOutcome) lines.push(`Task: ${presentation.taskOutcome.decision} · ${terminalText(presentation.taskOutcome.reason, 500)}`);
       if (presentation.liveness.state !== "unknown") lines.push(presentation.liveness.label);
     }
-    const initialVisible = new Set([...records.filter(a => activationState(a) === "answered" || presentation.activeKeys.includes(a.key) || presentation.waitingKeys.includes(a.key) || presentation.retryingKeys.includes(a.key)), ...records.filter(a => a.status !== "running" && significant(a)).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0)).slice(0, 5)].map(a => a.key));
+    const initialVisible = new Set([...records.filter(a => activationState(a, run) === "answered" || presentation.activeKeys.includes(a.key) || presentation.waitingKeys.includes(a.key) || presentation.retryingKeys.includes(a.key)), ...records.filter(a => a.status !== "running" && significant(a)).sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0)).slice(0, 5)].map(a => a.key));
     for (const a of records) {
       const repair = parseOutputRepairProgress(a.metadata.outputRepair);
       const collection = collectionEvidence(a);
-      const retry = parseRetryProgress(a.metadata.retry);
-      const value = `${activationState(a)}/${a.attempt}/${repair?.round ?? 0}/${repair?.status ?? ""}/${collection}/${retry?.decisionSeq??0}/${retry?.status??""}`;
-      if (significant(a) && (this.state || initialVisible.has(a.key)) && this.records.get(a.key) !== value) lines.push(activationState(a) === "waiting"
+      const retry = pendingRetry(run, a);
+      const value = `${activationState(a, run)}/${a.attempt}/${repair?.round ?? 0}/${repair?.status ?? ""}/${collection}/${retry?.decisionSeq??0}/${retry?.status??""}`;
+      if (significant(a) && (this.state || initialVisible.has(a.key)) && this.records.get(a.key) !== value) lines.push(activationState(a, run) === "waiting"
         ? `? ${activationPath(a)} — ${terminalText(String(a.metadata.waitReason), 500)} · ${terminalText(String(a.metadata.waitId))}`
-        : activationState(a) === "answered" ? `✓ ${activationPath(a)} — ответ сохранён${run.desired === "paused" ? " · на паузе" : " · ожидает продолжения"}`
+        : activationState(a, run) === "answered" ? `✓ ${activationPath(a)} — ответ сохранён${run.desired === "paused" ? " · на паузе" : " · ожидает продолжения"}`
         : retry?.status === "scheduled" ? `↻ ${activationPath(a)} — запланирована попытка ${retry.nextAttempt}`
-        : a.status === "running" ? `▶ ${activationPath(a)} — ${repair ? `исправление формата · раунд ${repair.round} · ${repair.status} · только submit_result` : collection || "начат"}` : historyLine(a));
+        : a.status === "running" ? `▶ ${activationPath(a)} — ${repair ? `исправление формата · раунд ${repair.round} · ${repair.status} · только submit_result` : collection || "начат"}` : historyLine(a, run));
       this.records.set(a.key, value);
     }
     this.state = state;

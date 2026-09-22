@@ -34,8 +34,14 @@ export function activeWork(records: readonly ActivationRecord[]): ActivationReco
     return false;
   });
 }
-export function activationState(a: ActivationRecord) {
-  if (a.status === "failed" && parseRetryProgress(a.metadata.retry)?.status === "scheduled") return "retrying";
+// Представление сохранённого решения, не разрешение начать новую попытку.
+export function pendingRetry(run: Pick<RunRecord, "status"> | undefined, record: ActivationRecord) {
+  if ((run && terminal.has(run.status)) || record.status !== "failed") return null;
+  const retry = parseRetryProgress(record.metadata.retry);
+  return retry?.status === "scheduled" && retry.attempt === record.attempt ? retry : null;
+}
+export function activationState(a: ActivationRecord, run?: Pick<RunRecord, "status">) {
+  if (pendingRetry(run, a)) return "retrying";
   if (a.status === "running" && a.kind === "await" && a.metadata.waitResolved === true) return "answered";
   return a.status === "running" && a.kind === "await" && a.metadata.waiting === true ? "waiting" : a.status;
 }
@@ -67,7 +73,7 @@ export function projectRun(run: RunRecord, records: readonly ActivationRecord[],
     accepted: taskOutcome?.decision === "accepted" ? true : taskOutcome?.decision === "rejected" ? false : null,
     activeKeys: ["running", "waiting", "pausing", "cancelling"].includes(run.status) ? activeWork(records).map(a => a.key) : [],
     waitingKeys: records.filter(a => activationState(a) === "waiting").map(a => a.key),
-    retryingKeys: !terminal.has(run.status) ? records.filter(a=>activationState(a)==="retrying").map(a=>a.key) : [],
+    retryingKeys: records.filter(a=>pendingRetry(run,a)).map(a=>a.key),
     terminal: terminal.has(run.status),
     liveness: { state: livenessState, label: processLabel, supervisorAlive: processes?.supervisorAlive ?? null,
       unresolvedGroupProcesses: processes ? processes.unresolvedGroupProcesses ?? 0 : null,

@@ -1,8 +1,7 @@
 import { summarizeUsage, tokenNumber, tokenSummary } from "./usage.js";
 import type { Node } from "./graph.js";
 import type { ActivationRecord, RunRecord } from "./run-store.js";
-import { activationState, projectRun } from "./observation.js";
-import { parseRetryProgress } from "./retry-policy.js";
+import { activationState, pendingRetry, projectRun } from "./observation.js";
 import { providerResponseSummary } from "./provider-response.js";
 
 /** No workflow-provided byte can become a terminal escape, new row or bidi directive. */
@@ -11,14 +10,8 @@ export function terminalText(value: string, limit = 180): string {
     character => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`);
   return clean.length > limit ? `${clean.slice(0, Math.max(0, limit - 1))}…` : clean;
 }
-// Presentation of the saved decision, not authorization to admit another attempt.
-function pendingRetry(run: RunRecord, record: ActivationRecord) {
-  if (["succeeded", "failed", "cancelled"].includes(run.status) || record.status !== "failed") return null;
-  const retry = parseRetryProgress(record.metadata.retry);
-  return retry?.status === "scheduled" && retry.attempt === record.attempt ? retry : null;
-}
 function displayState(run: RunRecord, record: ActivationRecord) {
-  return record.status === "failed" ? pendingRetry(run, record) ? "retrying" : "failed" : activationState(record);
+  return activationState(record, run);
 }
 const answeredLabel = "Ответ сохранён · ожидает продолжения";
 const counts = (run: RunRecord, records: readonly ActivationRecord[]) => ({

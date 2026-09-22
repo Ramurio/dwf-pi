@@ -25,7 +25,7 @@ export function graphSnapshot(
       ? { ...original, metadata: { ...original.metadata, waitResolved: true } } : original;
     const key = JSON.stringify([a.context.graphId, a.context.nodeId]);
     const list = byNode.get(key) ?? []; list.push(a); byNode.set(key, list);
-    if (activationState(a) === "waiting") waitingKeys.push(a.key);
+    if (activationState(a, run) === "waiting") waitingKeys.push(a.key);
   }
   presentation = { ...presentation, waitingKeys };
   return {
@@ -61,10 +61,10 @@ export function graphSnapshot(
           (a, b) =>
             b.startedAt - a.startedAt || b.context.visit - a.context.visit,
         );
-        const states = activations.map(activationState);
+        const states = activations.map(a => activationState(a, run));
         const status = states.includes("running") ? "running" : states.includes("waiting") ? "waiting"
           : states.includes("answered") ? "answered" : states.includes("retrying") ? "retrying"
-          : (ordered[0] ? activationState(ordered[0]) : "unvisited");
+          : (ordered[0] ? activationState(ordered[0], run) : "unvisited");
         const config = run.plan.agents[id]?.[node.id];
         return {
           branches: new Set(
@@ -91,7 +91,7 @@ export function graphSnapshot(
             key: a.key,
             path: activationPath(a),
             basePath: activationPath(a, false),
-            status: activationState(a),
+            status: activationState(a, run),
             visit: a.context.visit + 1,
             attempt: a.attempt,
             startedAt: a.startedAt,
