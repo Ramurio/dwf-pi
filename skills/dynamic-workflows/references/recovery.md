@@ -135,3 +135,16 @@
 переводит запланированный автоматический повтор этой активации в `abandoned`:
 старое решение не должно допустить лишний запуск. Повтор всего исполнителя отличается
 от исправления формата внутри сессии.
+
+## Worktree: одобренный Git tree
+
+Opt-in `expectedTreeFromResult: string[]` выбирает поле результата ребёнка; `[]` — корень.
+Значение строго `git-tree:<40/64 lowercase hex>` либо явный null; missing/invalid — ошибка.
+Без настройки старые графы совместимы, frozen планы не обновляются автоматически.
+`childResult` и `operation.expectedTree` журналируются до admission и сохраняются при retry.
+Recovery сверяет frozen selector и обе записи; committing/complete без evidence не принимаются.
+Accept требует чистого ожидаемого дерева (complete — также точного head); dirty retry проверяет
+дерево при staging, не приравнивает base HEAD к артефакту. Postcheck проверяет возвращаемый OID,
+но не отменяет уже созданный commit. Нет reset, автоматического повтора, sandbox или CAS.
+S/P/C возвращают approvedArtifactRevision из snapshot при accepted, null при blocked;
+`succeeded` не равно `accepted`.

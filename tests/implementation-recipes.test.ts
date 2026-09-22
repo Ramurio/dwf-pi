@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { applyPatch, createDraft } from "../src/authoring.js";
 import { compileWorkflow } from "../src/compiler.js";
-import { chooseEdge } from "../src/expressions.js";
+import { chooseEdge, evaluate } from "../src/expressions.js";
 
 const recipes = fileURLToPath(new URL("../skills/dynamic-workflows/recipes/implementation-review/", import.meta.url));
 const read = (file: string) => JSON.parse(fs.readFileSync(file, "utf8"));
@@ -58,6 +58,15 @@ for (const variant of ["S", "P", "C"]) test(`recipe ${variant}: official authori
   }
   const candidateNode = main.nodes.find(n => n.id === "candidate")!;
   assert.equal(candidateNode.kind, "worktree");
+  if (candidateNode.kind !== "worktree") throw Error("Expected worktree");
+  assert.deepEqual(candidateNode.expectedTreeFromResult, ["approvedArtifactRevision"]);
+  for (const id of ["accepted", "blocked"]) {
+    const terminal = pipeline.nodes.find(n => n.id === id)!;
+    if (terminal.kind !== "finish" && terminal.kind !== "end") throw Error("Expected terminal");
+    if (terminal.value.op !== "object") throw Error("Expected object");
+    const expression = terminal.value.fields.approvedArtifactRevision!;
+    assert.equal(evaluate(expression, { input, nodes: { snapshot: { stdout: "git-tree:" + "a".repeat(40) } } }), id === "accepted" ? "git-tree:" + "a".repeat(40) : null);
+  }
   assert(!JSON.stringify(workflow).includes('"kind":"integrate"'));
   const agents = Object.values(workflow.graphs).flatMap(g => g.nodes).filter(n => n.kind === "agent");
   assert.equal(agents.length, variant === "S" ? 3 : 4);

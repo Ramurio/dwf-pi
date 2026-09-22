@@ -1,3 +1,5 @@
+import { recordedWorktreeTree } from "./worktree-constraint.js";
+import type { Node } from "./graph.js";
 import type { ActivationRecord, RunRecord } from "./run-store.js";
 import type { CollectionRecord } from "./collection.js";
 import { parseOperation } from "./operation-record.js";
@@ -67,10 +69,12 @@ export async function inspectUncertainWriterGit(
   git: GitWorkspaces,
   activation: ActivationRecord,
   activations: readonly ActivationRecord[],
+  node?: Node,
 ): Promise<void> {
   const operation = parseOperation(activation.metadata.operation);
   if (!operation) throw new Error("The actual operation was not recorded; historical inputs or paths cannot be reconstructed as evidence.");
   if (operation.kind === "worktree") {
+    const expectedTree = recordedWorktreeTree(node, operation, activation.metadata.workspacePhase);
     if (activation.metadata.workspace === undefined) {
       if (activation.metadata.workspacePhase === "allocating") return;
       throw new Error("No owned workspace allocation was recorded");
@@ -81,12 +85,17 @@ export async function inspectUncertainWriterGit(
       const inspected = await git.inspectAllocationRecovery(operation.source, activation.key, activation.metadata.workspace);
       if (inspected.mode !== "reattach") throw new Error("Missing child workspace is not attached at its recorded allocation");
     } else {
-      await git.inspectWorktree(
+      const workspace = await git.inspectWorktree(
         operation.source,
         activation.key,
         activation.metadata.workspace,
         activation.metadata.workspacePhase === "complete",
+        expectedTree,
       );
+      if (activation.metadata.workspacePhase === "complete") {
+        const recorded = activation.metadata.workspace;
+        if (!recorded || typeof recorded !== "object" || Array.isArray(recorded) || recorded.head !== workspace.head) throw new Error("Workspace head changed after recorded completion");
+      }
     }
     return;
   }

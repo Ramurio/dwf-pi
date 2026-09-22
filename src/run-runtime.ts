@@ -1,3 +1,5 @@
+import { parseOperation } from "./operation-record.js";
+import { expectedWorktreeTree, recordedWorktreeTree } from "./worktree-constraint.js";
 import { randomUUID, createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -314,7 +316,8 @@ export class JournalRuntime implements WorkflowRuntime {
       const key = activationKey(context);
       const childScope = [...context.scope, "node", node.id, "visit", String(context.visit), "worktree", "graph", node.graphId];
       const previous = runtime.store.getActivation(runtime.run.id, key)!.metadata;
-      const operation:Extract<OperationRecord,{kind:"worktree"}>={kind:"worktree",source:runtime.workspaceCwd(context),childScope:[...childScope],...(node.base?{base:node.base}:{})};
+      const savedOperation = parseOperation(previous.operation);
+      const operation:Extract<OperationRecord,{kind:"worktree"}>= savedOperation?.kind === "worktree" ? savedOperation : {kind:"worktree",source:runtime.workspaceCwd(context),childScope:[...childScope],...(node.base?{base:node.base}:{})};
       const resuming = previous.workspacePhase === "children" && previous.workspace !== undefined;
       const reconciliation = previous.reconciliation;
       const recoveringAllocation = previous.workspacePhase === "allocating" && previous.workspace !== undefined &&
@@ -328,14 +331,19 @@ export class JournalRuntime implements WorkflowRuntime {
         : runtime.workspaces.allocate(runtime.workspaceCwd(context), key, node.base,
           runtime.gitOptions(context, signal), allocation => runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspace: { ...allocation } })));
       runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspacePhase: "children" });
-      const result = yield* child(childScope);
+      recordedWorktreeTree(node, operation, previous.workspacePhase);
+      const result = Object.hasOwn(operation, "childResult") ? operation.childResult! : yield* child(childScope);
       runtime.store.setActivationMetadata(runtime.run.id,runtime.token,key,{operation:{...operation,childResult:result}});
+      const persisted = parseOperation(runtime.store.getActivation(runtime.run.id, key)!.metadata.operation);
+      if (persisted?.kind !== "worktree" || !Object.hasOwn(persisted, "childResult")) throw new Error("Missing persisted childResult");
+      const expectedTree = expectedWorktreeTree(node, persisted.childResult!);
+      runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { operation: { ...persisted, ...(expectedTree === undefined ? {} : { expectedTree }) } });
       for (;;) {
         yield* Effect.tryPromise({ try: signal => runtime.gate(signal), catch: errorOf });
         const admitted = yield* Effect.try({ try: () => runtime.store.admitWorkspaceCommit(runtime.run.id, runtime.token, key), catch: errorOf });
         if (admitted) break;
       }
-      const workspace = yield* processEffect(signal => runtime.workspaces.commit(allocation, runtime.gitOptions(context, signal)));
+      const workspace = yield* processEffect(signal => runtime.workspaces.commit(allocation, { ...runtime.gitOptions(context, signal), ...(expectedTree === undefined ? {} : { expectedTree }) }));
       runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspace: { ...workspace }, workspacePhase: "complete" });
       return { result, workspace: { ...workspace } };
     });

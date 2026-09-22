@@ -277,12 +277,17 @@ test("a pause injected after the gate wins atomic commit admission until explici
   const directory = join(f.directory, "run");
   const store = new RunStore(join(f.directory, "state.sqlite"));
   try {
-    const plan = await prepareExecutionPlan(isolatedFlow("require('node:fs').writeFileSync('atomic.txt','kept')"), { cwd: f.repo, availableModels: [] });
+    const flow = isolatedFlow("require('node:fs').writeFileSync('atomic.txt','kept');const cp=require('node:child_process');cp.execFileSync('git',['add','.']);process.stdout.write('git-tree:'+cp.execFileSync('git',['write-tree'],{encoding:'utf8'}).trim())");
+    const node = flow.graphs.main!.nodes[0]!;
+    if (node.kind !== "worktree") throw Error("Expected worktree");
+    node.expectedTreeFromResult = ["stdout"];
+    const plan = await prepareExecutionPlan(flow, { cwd: f.repo, availableModels: [] });
     store.create({ id: "run-atomic", plan, input: null, cwd: f.repo });
     const { token, run } = store.reserveLaunch("run-atomic");
     const original = store.admitWorkspaceCommit.bind(store);
     let injected = false;
     let refused = false;
+    let approved = "";
     store.admitWorkspaceCommit = (id, owner, key) => {
       if (!injected) {
         injected = true;
@@ -292,11 +297,14 @@ test("a pause injected after the gate wins atomic commit admission until explici
         assert.equal(refused, true);
         assert.equal(store.getActivation(id, key)!.metadata.workspacePhase, "children");
         const allocation = store.getActivation(id, key)!.metadata.workspace as any;
+        approved = (parseOperation(store.getActivation(id, key)!.metadata.operation) as any).expectedTree;
+        assert.equal(approved, git(allocation.path, "write-tree"));
         assert.equal(git(allocation.path, "rev-parse", "HEAD"), f.base);
         setTimeout(() => store.requestControl(id, "resume"), 40);
         return false;
       }
       assert.equal(store.get(id).desired, "running");
+      assert.equal((parseOperation(store.getActivation(id, key)!.metadata.operation) as any).expectedTree, approved);
       return original(id, owner, key);
     };
     const module = await loadGeneratedModule(plan, directory);
@@ -418,4 +426,133 @@ test("Git failure preserves primary error alongside normalized cleanup failure",
       return true;
     });
   } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
+test("unguarded snapshot A then edit B preserves legacy commit behavior", async () => {
+  const f = await fixture();
+  try {
+    const manager = new GitWorkspaces("run-drift", join(f.directory, "run"));
+    const allocation = await manager.allocate(f.repo, "candidate", undefined);
+    await writeFile(join(allocation.path, "base.txt"), "A\n");
+    git(allocation.path, "add", ".");
+    const approved = git(allocation.path, "write-tree");
+    await writeFile(join(allocation.path, "base.txt"), "B\n");
+    const result = await manager.commit(allocation);
+    assert.notEqual(git(allocation.path, "rev-parse", `${result.head}^{tree}`), approved);
+    assert.equal(git(allocation.path, "show", `${result.head}:base.txt`), "B");
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
+test("guard rejects A to B drift, clean external B, and accepts A including no-op", async () => {
+  const f = await fixture();
+  try {
+    const manager = new GitWorkspaces("run-guard", join(f.directory, "run"));
+    const a = await manager.allocate(f.repo, "candidate", undefined);
+    await writeFile(join(a.path, "base.txt"), "A\n"); git(a.path, "add", ".");
+    const expectedTree = git(a.path, "write-tree");
+    await writeFile(join(a.path, "base.txt"), "B\n");
+    await assert.rejects(manager.commit(a, { expectedTree }), /mismatch.*precheck/);
+    assert.equal(await readFile(join(a.path, "base.txt"), "utf8"), "B\n");
+    git(a.path, "commit", "-m", "External B");
+    await assert.rejects(manager.commit(a, { expectedTree }), /mismatch/);
+    await assert.rejects(manager.inspectWorktree(f.repo, "candidate", { ...a }, true, expectedTree), /mismatch/);
+    await writeFile(join(a.path, "base.txt"), "A\n");
+    const first = await manager.commit(a, { expectedTree });
+    assert.equal(git(a.path, "rev-parse", `${first.head}^{tree}`), expectedTree);
+    assert.deepEqual(await manager.commit(a, { expectedTree }), first);
+    git(a.path, "commit", "--allow-empty", "-m", "Same tree different head");
+    assert.notEqual((await manager.commit(a, { expectedTree })).head, first.head);
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
+for (const mode of ["commit", "recovery"] as const) test(`tree guard ignores replacement objects (${mode})`, async () => {
+  const f = await fixture();
+  try {
+    const manager = new GitWorkspaces("run-replaced", join(f.directory, "run"));
+    const a = await manager.allocate(f.repo, "candidate", undefined);
+    await writeFile(join(a.path, "base.txt"), "A\n"); git(a.path, "add", ".");
+    const expectedTree = git(a.path, "write-tree");
+    const replacement = git(a.path, "commit-tree", expectedTree, "-p", a.base, "-m", "Approved tree A");
+    await writeFile(join(a.path, "base.txt"), "B\n"); git(a.path, "add", "."); git(a.path, "commit", "-m", "Unapproved B");
+    const original = git(a.path, "rev-parse", "HEAD");
+    git(a.path, "replace", original, replacement);
+    // Git по умолчанию теперь считает A содержимым коммита B; настоящий объект B не менялся.
+    git(a.path, "read-tree", "--reset", "-u", "HEAD");
+    assert.equal(git(a.path, "status", "--porcelain"), "");
+    assert.equal(git(a.path, "rev-parse", `${original}^{tree}`), expectedTree);
+    assert.notEqual(git(a.path, "--no-replace-objects", "rev-parse", `${original}^{tree}`), expectedTree);
+    if (mode === "recovery") {
+      await assert.rejects(manager.inspectWorktree(f.repo, "candidate", { ...a }, true, expectedTree), /clean|dirty|mismatch/i);
+    } else {
+      const result = await manager.commit(a, { expectedTree });
+      assert.equal(git(a.path, "--no-replace-objects", "rev-parse", `${result.head}^{tree}`), expectedTree);
+      assert.notEqual(result.head, original);
+    }
+    assert.equal(await readFile(join(a.path, "base.txt"), "utf8"), "A\n");
+  } finally { await rm(f.directory, { recursive: true, force: true }); }
+});
+
+test("postcheck rejects committed index drift and checks the captured head OID", async () => {
+  for (const mode of ["index", "head"] as const) {
+    const f = await fixture();
+    try {
+      const manager = new GitWorkspaces("run-postcheck", join(f.directory, "run"));
+      const a = await manager.allocate(f.repo, "candidate", undefined);
+      await writeFile(join(a.path, "base.txt"), "A\n"); git(a.path, "add", ".");
+      const expectedTree = git(a.path, "write-tree");
+      type Call = (cwd: string, args: string[], options: any, expected?: number[]) => Promise<any>;
+      const internal = manager as unknown as { git: Call }, original = internal.git.bind(manager);
+      let injected = false, captured = "";
+      internal.git = async (cwd, args, options, expected) => {
+        const result = await original(cwd, args, options, expected);
+        if (!injected && (mode === "index" ? args[0] === "write-tree" : args[0] === "rev-parse" && args.includes("HEAD^{commit}"))) {
+          injected = true; captured = result.stdout.trim();
+          await writeFile(join(a.path, "base.txt"), "B\n"); git(a.path, "add", ".");
+          if (mode === "head") git(a.path, "commit", "-m", "External B after captured HEAD");
+        }
+        return result;
+      };
+      if (mode === "index") {
+        await assert.rejects(manager.commit(a, { expectedTree }), /mismatch.*postcheck/);
+        assert.equal(git(a.path, "show", "HEAD:base.txt"), "B");
+        assert.equal(git(a.path, "status", "--porcelain"), "");
+      } else {
+        const result = await manager.commit(a, { expectedTree });
+        assert.equal(result.head, captured);
+        assert.equal(git(a.path, "show", `${result.head}:base.txt`), "A");
+        assert.equal(git(a.path, "show", "HEAD:base.txt"), "B");
+      }
+      assert.equal(injected, true);
+    } finally { await rm(f.directory, { recursive: true, force: true }); }
+  }
+});
+
+test("runtime journals A before admission and rejects deterministic B drift", async () => {
+  const f = await fixture(), directory = join(f.directory, "run"), store = new RunStore(join(f.directory, "state.sqlite"));
+  try {
+    const flow = workflow({
+      main: graph([{ id: "candidate", kind: "worktree", graphId: "worker", input: literal(null), expectedTreeFromResult: ["approved"] }, end(ref("nodes", "candidate"))]),
+      worker: graph([{ id: "snapshot", kind: "check", command: process.execPath, args: ["-e", "const fs=require('node:fs'),cp=require('node:child_process');fs.writeFileSync('base.txt','A\\n');cp.execFileSync('git',['add','.']);process.stdout.write('git-tree:'+cp.execFileSync('git',['write-tree'],{encoding:'utf8'}).trim())"] }, end({ op: "object", fields: { approved: ref("nodes", "snapshot", "stdout") } })]),
+    });
+    const plan = await prepareExecutionPlan(flow, { cwd: f.repo, availableModels: [] });
+    store.create({ id: "run-bound", plan, input: null, cwd: f.repo });
+    const { token, run } = store.reserveLaunch("run-bound");
+    const original = store.admitWorkspaceCommit.bind(store);
+    let expected = "", path = "";
+    store.admitWorkspaceCommit = (id, owner, key) => {
+      const record = store.getActivation(id, key)!, operation = parseOperation(record.metadata.operation);
+      assert.equal(operation?.kind, "worktree");
+      expected = (operation as any).expectedTree;
+      path = (record.metadata.workspace as any).path;
+      assert.equal(expected, git(path, "write-tree"));
+      execFileSync(process.execPath, ["-e", "require('node:fs').writeFileSync(process.argv[1],'B\\n')", join(path, "base.txt")]);
+      return original(id, owner, key);
+    };
+    const module = await loadGeneratedModule(plan, directory);
+    await assert.rejects(Effect.runPromise(module.run(new JournalRuntime(store, run, token, directory), null)), /mismatch/);
+    const parent = store.listActivations(run.id).find(a => a.kind === "worktree")!;
+    assert.equal((parseOperation(parent.metadata.operation) as any).expectedTree, expected);
+    assert.equal(parent.metadata.workspacePhase, "committing");
+    assert.equal(await readFile(join(path, "base.txt"), "utf8"), "B\n");
+  } finally { store.close(); await rm(f.directory, { recursive: true, force: true }); }
 });

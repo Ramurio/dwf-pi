@@ -149,3 +149,12 @@ node --import tsx --test --test-concurrency=1 tests/pi-worker.test.ts tests/git-
   скрыть реальный файл как отсутствующий. Mac обычно отвергает такие имена при
   создании; отказ осмотра отдельно проверен на Linux. Корректные Unicode-имена,
   включая начальный BOM и настоящий `�`, сохраняются без нормализации.
+
+## Граница snapshot → commit
+
+Opt-in worktree tree constraint закрывает успешную выдачу B при одобренном A.
+S/P/C включают selector approvedArtifactRevision; старые frozen планы остаются unguarded.
+Postcheck может обнаружить drift уже после создания commit: ошибка сохраняет этот эффект,
+а не отменяет его. Guard не проверяет качество ревью и игнорируемые файлы, не изолирует ОС
+и не блокирует внешних writers. `succeeded` по-прежнему не означает `accepted`.
+Регрессии: `workspaces`, `worktree-constraint`, `run-runtime`, `operation-record`, `graph`.

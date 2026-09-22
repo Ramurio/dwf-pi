@@ -76,3 +76,10 @@ test('a new attempt archives operation/session provenance and starts without sta
   assert.deepEqual(archived.metadata.operation,operation);assert.equal(archived.metadata.sessionFile,'old-session');
   for(const field of ['operation','sessionFile','workerToken','workerKind','workerPid','workerLaunch','workerGroupPid','workerGroupState','cwd','model','thinking'])assert.equal(current.metadata[field],undefined);
 }));
+
+test("worktree expectedTree accepts full OIDs and explicit null without breaking old records", () => {
+  const old = { kind: "worktree", source: "/repo", childScope: [] };
+  assert.deepEqual(parseOperation(old), old);
+  for (const expectedTree of [null, "a".repeat(40), "b".repeat(64)]) assert.deepEqual(parseOperation({ ...old, expectedTree }), { ...old, expectedTree });
+  for (const expectedTree of ["abc", "git-tree:" + "a".repeat(40), 42]) assert.equal(parseOperation({ ...old, expectedTree }), undefined);
+});

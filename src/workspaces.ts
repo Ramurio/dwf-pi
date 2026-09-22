@@ -13,6 +13,7 @@ import { observeRecoveryFiles } from "./recovery-files.js";
 export interface WorkspaceAllocation { path: string; branch: string; base: string }
 export interface WorkspaceRecord extends WorkspaceAllocation { head: string }
 export interface GitOperationOptions extends ProcessOptions { onFinished?: () => void }
+export interface WorkspaceCommitOptions extends GitOperationOptions { expectedTree?: string | null }
 export interface AllocationRecovery { mode: "reattach" | "create" | "reuse-branch" | "replace-registration"; allocation: WorkspaceAllocation; registration?: string }
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const unsafeGitEnvironment = /^GIT_(?:DIR|WORK_TREE|COMMON_DIR|INDEX_FILE|INDEX_VERSION|OBJECT_DIRECTORY|ALTERNATE_OBJECT_DIRECTORIES|QUARANTINE_PATH|NAMESPACE|REPLACE_REF_BASE|NO_REPLACE_OBJECTS|SHALLOW_FILE|CEILING_DIRECTORIES|DISCOVERY_ACROSS_FILESYSTEM|CONFIG(?:_.*)?|EXEC_PATH|AUTHOR_.*|COMMITTER_.*|ATTR_SOURCE|INTERNAL_SUPER_PREFIX|PREFIX|EXTERNAL_DIFF)$/;
@@ -39,19 +40,22 @@ export class GitWorkspaces {
       return allocation;
     });
   }
-  async commit(allocation: WorkspaceAllocation, options: GitOperationOptions = {}): Promise<WorkspaceRecord> {
+  async commit(allocation: WorkspaceAllocation, options: WorkspaceCommitOptions = {}): Promise<WorkspaceRecord> {
     return this.locked(allocation.path, async () => {
       await this.assertAllocation(allocation, options);
       await this.noOperation(allocation.path, options);
       await this.visibleIndex(allocation.path, options);
+      if (options.expectedTree != null && !hashPattern.test(options.expectedTree)) throw new Error("Invalid expectedTree");
       if ((await this.git(allocation.path, ["status", "--porcelain=v1", "--untracked-files=all"], options)).stdout) {
         await this.git(allocation.path, ["add", "--all", "--", "."], options);
+        await this.checkTree(allocation.path, options.expectedTree, "precheck", undefined, options);
         const staged = await this.git(allocation.path, ["diff", "--cached", "--quiet", "--exit-code"], options, [0, 1]);
         if (staged.exitCode === 1) await this.git(allocation.path, ["commit", "--no-verify", "--no-gpg-sign", "-m", `dynamicwf: ${this.runId} ${allocation.branch.split("/").at(-1)!.slice(0, 12)}`], options);
-      }
+      } else await this.checkTree(allocation.path, options.expectedTree, "precheck", undefined, options);
       await this.clean(allocation.path, options);
       const head = await this.head(allocation.path, "HEAD", options);
       await this.git(allocation.path, ["merge-base", "--is-ancestor", allocation.base, head], options);
+      await this.checkTree(allocation.path, options.expectedTree, "postcheck", head, options);
       return { ...allocation, head };
     });
   }
@@ -203,10 +207,13 @@ export class GitWorkspaces {
     });
   }
   /** Read-only evidence for recovery; committing or merging remains an ordinary admitted attempt. */
-  async inspectWorktree(source: string, key: string, value: Json, requireClean: boolean): Promise<WorkspaceRecord> {
+  async inspectWorktree(source: string, key: string, value: Json, requireClean: boolean, expectedTree?: string | null): Promise<WorkspaceRecord> {
     const allocation = await this.reattach(source, key, value);
     if (requireClean) await this.clean(allocation.path, {});
-    return { ...allocation, head: await this.head(allocation.path, "HEAD", {}) };
+    const head = await this.head(allocation.path, "HEAD", {});
+    const clean = !(await this.git(allocation.path, ["status", "--porcelain=v1", "--untracked-files=all"], {})).stdout;
+    if (requireClean || clean) await this.checkTree(allocation.path, expectedTree, "recovery", head, {});
+    return { ...allocation, head };
   }
   async inspectIntegration(target: string, sources: Json, owned: readonly WorkspaceRecord[], progress: IntegrationProgress | undefined, accepted: boolean): Promise<Json> {
     const cwd = await realpath(target), records = parseWorkspaceSources(sources);
@@ -226,6 +233,11 @@ export class GitWorkspaces {
       if (accepted) await this.git(cwd, ["merge-base", "--is-ancestor", source.head, head], {});
     }
     return { workspace: { path: cwd, branch, base: progress?.originalHead ?? head, head }, merged: records.map(record => record.head) };
+  }
+  private async checkTree(cwd: string, expected: string | null | undefined, phase: string, head: string | undefined, options: GitOperationOptions): Promise<void> {
+    if (expected == null) return;
+    const actual = (await this.git(cwd, head ? ["rev-parse", "--verify", `${head}^{tree}`] : ["write-tree"], options)).stdout.trim();
+    if (actual !== expected) throw new Error(`Worktree tree mismatch (${phase}): expected ${expected}, actual ${actual}, head ${head ?? "not yet captured"}`);
   }
   private async assertAllocation(allocation: WorkspaceAllocation, options: GitOperationOptions): Promise<void> {
     const suffix = allocation.branch.slice(`dynamicwf/${this.runId}/`.length);
@@ -296,7 +308,7 @@ export class GitWorkspaces {
     const override = Object.keys(process.env).find(name => unsafeGitEnvironment.test(name));
     if (override) throw new Error(`Git environment override is unsupported for managed workspaces: ${override}. Unset it before launching the workflow.`);
     return withProcessCleanup(async () => {
-      const result = await runCheckProcess("git", ["--no-optional-locks", ...gitConfiguration, ...args], cwd, options) as { exitCode: number; stdout: string; stderr: string };
+      const result = await runCheckProcess("git", ["--no-replace-objects", "--no-optional-locks", ...gitConfiguration, ...args], cwd, options) as { exitCode: number; stdout: string; stderr: string };
       if (!expected.includes(result.exitCode)) throw new Error(`git ${args[0]} failed (${result.exitCode}): ${result.stderr.trim() || result.stdout.trim()}`);
       return result;
     }, () => options.onFinished?.());

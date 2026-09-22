@@ -1,3 +1,4 @@
+import { recordedWorktreeTree } from "./worktree-constraint.js";
 import { randomUUID } from "node:crypto";
 import { spawn, execFileSync } from "node:child_process";
 import { closeSync, mkdirSync, openSync } from "node:fs";
@@ -144,6 +145,7 @@ export class RunController {
     return (initialOnly ? ["queued"] : ["queued", "interrupted"]).includes(run.status) && run.desired === "running" && run.ownerToken === null;
   }
   private async continuationGitBlockers(id: string): Promise<ContinuationBlocker[]> {
+    const run = this.store.get(id);
     const activations = this.store.listActivations(id);
     const git = new GitWorkspaces(id, this.directory(id));
     const blockers: ContinuationBlocker[] = [];
@@ -152,7 +154,7 @@ export class RunController {
         blockers.push({ code: "missing-operation", key: record.key, message: "Missing operation evidence stops continuation; inspect the original attempt instead of inventing an output." });
         continue;
       }
-      try { await inspectUncertainWriterGit(git, record, activations); }
+      try { await inspectUncertainWriterGit(git, record, activations, run.plan.workflow.graphs[record.context.graphId]?.nodes.find(n => n.id === record.context.nodeId)); }
       catch (error) { blockers.push(continuationGitBlocker(record, error)); }
     }
     return blockers;
@@ -288,6 +290,11 @@ export class RunController {
     const blockers = recoveryBlockers(initial.run, selected, initial.activations, initial.collections);
     if (observed.supervisorAlive || observed.workersAlive) blockers.push({ code: "live-processes", message: "Execution processes are still alive." });
     if (observed.unresolvedGroups.length) blockers.push({ code: "unresolved-groups", message: "Process groups require inspection before recovery." });
+    const frozenNode = initial.run.plan.workflow.graphs[selected.context.graphId]?.nodes.find(n => n.id === selected.context.nodeId);
+    if (!blockers.length && frozenNode?.kind === "worktree" && frozenNode.expectedTreeFromResult !== undefined && selected.metadata.workspacePhase !== "allocating") {
+      try { await inspectUncertainWriterGit(new GitWorkspaces(id, this.directory(id)), selected, initial.activations, frozenNode); }
+      catch (error) { blockers.push({ code: "worktree-constraint", message: error instanceof Error ? error.message : String(error) }); }
+    }
     const checkpoint = recoveryCheckpoint(initial.run, initial.activations, initial.collections, initial.eventSeq);
     let workspace: Awaited<ReturnType<typeof observeRecoveryFiles>> | null = null;
     if (!blockers.length) {
@@ -327,13 +334,15 @@ export class RunController {
     const operation = parseOperation(selected.metadata.operation)!;
     const git = new GitWorkspaces(request.id, this.directory(request.id));
     if (operation.kind === "worktree") {
+      const node = state.run.plan.workflow.graphs[selected.context.graphId]?.nodes.find(n => n.id === selected.context.nodeId);
+      const expectedTree = recordedWorktreeTree(node, operation, request.action === "accept" ? "committing" : selected.metadata.workspacePhase);
       if (selected.metadata.workspace === undefined) {
         if (request.action === "accept" || selected.metadata.workspacePhase !== "allocating") throw new Error("No owned workspace allocation was recorded");
       } else {
         const allocating = selected.metadata.workspacePhase === "allocating" && !state.activations.some(a => a.key !== selected.key && operation.childScope.every((part, index) => a.context.scope[index] === part));
         const workspace = request.action === "retry" && allocating
           ? (await git.inspectAllocationRecovery(operation.source, selected.key, selected.metadata.workspace)).allocation
-          : await git.inspectWorktree(operation.source, selected.key, selected.metadata.workspace, request.action === "accept" || selected.metadata.workspacePhase === "complete");
+          : await git.inspectWorktree(operation.source, selected.key, selected.metadata.workspace, request.action === "accept" || selected.metadata.workspacePhase === "complete", expectedTree);
         if (selected.metadata.workspacePhase === "complete") {
           const recorded = selected.metadata.workspace as Record<string, Json>;
           if (typeof recorded.head !== "string") throw new Error("Recorded completed workspace head is missing");

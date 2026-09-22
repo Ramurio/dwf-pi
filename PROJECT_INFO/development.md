@@ -310,3 +310,11 @@ npm run typecheck
 сохраняет её. Обе копии проверяются через `readOnly`, включая отказ записи. Живые журналы
 и провайдеры не затрагиваются. `src/sqlite.ts` и управление восстановлением остаются
 без изменений: новая подсистема резервного копирования/восстановления не добавляется.
+
+## Проверки tree constraint
+
+`npm run typecheck`; `node --import tsx --test tests/workspaces.test.ts tests/worktree-constraint.test.ts
+ tests/implementation-recipes.test.ts tests/reconciliation.test.ts tests/graph.test.ts tests/operation-record.test.ts`.
+Дополнительно recovery-inspection, run-store, run-runtime, allocation-recovery, git-recovery-crash,
+continuation, compiler, execution-plan, public-patch-schema и полный `npm test`.
+Drift внедряется обёрткой Git/admission в тестах, без production fault flags.

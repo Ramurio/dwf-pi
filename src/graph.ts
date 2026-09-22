@@ -24,7 +24,7 @@ export type Node = { id: string } & (
   | { kind: "await"; reason: Expr; input: Expr; responseSchema: Record<string, unknown> }
   | { kind: "branch"; input?: Expr }
   | { kind: "subworkflow"; graphId: string; input: Expr }
-  | { kind: "worktree"; graphId: string; input: Expr; base?: string }
+  | { kind: "worktree"; graphId: string; input: Expr; base?: string; expectedTreeFromResult?: string[] }
   | { kind: "integrate"; sources: Expr }
   | { kind: "map"; graphId: string; items: Expr; concurrency?: number; failurePolicy?: "fail-fast" | "collect" }
   | { kind: "parallel"; children: { id: string; graphId: string; input: Expr }[]; concurrency?: number; failurePolicy?: "fail-fast" | "collect" }
@@ -61,7 +61,7 @@ const definitions = {
     node("await", { reason: expr, input: expr, responseSchema: Type.Record(Type.String(), Type.Unknown()) }),
     node("branch", { input: Type.Optional(expr) }),
     node("subworkflow", { graphId: id, input: expr }),
-    node("worktree", { graphId: id, input: expr, base: Type.Optional(Type.String({ minLength: 1, pattern: "^[^\\u0000]+$" })) }),
+    node("worktree", { graphId: id, input: expr, expectedTreeFromResult: Type.Optional(Type.Array(Type.String())), base: Type.Optional(Type.String({ minLength: 1, pattern: "^[^\\u0000]+$" })) }),
     node("integrate", { sources: expr }),
     node("map", { graphId: id, items: expr, concurrency: Type.Optional(positiveInt), failurePolicy: Type.Optional(Type.Enum(["fail-fast", "collect"])) }),
     node("parallel", { children: Type.Array(Type.Object({ id, graphId: id, input: expr }, closed), { minItems: 1 }), concurrency: Type.Optional(positiveInt), failurePolicy: Type.Optional(Type.Enum(["fail-fast", "collect"])) }),
