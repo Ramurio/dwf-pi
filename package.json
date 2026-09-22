@@ -21,7 +21,9 @@
     "mcp": "node --import tsx src/mcp.ts",
     "watch": "node --import tsx src/watch.ts",
     "cli": "node --import tsx src/cli.ts",
-    "postinstall": "node scripts/apply-sdk-bash-signal.mjs && node scripts/apply-sdk-provider-contracts.mjs"
+    "sdk:check": "node scripts/sdk-patches.mjs --check",
+    "sdk:apply": "node scripts/sdk-patches.mjs",
+    "postinstall": "node scripts/sdk-patches.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "0.85.1",

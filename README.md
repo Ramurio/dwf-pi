@@ -12,6 +12,7 @@
 
 ```sh
 npm ci
+npm run sdk:check
 npm run setup
 dynamicwf system.doctor
 dynamicwf catalog.models

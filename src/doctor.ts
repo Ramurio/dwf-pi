@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { access, mkdtemp, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import type { AvailableExecutionModel } from "./execution-plan.js";
 import { discoverWorkflowCatalog } from "./model-runtime.js";
 
@@ -77,6 +78,15 @@ export async function diagnoseSystem(options: DoctorOptions): Promise<DoctorRepo
     const { stdout } = await execute("git", ["--version"], { timeout: 5000, maxBuffer: 4096 });
     checks.push({ id: "git", status: "ok", detail: stdout.trim().replace(/[\x00-\x1f\x7f]/g, " ") });
   } catch { checks.push({ id: "git", status: "unavailable", detail: "Git executable is unavailable; non-Git workflows can still run" }); }
+  let sdkReady = false;
+  try {
+    const installation = fileURLToPath(new URL("../", import.meta.url));
+    await execute(process.execPath, [join(installation, "scripts/sdk-patches.mjs"), "--check"], { cwd: installation, timeout: 5000, maxBuffer: 16_384 });
+    sdkReady = true;
+    checks.push({ id: "sdk-patches", status: "ok", detail: "Версии и SHA256 локальных исправлений SDK проверены; файлы не изменялись" });
+  } catch {
+    checks.push({ id: "sdk-patches", status: "error", detail: "Исправления SDK не проверены. В каталоге установки выполните npm run sdk:check; известное частичное состояние исправляет npm run sdk:apply, неизвестные файлы требуют npm ci" });
+  }
   let models: AvailableExecutionModel[] = [], issues: string[] = [];
   try {
     if (options.availableModels !== undefined) models = structuredClone([...options.availableModels]);
@@ -87,5 +97,5 @@ export async function diagnoseSystem(options: DoctorOptions): Promise<DoctorRepo
     checks.push({ id: "authenticated-models", status: "error", detail: "Model discovery failed; credentials and provider errors are not included" });
   }
   const pureRuns = nodeReady && groupsReady && workspaceExists && workspaceReads && state.status === "ok";
-  return { cwd, store, checks, models, issues, readyFor: { pureRuns, agentRuns: pureRuns && models.length > 0, grok: pureRuns && models.some(model => model.provider === "xai"), workspaceWrites: pureRuns && workspaceWrites } };
+  return { cwd, store, checks, models, issues, readyFor: { pureRuns, agentRuns: pureRuns && sdkReady && models.length > 0, grok: pureRuns && sdkReady && models.some(model => model.provider === "xai"), workspaceWrites: pureRuns && workspaceWrites } };
 }

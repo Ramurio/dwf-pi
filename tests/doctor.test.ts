@@ -21,6 +21,7 @@ test("doctor checks local prerequisites and keeps missing state location uncreat
   assert.deepEqual(result.readyFor, { pureRuns: true, agentRuns: true, grok: true, workspaceWrites: true });
   assert.deepEqual(result.models, models); assert.deepEqual(result.issues, []);
   assert.ok(result.checks.some(check => check.id === "git"));
+  assert.equal(result.checks.find(check => check.id === "sdk-patches")?.status, "ok");
   assert.match(result.checks.find(check => check.id === "authenticated-models")!.detail, /credentials were not inspected/);
   assert.deepEqual(await readdir(f.directory), before);
 });

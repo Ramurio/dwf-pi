@@ -11,3 +11,4 @@ coverage/
 *.tsbuildinfo
 scratch/
 *.log
+.sdk-patch-*/
