@@ -24,7 +24,7 @@ const check = (value, message) => { if (!value) throw new Error(message); };
 const descendants = node => Array.from(node.children).flatMap(child => [child, ...descendants(child)]);
 const clicks = (node, text) => descendants(node).find(n => n.tagName.toLowerCase() === 'button' && n.textContent === text).click();
 const scopes = ['A', 'B'].map(branch => [{ graphId: 'main', nodeId: 'fan', branch }]);
-const records = scopes.map((scope, i) => ({ context: { graphId: 'main', scope, visit: 0 }, attempt: 1, at: 0,
+const records = scopes.map((scope, i) => ({ runId: 'fixture', context: { graphId: 'main', scope, visit: 0 }, attempt: 1, at: 0,
   decision: { from: 'route', to: 'end', edgeIndex: 0, reason: 'condition', evaluations: [{ edgeIndex: 0, to: 'end', result: i ? 'fallback' : 'true' }] } }));
 const nodes = ['route', 'end'].map(id => ({ id, kind: 'branch', status: 'succeeded', branches: 2, children: [],
   activations: scopes.map((scope, i) => ({ key: id + i, scope: JSON.stringify(scope), path: 'branch ' + i + ' / ' + id,
