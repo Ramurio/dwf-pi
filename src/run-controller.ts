@@ -19,7 +19,7 @@ import { parseOperation } from "./operation-record.js";
 import { GitWorkspaces, parseWorkspaceSources } from "./workspaces.js";
 import { parseReconciliationRequest, sameReconciliation, validateReconciledOutput } from "./reconciliation.js";
 import {
-  ancestrySet, canonicalContinuationRequest, continuationKind, continuationWriterBlockers, digestJson, matchReuseBindings, resolveReuseBinding, sourceActivationSchema, unknownWriterActivations,
+  ancestrySet, canonicalContinuationRequest, continuationKind, continuationWriterBlockers, continuationWriterEffects, digestJson, matchReuseBindings, resolveReuseBinding, sourceActivationSchema, unknownWriterActivations,
   type ContinuationBlocker, type ContinuationRequest,
 } from "./lineage.js";
 
@@ -406,7 +406,7 @@ export class RunController {
       reusable,
       writerEffects: state.activations.filter(record => record.sideEffect && record.status !== "succeeded").map(record => ({
         key: record.key, attempt: record.attempt, kind: record.kind, operation: Boolean(record.metadata.operation),
-        effects: record.metadata.failure && typeof record.metadata.failure === "object" && !Array.isArray(record.metadata.failure) ? record.metadata.failure.effects ?? "unknown" : "unknown",
+        effects: continuationWriterEffects(record),
       })),
       processes: { supervisorAlive: observed.supervisorAlive, workersAlive: observed.workersAlive, unresolvedGroups: observed.unresolvedGroups, launchPending: observed.run.ownerToken !== null && observed.run.supervisorPid === null && !observed.supervisorAlive },
       facts: "Machine-verified facts are checkpoint, plan hash, output identity and filesystem digest. Actor evidence is attestation, not proof of no outside effects.",

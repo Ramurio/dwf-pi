@@ -1,4 +1,4 @@
-import { parseFailureCauses } from "./execution-failure.js";
+import { parseFailureCauses, type ExecutionFailureRecord } from "./execution-failure.js";
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { assertJson, createOutputValidator } from "./output-schema.js";
@@ -394,15 +394,20 @@ export function matchReuseBindings(plan: ExecutionPlan, requested: readonly Cont
   });
 }
 
+/** Одна консервативная сводка последствий для инспекции и допуска продолжения. */
+export function continuationWriterEffects(record: ActivationRecord): ExecutionFailureRecord["effects"] {
+  if (record.status !== "failed") return "unknown";
+  const failure = record.metadata.failure;
+  const effects = failure && typeof failure === "object" && !Array.isArray(failure) ? failure.effects : undefined;
+  if (effects !== "not-started" && effects !== "read-only") return "unknown";
+  const causes = parseFailureCauses(record.metadata.failureCauses);
+  if (record.metadata.failureCauses !== undefined && !causes) return "unknown";
+  if (causes?.some(cause => cause.effects === "unknown")) return "unknown";
+  return effects === "read-only" || causes?.some(cause => cause.effects === "read-only") ? "read-only" : "not-started";
+}
+
 export function unknownWriterActivations(activations: readonly ActivationRecord[]): ActivationRecord[] {
-  return activations.filter(record => {
-    if (!record.sideEffect || record.status === "succeeded") return false;
-    if (record.status === "running" || record.status === "interrupted") return true;
-    const failure = record.metadata.failure;
-    const effects = failure && typeof failure === "object" && !Array.isArray(failure) ? failure.effects : "unknown";
-    const causes = parseFailureCauses(record.metadata.failureCauses);
-    return effects === "unknown" || effects === undefined || !!causes?.some(cause => cause.effects === "unknown");
-  });
+  return activations.filter(record => record.sideEffect && record.status !== "succeeded" && continuationWriterEffects(record) === "unknown");
 }
 
 export function continuationWriterBlockers(activations: readonly ActivationRecord[], dispositions: readonly WriterDisposition[]): ContinuationBlocker[] {

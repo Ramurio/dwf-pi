@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  ancestrySet, canonicalContinuationRequest, canonicalJson, continuationWriterBlockers, digestJson, matchReuseBindings, parseContinuationRequest, planHasReuse, planReuseNodes, resolveReuseBinding, sourceActivationSchema,
+  ancestrySet, canonicalContinuationRequest, canonicalJson, continuationWriterBlockers, continuationWriterEffects, digestJson, matchReuseBindings, parseContinuationRequest, planHasReuse, planReuseNodes, resolveReuseBinding, sourceActivationSchema, unknownWriterActivations,
 } from "../src/lineage.js";
 import { compileWorkflow } from "../src/compiler.js";
 import { validateWorkflow, type WorkflowDefinition } from "../src/graph.js";
 import type { ExecutionPlan } from "../src/execution-types.js";
 import type { ActivationRecord } from "../src/run-store.js";
+import { executionFailure } from "../src/execution-failure.js";
 
 const digest = "a".repeat(64);
 const prepared = `prepared-${"b".repeat(64)}`;
@@ -67,6 +68,35 @@ test("ancestry walks parents and rejects cycles; writer dispositions are exact",
   assert.equal(continuationWriterBlockers([
     { ...failed, metadata: { failure: { effects: "unknown" }, operation: { kind: "check" } } },
   ], [{ key: "k", attempt: 1, disposition: "retain-effects", evidence: ["kept files"] }])[0]?.code, "missing-operation");
+});
+
+test("continuation effects conservatively include every cause and unfinished attempt", () => {
+  const notStarted = executionFailure("process", "setup", "not-started", "No dispatch").failure;
+  const readOnly = executionFailure("expression", "execution", "read-only", "Read failed").failure;
+  const unknown = executionFailure("uncertain-effect", "cleanup", "unknown", "Cleanup not confirmed").failure;
+  const failed = { runId: "run-a", key: "k", context: { graphId: "main", nodeId: "write", scope: [], visit: 0 }, kind: "check", sideEffect: true, status: "failed", attempt: 1, ownerToken: "", startedAt: 0, finishedAt: 1, metadata: {} } as ActivationRecord;
+  const cases = [
+    { metadata: { failure: notStarted }, expected: "not-started" },
+    { metadata: { failure: readOnly }, expected: "read-only" },
+    { metadata: { failure: notStarted, failureCauses: [notStarted, readOnly] }, expected: "read-only" },
+    { metadata: { failure: notStarted, failureCauses: [notStarted, unknown] }, expected: "unknown" },
+    { metadata: { failure: readOnly, failureCauses: [readOnly, unknown] }, expected: "unknown" },
+    { metadata: { failure: unknown, failureCauses: [notStarted, readOnly] }, expected: "unknown" },
+    { metadata: {}, expected: "unknown" },
+    { metadata: { failure: { effects: "invalid" } }, expected: "unknown" },
+    { metadata: { failure: notStarted, failureCauses: [notStarted, {}] }, expected: "unknown" },
+  ];
+  for (const { metadata, expected } of cases) {
+    const record = { ...failed, metadata } as ActivationRecord;
+    assert.equal(continuationWriterEffects(record), expected);
+    assert.equal(unknownWriterActivations([record]).length, expected === "unknown" ? 1 : 0);
+  }
+  for (const status of ["running", "interrupted"] as const) {
+    const record = { ...failed, status, metadata: { failure: notStarted } } as unknown as ActivationRecord;
+    assert.equal(continuationWriterEffects(record), "unknown");
+    assert.equal(unknownWriterActivations([record]).length, 1);
+  }
+  assert.equal(unknownWriterActivations([{ ...failed, status: "succeeded" }, { ...failed, sideEffect: false }]).length, 0);
 });
 
 test("reused reviewer verdict cannot drop artifactRevision from the target schema", () => {

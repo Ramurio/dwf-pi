@@ -302,6 +302,41 @@ test("writer retain-effects is required and does not accept or retry the old att
   assert.equal(c.store.getActivation(run.id, key)?.status, "failed");
 }));
 
+for (const firstEffects of ["not-started", "read-only"] as const) test(`inspect exposes unknown cleanup after ${firstEffects} and continue requires the displayed writer disposition`, async () => fixture(async (s, c, directory) => {
+  await author(s, "original", [writeFail, { id: "done", kind: "end", value: { op: "literal", value: null } }]);
+  const prepared = await s.dispatch("workflow.prepare", { id: "original" }) as PreparedExecution;
+  const run = c.store.create({ id: "run-composite-writer", plan: prepared.plan, input: null, cwd: directory });
+  const { token } = c.store.reserveLaunch(run.id);
+  const context = { scope: ["graph", "main"], graphId: "main", nodeId: "write", visit: 0 };
+  const original = c.store.beginActivation(run.id, token, context, { kind: "check", sideEffect: true });
+  const primary = executionFailure("process", "setup", firstEffects, "Primary failure").failure;
+  const cleanup = executionFailure("uncertain-effect", "cleanup", "unknown", "Cleanup not confirmed").failure;
+  c.store.failActivation(run.id, token, original.key, "Primary and cleanup failure", primary, { retryCauses: [primary, cleanup] });
+  c.store.finish(run.id, token, { status: "failed", error: "Primary and cleanup failure" });
+  const before = c.store.getActivation(run.id, original.key);
+  await author(s, "next", [{ id: "done", kind: "end", value: { op: "literal", value: "continued" } }]);
+  const next = await s.dispatch("workflow.prepare", { id: "next" }) as PreparedExecution;
+  const inspect = await s.dispatch("run.continuation.inspect", { id: run.id }) as Awaited<ReturnType<RunController["continuationInspect"]>>;
+  assert.deepEqual(inspect.blockers, []);
+  assert.deepEqual(inspect.writerEffects, [{ key: original.key, attempt: 1, kind: "check", operation: true, effects: "unknown" }]);
+  const request = {
+    preparedId: next.preparedId, idempotencyKey: "composite-continuation", input: null,
+    actor: "tester", reason: "Retain effects of the inspected attempt", evidence: ["Inspected both failure causes"],
+    source: { runId: run.id, checkpoint: inspect.checkpoint, planHash: inspect.planHash }, workspaceDigest: inspect.workspace!.digest,
+  };
+  await assert.rejects(s.dispatch("run.continue", request), /writer-disposition-required/);
+  assert.equal(c.store.listRuns().length, 1);
+  assert.equal(c.store.fence(run.id), undefined);
+  const dispositions = inspect.writerEffects.filter(writer => writer.effects === "unknown").map(writer => ({
+    key: writer.key, attempt: writer.attempt, disposition: "retain-effects", evidence: ["Inspected workspace; retain original effects"],
+  }));
+  await assert.rejects(s.dispatch("run.continue", { ...request, dispositions: dispositions.map(item => ({ ...item, attempt: 2 })) }), /writer-disposition-required/);
+  const continued = await s.dispatch("run.continue", { ...request, dispositions }) as { id: string };
+  assert.equal((await wait(c, continued.id, "succeeded")).output, "continued");
+  assert.deepEqual(c.store.getActivation(run.id, original.key), before, "continuation must not accept or replay the uncertain source attempt");
+  assert.equal(c.store.listActivations(continued.id).some(record => record.sideEffect), false);
+}));
+
 test("malicious continuation reason is projected as text and reused nodes have no model", async () => fixture(async (s, c) => {
   await author(s, "sample", [planNode, done]);
   const prepared = await s.dispatch("workflow.prepare", { id: "sample" }) as PreparedExecution;
