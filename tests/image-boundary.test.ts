@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { createReadToolDefinition } from "@earendil-works/pi-coding-agent";
-import { applyImageToolGuard, decodeInlineImage, inspectImageBytes, wrapImageProducingTool } from "../src/image-boundary.js";
+import { applyImageToolGuard, assertContextImagesAllowed, decodeInlineImage, inspectImageBytes, MAX_INLINE_IMAGE_AGGREGATE_BASE64_CHARS, MAX_INLINE_IMAGE_BASE64_CHARS, MAX_INLINE_IMAGE_COUNT, wrapImageProducingTool } from "../src/image-boundary.js";
 import { effectiveFromRaw, noneAdapterCapabilities, rawInputCapability, supportedImageCapability } from "../src/capabilities.js";
 import { pngDigit } from "./helpers/test-images.js";
 import { xaiBridgeCapabilityRevision, type AdapterIdentityRecord } from "../src/adapter-identity.js";
 import { ExecutionFailure } from "../src/execution-failure.js";
+import { createRequestObservation } from "../src/request-observation.js";
 
 const adapter: AdapterIdentityRecord = {
   packageName: "pi-xai-oauth", packageVersion: "1.5.2", contentDigest: "a".repeat(64),
@@ -19,6 +20,21 @@ const adapter: AdapterIdentityRecord = {
 function isInvalid(error: unknown) {
   assert.ok(error instanceof ExecutionFailure); assert.equal(error.failure.diagnostic?.subcode, "image-invalid"); return true;
 }
+test("context count, individual and aggregate sizes are bounded before inspecting any codec", async () => {
+  let codecReads = 0;
+  const part = (data: string) => ({ type: "image", data, get mimeType() { codecReads++; return "image/png"; } });
+  for (const content of [
+    Array.from({ length: MAX_INLINE_IMAGE_COUNT + 1 }, () => part("YQ==")),
+    [part("A".repeat(MAX_INLINE_IMAGE_BASE64_CHARS + 4))],
+    [part("A".repeat(MAX_INLINE_IMAGE_AGGREGATE_BASE64_CHARS / 2)), part("A".repeat(MAX_INLINE_IMAGE_AGGREGATE_BASE64_CHARS / 2 + 4))],
+  ]) {
+    const observation = createRequestObservation();
+    await assert.rejects(assertContextImagesAllowed([{ content }], supportedImageCapability("test"), observation), isInvalid);
+    assert.equal(codecReads, 0);
+    assert.equal(observation.dispatch, "not-dispatched");
+    assert.equal(observation.diagnosticSubcode, "image-invalid");
+  }
+});
 test("PNG/JPEG decode rejects GIF, corrupt bytes and MIME mismatch", async () => {
   const png = pngDigit(4);
   const inspected = inspectImageBytes(png, "image/png");

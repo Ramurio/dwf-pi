@@ -19,7 +19,7 @@ import { observeProviderResponse, type ProviderResponseRecord } from "./provider
 import { providerFailureMessage } from "./provider-failure-message.js";
 
 import { capabilityAllowsImage, effectiveFromRaw, intersectEffectiveCapabilities, rawInputCapability, requirementsSatisfied, type FrozenCapabilities } from "./capabilities.js";
-import { sessionHistoryHasImages, wrapImageProducingTool } from "./image-boundary.js";
+import { assertContextImagesAllowed, sessionHistoryHasImages, wrapImageProducingTool } from "./image-boundary.js";
 import {
   createRequestObservation, diagnosticFromObservation, diagnosticMessages,
   runWithRequestObservation, type TrustedRequestObservation,
@@ -221,13 +221,17 @@ export async function executePiWorker(request: PiWorkerRequest, options: PiWorke
     let failedResponse: ProviderResponseRecord | undefined;
     let lastObservation: TrustedRequestObservation | undefined;
     const stream = session.agent.streamFunction;
-    session.agent.streamFunction = (requestModel, context, streamOptions) => {
+    session.agent.streamFunction = async (requestModel, context, streamOptions) => {
       // One response scope per assistant request, including output repair turns.
       const observation = createRequestObservation();
       observation.requestedReasoning = config.thinking;
       lastObservation = observation;
       const response: { value: ProviderResponseRecord | undefined } = {value:undefined};
       currentResponse = response;
+      // Проверяем всю исходящую историю, включая продолжение и ремонт вывода:
+      // проверка отдельного результата инструмента не ограничивает их общую сумму.
+      await assertContextImagesAllowed(context.messages, capabilities.effective.input, observation);
+      checkAdmission();
       let observedHttp = false;
       const upstreamFetch = options.providerFetch ?? streamOptions?.fetch ?? globalThis.fetch;
       const canObserveFetch = ["openai-codex-responses","openai-responses","openai-completions","xai-responses"].includes(requestModel.api);

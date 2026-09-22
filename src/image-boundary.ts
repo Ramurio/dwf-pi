@@ -5,7 +5,7 @@ import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 import { resizeImage as nativeResizeImage, type ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { diagnosticMessages, localDiagnostic, type TrustedRequestObservation } from "./request-observation.js";
 import { capabilityAllowsImage, supportedImageMimeTypes, type FrozenCapabilities, type ModalityCapability, type SupportedImageMimeType } from "./capabilities.js";
-import { executionFailure } from "./execution-failure.js";
+import { ExecutionFailure, executionFailure } from "./execution-failure.js";
 
 export const IMAGE_TOOL_GUARD_MESSAGE = diagnosticMessages["image-unsupported"];
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -204,16 +204,23 @@ export function contentHasImage(content: unknown): boolean {
 }
 
 export async function collectContextImages(messages: readonly { content?: unknown; role?: string }[]): Promise<InspectedInlineImage[]> {
-  const images: InspectedInlineImage[] = [];
+  const images: { mimeType?: string; data: string }[] = [];
+  let aggregate = 0;
+  // Проверяем размер всей истории до выделения буферов и декодирования изображений.
   for (const message of messages) {
     if (!Array.isArray(message.content)) continue;
     for (const part of message.content) {
       if (!part || typeof part !== "object" || (part as { type?: string }).type !== "image") continue;
       const image = part as { mimeType?: string; data?: string };
-      images.push(await decodeInlineImage(String(image.mimeType ?? ""), String(image.data ?? "")));
+      if (typeof image.data !== "string" || image.data.length > MAX_INLINE_IMAGE_BASE64_CHARS) throw invalidImage();
+      aggregate += image.data.length;
+      if (images.length >= MAX_INLINE_IMAGE_COUNT || aggregate > MAX_INLINE_IMAGE_AGGREGATE_BASE64_CHARS) throw invalidImage();
+      images.push(image as { mimeType?: string; data: string });
     }
   }
-  return images;
+  const inspected: InspectedInlineImage[] = [];
+  for (const image of images) inspected.push(await decodeInlineImage(String(image.mimeType ?? ""), image.data));
+  return inspected;
 }
 
 export async function assertContextImagesAllowed(
@@ -224,19 +231,11 @@ export async function assertContextImagesAllowed(
   let images: InspectedInlineImage[];
   try { images = await collectContextImages(messages); }
   catch (error) {
-    localDiagnostic(observation, { subcode: "image-invalid", code: "resource", dispatch: "not-dispatched" });
+    const unsupported = error instanceof ExecutionFailure && error.failure.diagnostic?.subcode === "image-unsupported";
+    localDiagnostic(observation, { subcode: unsupported ? "image-unsupported" : "image-invalid", code: unsupported ? "configuration" : "resource", dispatch: "not-dispatched" });
     throw error;
   }
   if (images.length === 0) return images;
-  if (images.length > MAX_INLINE_IMAGE_COUNT) {
-    localDiagnostic(observation, { subcode: "image-invalid", code: "resource", dispatch: "not-dispatched" });
-    throw invalidImage();
-  }
-  const aggregate = images.reduce((sum, image) => sum + image.encodedChars, 0);
-  if (aggregate > MAX_INLINE_IMAGE_AGGREGATE_BASE64_CHARS) {
-    localDiagnostic(observation, { subcode: "image-invalid", code: "resource", dispatch: "not-dispatched" });
-    throw invalidImage();
-  }
   if (!capabilityAllowsImage(capability)) {
     localDiagnostic(observation, { subcode: "image-unsupported", code: "configuration", dispatch: "not-dispatched" });
     throw unsupportedImage();
