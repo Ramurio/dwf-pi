@@ -20,10 +20,12 @@ function pendingRetry(run: RunRecord, record: ActivationRecord) {
 function displayState(run: RunRecord, record: ActivationRecord) {
   return record.status === "failed" ? pendingRetry(run, record) ? "retrying" : "failed" : activationState(record);
 }
+const answeredLabel = "Ответ сохранён · ожидает продолжения";
 const counts = (run: RunRecord, records: readonly ActivationRecord[]) => ({
   succeeded: records.filter(a => a.status === "succeeded").length,
   running: records.filter(a => displayState(run, a) === "running").length,
   waiting: records.filter(a => displayState(run, a) === "waiting").length,
+  answered: records.filter(a => displayState(run, a) === "answered").length,
   retrying: records.filter(a => displayState(run, a) === "retrying").length,
   failed: records.filter(a => displayState(run, a) === "failed").length,
   interrupted: records.filter(a => a.status === "interrupted").length,
@@ -31,7 +33,7 @@ const counts = (run: RunRecord, records: readonly ActivationRecord[]) => ({
 const identity = (record: ActivationRecord) => `${terminalText(record.context.graphId)}.${terminalText(record.context.nodeId)} scope=${terminalText(JSON.stringify(record.context.scope), 2_000)} visit=${record.context.visit}`;
 const progress = (run: RunRecord, activations: readonly ActivationRecord[]) => {
   const count = counts(run, activations);
-  return `${count.succeeded} succeeded · ${count.running} running${count.waiting ? ` · ${count.waiting} waiting` : ""}${count.retrying ? ` · ${count.retrying} retrying` : ""} · ${count.failed} failed · ${count.interrupted} interrupted (${activations.length} recorded activations)`;
+  return `${count.succeeded} succeeded · ${count.running} running${count.waiting ? ` · ${count.waiting} waiting` : ""}${count.answered ? ` · ${answeredLabel}: ${count.answered}` : ""}${count.retrying ? ` · ${count.retrying} retrying` : ""} · ${count.failed} failed · ${count.interrupted} interrupted (${activations.length} recorded activations)`;
 };
 const stateLabel = (run: RunRecord) => `${run.status}${run.status !== run.desired && !["succeeded", "failed", "cancelled"].includes(run.status) ? `; desired ${run.desired}` : ""}`;
 export function renderRunSummary(run: RunRecord, activations: readonly ActivationRecord[]): string {
@@ -45,7 +47,7 @@ function nodeLabel(node: Node): string {
 function nodeState(run: RunRecord, records: readonly ActivationRecord[]): string {
   if (!records.length) return "○ not visited";
   const count = counts(run, records);
-  const state = count.running ? "▶ running" : count.waiting ? "? waiting" : count.retrying ? "↻ retrying" : count.interrupted ? "! interrupted" : count.failed ? "× failed" : "✓ succeeded";
+  const state = count.running ? "▶ running" : count.waiting ? "? waiting" : count.answered ? `◷ ${answeredLabel}` : count.retrying ? "↻ retrying" : count.interrupted ? "! interrupted" : count.failed ? "× failed" : "✓ succeeded";
   return records.length === 1 ? state : `${state} · ${count.succeeded}/${records.length} recorded visits succeeded`;
 }
 /** All graph definitions and explicit edges, followed by concrete running identities and saved pending retry decisions. */
@@ -97,6 +99,6 @@ export function renderRun(run: RunRecord, activations: readonly ActivationRecord
     }
   }
   if (run.error) lines.push("", `Error: ${terminalText(run.error, 500)}`);
-  lines.push("", "○ not visited  ▶ running  ✓ succeeded  × failed  ! interrupted");
+  lines.push("", "○ not visited  ▶ running  ◷ ответ сохранён  ✓ succeeded  × failed  ! interrupted");
   return lines.join("\n");
 }

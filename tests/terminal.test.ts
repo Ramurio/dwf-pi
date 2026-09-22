@@ -28,6 +28,78 @@ function activation(nodeId: string, status: ActivationRecord["status"], graphId 
     sideEffect: nodeId !== "map", status, attempt: 1, ownerToken: "owner", startedAt: 1, finishedAt: status === "running" ? null : 2, metadata: {} };
 }
 
+const responseSchema = { type: "object", properties: { answer: { type: "boolean" } }, required: ["answer"], additionalProperties: false };
+function waitRun(): RunRecord {
+  const record = run();
+  record.plan.workflow.graphs = { main: { entry: "answer", nodes: [
+    { id: "answer", kind: "await", reason: { op: "literal", value: "Нужен ответ" }, input: { op: "literal", value: null }, responseSchema },
+    { id: "done", kind: "end", value: { op: "ref", path: ["input"] } },
+  ], edges: [{ from: "answer", to: "done" }] } };
+  return record;
+}
+
+const answerRow = (text: string) => text.split("\n").find(line => line.startsWith("│ answer [await]"))!;
+
+test("ответ на паузе виден в графе и сводке до фактического завершения await", () => {
+  const store = new RunStore(":memory:");
+  try {
+    const record = waitRun();
+    store.create({ id: record.id, plan: record.plan, input: null, cwd: record.cwd });
+    const { token } = store.reserveLaunch(record.id);
+    const active = store.beginActivation(record.id, token, { graphId: "main", nodeId: "answer", scope: ["root"], visit: 0 }, { kind: "await", sideEffect: false });
+    const wait = store.openWait(record.id, token, active.key, "Нужен ответ", null, responseSchema);
+    assert.match(answerRow(renderRun(store.get(record.id), store.listActivations(record.id))), /\? waiting/);
+    store.requestControl(record.id, "pause");
+    store.markPaused(record.id, token);
+    store.resolveWait(record.id, wait.id, { answer: true }, "terminal-test");
+    const saved = store.getActivation(record.id, active.key)!;
+    assert.equal(saved.status, "running");
+    assert.equal(saved.metadata.waitResolved, true);
+    assert.equal(store.completed(record.id, active.key), undefined);
+    const snapshot = () => ({ run: store.get(record.id), activations: store.listActivations(record.id), events: store.events(record.id) });
+    const before = snapshot();
+    const text = renderRun(before.run, before.activations);
+    assert.match(answerRow(text), /Ответ сохранён · ожидает продолжения/);
+    assert.doesNotMatch(answerRow(text), /succeeded|running|waiting/);
+    assert.doesNotMatch(text, /Wait |Paused structural activations:/);
+    const summary = renderRunSummary(before.run, before.activations);
+    assert.match(summary, /paused · 0 succeeded · 0 running/);
+    assert.match(summary, /Ответ сохранён · ожидает продолжения: 1/);
+    assert.doesNotMatch(summary, / · active /);
+    assert.deepEqual(snapshot(), before, "наблюдение не завершает await и не меняет журнал");
+    store.requestControl(record.id, "resume");
+    assert.match(answerRow(renderRun(store.get(record.id), store.listActivations(record.id))), /Ответ сохранён · ожидает продолжения/);
+    store.completeActivation(record.id, token, active.key, { answer: true });
+    assert.match(answerRow(renderRun(store.get(record.id), store.listActivations(record.id))), /✓ succeeded/);
+    assert.doesNotMatch(renderRunSummary(store.get(record.id), store.listActivations(record.id)), /Ответ сохранён/);
+  } finally { store.close(); }
+});
+
+test("смешанные посещения сохраняют ответ и приоритет действительно работающих и ожидающих узлов", () => {
+  const answered = { ...activation("answer", "running"), kind: "await", metadata: { waiting: true, waitResolved: true } };
+  const completed = { ...activation("answer", "succeeded", "main", 1), kind: "await" };
+  const failed = { ...activation("answer", "failed", "main", 2), kind: "await", metadata: { waitResolved: true } };
+  const interrupted = { ...activation("answer", "interrupted", "main", 3), kind: "await", metadata: { waitResolved: true } };
+  const waiting = { ...activation("answer", "running", "main", 4), kind: "await", metadata: { waiting: true } };
+  const running = { ...activation("answer", "running", "main", 5), kind: "await" };
+  const previous = [completed, failed, interrupted];
+  for (const [records, expected] of [
+    [[answered, ...previous], /Ответ сохранён · ожидает продолжения/],
+    [[answered, ...previous, waiting], /\? waiting/],
+    [[answered, ...previous, waiting, running], /▶ running/],
+    [[failed], /× failed/],
+    [[interrupted], /! interrupted/],
+  ] as const) {
+    for (const ordered of [records, [...records].reverse()]) {
+      assert.match(answerRow(renderRun(waitRun(), ordered)), expected);
+    }
+  }
+  const summary = renderRunSummary(waitRun(), [answered, ...previous]);
+  assert.match(summary, /1 succeeded · 0 running/);
+  assert.match(summary, /Ответ сохранён · ожидает продолжения: 1/);
+  assert.match(summary, /1 failed · 1 interrupted \(4 recorded activations\)/);
+});
+
 test("terminal diagram contains every graph, explicit loop/conditional edges, node states and concrete activation scope", () => {
   const records = [activation("review", "succeeded"), activation("map", "running"),
     activation("check", "succeeded", "child", 0), activation("check", "running", "child", 1)];
