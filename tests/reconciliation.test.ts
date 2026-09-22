@@ -201,3 +201,37 @@ test("integration acceptance verifies every source ancestor and recorded origina
   await controller.reconcile(accepted);assert.equal(git("rev-parse","HEAD"),finalHead);
   assert.equal(controller.store.reconciliation(id,retry.decisionId)!.supersededBy,accepted.decisionId);
 }));
+
+for (const mode of ["clean-B", "dirty-A", "missing", "contradiction"] as const) test(`guarded worktree recovery ${mode} preserves approved A`, async () => fixture(async (controller, directory) => {
+  const repo = join(directory, "repo"); await mkdir(repo);
+  const git = (cwd: string, ...args: string[]) => execFileSync("git", ["-c", "user.name=Fixture", "-c", "user.email=fixture@localhost", "-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false", ...args], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  git(repo, "init", "-b", "main"); await writeFile(join(repo, "base"), "base"); git(repo, "add", "."); git(repo, "commit", "-m", "base");
+  const workflow = flow("unused");
+  workflow.graphs.main!.nodes[0] = { id: "work", kind: "worktree", graphId: "child", input: { op: "literal", value: null }, expectedTreeFromResult: ["approved"] };
+  // Running this child on retry would produce an invalid approval; the journal must be reused.
+  workflow.graphs.child = { entry: "done", nodes: [{ id: "done", kind: "end", value: { op: "literal", value: "must not run" } }], edges: [] };
+  const { id, token, a } = await seed(controller, repo, workflow), manager = new GitWorkspaces(id, controller.directory(id));
+  const allocation = await manager.allocate(repo, a.key, undefined);
+  await writeFile(join(allocation.path, "base"), "A"); git(allocation.path, "add", ".");
+  const expectedTree = git(allocation.path, "write-tree"), childResult = { approved: `git-tree:${expectedTree}` };
+  if (mode === "clean-B") {
+    await writeFile(join(allocation.path, "base"), "B"); await manager.commit(allocation);
+  }
+  controller.store.setActivationMetadata(id, token, a.key, { workspace: { ...allocation }, workspacePhase: "committing", operation: { kind: "worktree", source: repo, childScope: [...context.scope, "node", "work", "visit", "0", "worktree", "graph", "child"], childResult, ...(mode === "missing" ? {} : { expectedTree: mode === "contradiction" ? null : expectedTree }) } });
+  fail(controller, id, token, a.key);
+  const inspection = await controller.recovery(id, a.key);
+  if (mode !== "dirty-A") {
+    assert(inspection.blockers.some(b => b.code === "worktree-constraint"));
+    for (const action of ["accept", "retry"] as const) await assert.rejects(controller.reconcile({ id, key: a.key, attempt: 1, checkpoint: inspection.checkpoint, workspaceDigest: "a".repeat(64), decisionId: "denied", action, actor: "test", reason: "test", evidence: [true], ...(action === "accept" ? { output: null } : {}) }), /blocked/);
+  } else {
+    assert.deepEqual(inspection.blockers, []);
+    const r = await request(controller, id, a.key, "retry"); await controller.reconcile(r);
+    await controller.control(id, "resume"); const completed = await stopped(controller, id);
+    assert.equal(completed.status, "succeeded", completed.error);
+    const parent = controller.store.getActivation(id, a.key)!;
+    assert.equal((parent.metadata.operation as any).expectedTree, expectedTree);
+    assert.deepEqual((parent.output as any).result, childResult);
+    assert.equal(git(allocation.path, "rev-parse", "HEAD^{tree}"), expectedTree);
+    assert.equal(controller.store.listActivations(id).filter(a => a.context.graphId === "child").length, 0);
+  }
+}));

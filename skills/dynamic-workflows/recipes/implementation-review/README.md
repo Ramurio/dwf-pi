@@ -129,3 +129,14 @@ node --import tsx --test tests/implementation-recipes.test.ts
 выполняются без сети и моделей. Для сохранения новой версии как проверенного
 пресета нужен её собственный реальный пробный запуск с корневым `accepted`
 и актуальными доказательствами.
+
+## Проверяемая привязка commit
+
+S/P/C включают `candidate.expectedTreeFromResult: ["approvedArtifactRevision"]`.
+Accepted ребёнок возвращает в этом поле реальный `nodes.snapshot.stdout`, связанный с review;
+blocked всегда возвращает null, даже после предыдущего snapshot. Существующий artifactRevision
+сохраняется. Успешное исполнение не означает принятие результата.
+Runtime журналирует childResult и expectedTree до admission и проверяет Git tree до/после
+commit. При drift результат не успешен, правки сохраняются. Уже созданный внешний commit
+не отменяется postcheck; гарантия не является sandbox, блокировкой writers или CAS commit-tree.
+Старые frozen планы автоматически этот guard не получают.

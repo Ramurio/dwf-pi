@@ -318,3 +318,14 @@ control/`await`/`reconcile` ограничивает сырые байты, де
 решения, неизменное число дочерних вызовов и реальных коммитов. Повтор частичного слияния
 записывает `head` начала **своей** попытки как `originalHead`/`base` выхода; старый `originalHead`
 остаётся в архиве `interrupted`. Это не утверждение отката или повторного выполнения ранних слияний.
+
+## Одобренное дерево worktree
+
+Для frozen `expectedTreeFromResult` recovery сверяет selector, сохранённый `childResult`
+и `operation.expectedTree`. В committing/complete отсутствие или противоречие обязательного
+доказательства блокирует accept/retry. В children можно завершить запись expectedTree только
+из сохранённого childResult. Повтор parent attempt сохраняет это обязательство и не запускает
+завершённого ребёнка заново. Accept требует чистого commit с ожидаемым деревом; complete
+дополнительно требует прежний точный head. Чистый B при одобренном A отвергается.
+Грязный retry не является принятием: HEAD может ещё быть base, дерево проверяется после
+staging в обычном commit. Read-only inspection не выполняет git add.

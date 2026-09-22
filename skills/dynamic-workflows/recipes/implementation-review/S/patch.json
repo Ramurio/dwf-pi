@@ -32,7 +32,10 @@
           "path": [
             "input"
           ]
-        }
+        },
+        "expectedTreeFromResult": [
+          "approvedArtifactRevision"
+        ]
       }
     },
     {
@@ -641,6 +644,14 @@
                 "snapshot",
                 "stdout"
               ]
+            },
+            "approvedArtifactRevision": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "snapshot",
+                "stdout"
+              ]
             }
           }
         }
@@ -723,6 +734,10 @@
               }
             },
             "initialSnapshot": {
+              "op": "literal",
+              "value": null
+            },
+            "approvedArtifactRevision": {
               "op": "literal",
               "value": null
             }

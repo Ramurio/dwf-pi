@@ -175,3 +175,12 @@ test("graph rejects exotic array prototypes before getters or overridden iterati
   rejected(w, /plain JSON array/);
   assert.equal(calls, 0);
 });
+
+test("worktree selector is an optional array of strings, including the root path", () => {
+  for (const selector of [[], ["nested", "approved"], "approved", [1], null]) {
+    const flow = base();
+    flow.graphs.child = { entry: "done", nodes: [{ id: "done", kind: "end", value: literal(null) }], edges: [] };
+    flow.graphs.main = { entry: "candidate", nodes: [{ id: "candidate", kind: "worktree", graphId: "child", input: literal(null), expectedTreeFromResult: selector } as any, { id: "done", kind: "end", value: literal(null) }], edges: [{ from: "candidate", to: "done" }] };
+    assert.equal(validateWorkflow(flow).valid, Array.isArray(selector) && selector.every(v => typeof v === "string"));
+  }
+});

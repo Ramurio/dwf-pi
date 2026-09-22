@@ -1,3 +1,4 @@
+import { recordedWorktreeTree } from "./worktree-constraint.js";
 import { isDeepStrictEqual } from "node:util";
 import { assertJson, createOutputValidator } from "./output-schema.js";
 import type { Json } from "./graph.js";
@@ -35,6 +36,7 @@ export function validateReconciledOutput(run: RunRecord, activation: ActivationR
   if (!schema) throw new Error("This operation has no reconciliation output contract");
   const result = createOutputValidator(schema)(output);
   const node = run.plan.workflow.graphs[activation.context.graphId]?.nodes.find(n => n.id === activation.context.nodeId);
+  if (node?.kind === "worktree") recordedWorktreeTree(node, parseOperation(activation.metadata.operation), "complete");
   if (node?.kind === "agent" && node.role === "reviewer" && Array.isArray(schema.required) && schema.required.includes("artifactRevision")) {
     const operation = parseOperation(activation.metadata.operation);
     const input = operation?.kind === "agent" ? operation.input : null;

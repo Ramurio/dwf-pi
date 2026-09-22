@@ -174,3 +174,19 @@ test("agent setup failure and cleanup fault remain distinct without model admiss
   const causes = Array.from(Cause.failures(result.cause)) as ExecutionFailure[];
   assert.equal(causes.length, 2); assert.equal(causes[0]!.failure.code, "configuration"); assert.equal(causes[1]!.failure.phase, "cleanup");
 });
+
+test("worktree children journal survives a new parent attempt without recomputing approval", async t => {
+  const node: Node = { id: "work", kind: "worktree", graphId: "child", input: { op: "literal", value: null }, expectedTreeFromResult: ["approved"] };
+  const f = await fixture(t, node);
+  f.store.beginActivation("run", f.token, context, { kind: "worktree", sideEffect: true });
+  const operation = { kind: "worktree", source: f.directory, childScope: ["child"], childResult: { approved: `git-tree:${"a".repeat(40)}` }, expectedTree: "a".repeat(40) };
+  f.store.setActivationMetadata("run", f.token, key, { workspacePhase: "children", workspace: { path: f.directory }, operation });
+  f.store.failActivation("run", f.token, key, "paused before commit");
+  const next = f.store.beginActivation("run", f.token, context, { kind: "worktree", sideEffect: true });
+  assert.equal(next.attempt, 2);
+  assert.deepEqual(next.metadata.operation, operation);
+  f.store.setActivationMetadata("run", f.token, key, { operation: { ...operation, expectedTree: null } });
+  assert.throws(() => f.store.admitWorkspaceCommit("run", f.token, key), /contradicts/);
+  f.store.setActivationMetadata("run", f.token, key, { operation: { kind: "worktree", source: f.directory, childScope: [] } });
+  assert.throws(() => f.store.admitWorkspaceCommit("run", f.token, key), /childResult/);
+});

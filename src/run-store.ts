@@ -1,3 +1,4 @@
+import { recordedWorktreeTree } from "./worktree-constraint.js";
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
@@ -403,6 +404,8 @@ export class RunStore {
       const record = this.runningActivation(id, token, key);
       if (record.kind !== "worktree" || record.metadata.workspacePhase !== "children") throw new Error("Worktree is not ready to commit");
       if (run.desired !== "running" || !["running", "waiting"].includes(run.status)) return false;
+      const node = run.plan.workflow.graphs[record.context.graphId]?.nodes.find(n => n.id === record.context.nodeId);
+      recordedWorktreeTree(node, parseOperation(record.metadata.operation), "committing");
       const metadata = { ...record.metadata, workspacePhase: "committing" };
       this.database.prepare("UPDATE workflow_activations SET metadata=? WHERE run_id=? AND activation_key=?").run(JSON.stringify(metadata), id, key);
       this.event(id, "activation.metadata", { key, attempt: record.attempt, metadata: JSON.parse(JSON.stringify(metadata)) as Json });
@@ -500,6 +503,10 @@ export class RunStore {
       const decision = manual ? undefined : this.plannedRetry(run,old), allowed = !!decision;
       if (decision && retryRemaining(retryProgress(decision,"scheduled")) > 0) throw new RetryNotReady();
       if (old?.sideEffect && !allowed && !manual && !(old.kind === "worktree" && old.metadata.workspacePhase === "children")) throw executionFailure("uncertain-effect","recovery","unknown",`Uncertain side effect requires explicit retry authorization: ${key}`);
+      if (old?.kind === "worktree") {
+        const node = run.plan.workflow.graphs[context.graphId]?.nodes.find(n => n.id === context.nodeId);
+        recordedWorktreeTree(node, parseOperation(old.metadata.operation), old.metadata.workspacePhase);
+      }
       // Preserve the complete prior checkpoint atomically before replacing the current attempt.
       if (old) this.database.prepare("INSERT INTO workflow_activation_history(run_id,activation_key,attempt,record) VALUES(?,?,?,?)")
         .run(id, key, old.attempt, JSON.stringify(allowed ? {...old,metadata:{...old.metadata,retry:retryProgress(decision!,"admitted")}} : old));
@@ -507,6 +514,7 @@ export class RunStore {
         operation: _operation, sessionFile: _session, workerPid: _pid, workerToken: _worker, workerKind: _workerKind, workerLaunch: _workerLaunch,
         workerGroupPid: _groupPid, workerGroupState: _groupState,
         cwd: _cwd, model: _model, thinking: _thinking, reconciliation: _reconciliation, workspaceRecovery: _workspaceRecovery, ...metadata } = old?.metadata ?? {};
+      if (old?.kind === "worktree" && _operation !== undefined) metadata.operation = _operation;
       const now = Date.now();
       if (manual) {
         this.applyReconciliation(id, manual.request.decisionId, old!.attempt + 1, now);
@@ -554,6 +562,7 @@ export class RunStore {
       return;
     }
     if (node.kind !== "worktree") return;
+    if (metadata.operation !== undefined && metadata.workspace !== undefined && metadata.workspacePhase === "children") return;
     const childScope = [...context.scope, "node", node.id, "visit", String(context.visit), "worktree", "graph", node.graphId];
     const operation = parseOperation({ kind: "worktree", source, childScope, ...(node.base ? { base: node.base } : {}) });
     if (!operation) return;
