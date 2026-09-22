@@ -671,7 +671,7 @@ function renderInspector() {
         ),
       );
     if (a.result) row.append(el("p", "", a.result));
-    if (a.retry) row.append(retryView(a.retry));
+    if (a.retry) row.append(retryView(a.retry, a.status === "retrying"));
     if (node.retryPolicy) renderRetries(row,a);
     if (node.failurePolicy === "collect") renderCollection(row, a);
     if (a.outputRepair) row.append(outputRepairView(a.outputRepair, a.status));
@@ -806,12 +806,13 @@ function failureView(failure, runScope = false) {
   }
   return panel;
 }
-function retryView(progress) {
-  const labels = {scheduled:"запланирована",admitted:"допущена",abandoned:"снята без допуска"};
+function retryView(progress, pending = false) {
+  const historical = progress.status === "scheduled" && !pending;
+  const labels = {scheduled:historical ? "ранее планировалась" : "запланирована",admitted:"допущена",abandoned:"снята без допуска"};
   const panel = el("div","notice"), when = progress.dueAt !== null && Number.isFinite(new Date(progress.dueAt).getTime()) ? date(progress.dueAt) : `задержка ${number(progress.delayMs)} мс`;
-  panel.append(el("strong","",`Попытка ${progress.nextAttempt}: ${labels[progress.status] ?? progress.status}`),el("p","muted",`После ошибки попытки ${progress.attempt} · не раньше ${when}`));
+  panel.append(el("strong","",`Попытка ${progress.nextAttempt}: ${labels[progress.status] ?? progress.status}`),el("p","muted",`После ошибки попытки ${progress.attempt} · ${historical ? "срок исходного решения" : "не раньше"} ${when}`));
   panel.append(el("p","muted",`Назначенная задержка: ${number(progress.delayMs)} мс.`));
-  if (progress.status === "scheduled") panel.append(el("p","muted","Новая попытка ещё не началась. Для допуска запуск должен работать и срок задержки должен истечь."));
+  if (progress.status === "scheduled") panel.append(el("p","muted",historical ? "Сохранённое решение само по себе не означает, что повтор сейчас ожидается." : "Новая попытка ещё не началась. Для допуска запуск должен работать и срок задержки должен истечь."));
   return panel;
 }
 function renderRetries(container,activation) {
@@ -872,7 +873,7 @@ function renderAttempts(container, activation) {
     if(record.metadata.reconciliation?.action === "accept") card.append(el("p","notice","Результат принят при восстановлении. Нового вызова модели или команды не было; прежний расход сохранён в исходной попытке."));
     else if(record.kind==="agent")card.append(el("p","",record.accounting.usage ? `${number(record.accounting.usage.totalTokens)} ток. · ответов ${record.accounting.responses}${record.accounting.complete ? "" : " · частично"}` : "Расход этой попытки неизвестен: нет отчётов SDK."));
     if(record.metadata.outputRepair)card.append(outputRepairView(record.metadata.outputRepair,record.status));
-    if(record.metadata.retry)card.append(retryView(record.metadata.retry));
+    if(record.metadata.retry)card.append(retryView(record.metadata.retry, false));
     if(record.metadata.failureCauses)for(const cause of record.metadata.failureCauses)card.append(failureView(cause));
     else if(record.metadata.failure)card.append(failureView(record.metadata.failure));
     else if(record.error)card.append(el("pre","",record.error));
@@ -1264,7 +1265,7 @@ function renderNow() {
     state.run.activeKeys.includes(a.key),
   );
   for (const a of activations.filter(a=>(state.run.retryingKeys??[]).includes(a.key))) {
-    const row=taskRow(a);if(a.retry)row.append(retryView(a.retry));panel.append(row);
+    const row=taskRow(a);if(a.retry)row.append(retryView(a.retry, a.status === "retrying"));panel.append(row);
   }
   if (!active.length)
     panel.append(

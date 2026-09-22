@@ -126,6 +126,40 @@ back.value = 'all'; back.dispatchEvent(new Event('change'));
 check(rows().length === outcomes.length, 'accepted cannot be restored in full history');
 `;
 
+const retryReplay = `
+const retry = { decisionSeq: 1, attempt: 1, nextAttempt: 2, scheduledAt: 1, delayMs: 1000, dueAt: 1001, status: 'scheduled' };
+const current = { ...nodes[0].activations[0], status: 'failed', retry, attempt: 1 };
+state.run.graphs = [{ id: 'main', entry: 'route', edges: [], nodes: [{ ...nodes[0], kind: 'check', status: 'failed', activations: [current] }] }];
+state.graph = 'main'; state.node = 'route'; state.scope = ''; state.transition = null;
+state.run.activeKeys = []; state.run.retryingKeys = [];
+const assertHistorical = text => {
+ check(text.includes('ранее планировалась'), 'saved retry is presented as a current promise');
+ check(!text.includes('Новая попытка ещё не началась'), 'historical retry promises future admission');
+ check(!text.includes('снята без допуска'), 'UI invented abandoned status');
+};
+state.run.status = 'cancelled'; state.run.desired = 'cancelled'; renderPanel();
+assertHistorical($('inspector').textContent);
+state.run.status = 'running'; state.run.desired = 'running'; current.attempt = 2; renderPanel();
+assertHistorical($('inspector').textContent);
+current.attempt = 1; current.status = 'retrying'; state.run.retryingKeys = [current.key];
+for (const status of ['running', 'paused']) {
+ state.run.status = status; state.run.desired = status;
+ renderPanel();
+ check($('inspector').textContent.includes('Попытка 2: запланирована'), 'valid pending retry disappeared');
+ setTab('now'); check($('content-panel').textContent.includes('Попытка 2: запланирована'), 'current retry row disappeared');
+ setTab('graph');
+}
+const identity = JSON.stringify([state.id, current.key]);
+const archived = { attempt: 1, kind: 'check', status: 'failed', startedAt: 0, finishedAt: 1, metadata: { retry } };
+Object.assign(attemptPages.get(identity), { opened: true, reports: [archived], cursor: 1 });
+attemptPages.snapshots.set(identity, { current: { ...archived, attempt: 2 }, missingArchived: 0 });
+renderPanel();
+const cards = descendants($('inspector')).filter(n => n.className === 'attempt-card');
+check(cards.length === 2, 'attempt archive did not render');
+for (const card of cards) assertHistorical(card.textContent);
+check(retry.status === 'scheduled' && archived.metadata.retry === retry, 'render changed saved retry metadata');
+`;
+
 // Small deterministic DOM adapter; no UI function is mocked. A real browser replay below
 // runs the identical scenario against index.html and native events when Chrome is installed.
 class Element {
@@ -149,7 +183,7 @@ class Element {
   getBoundingClientRect() { return { width: 900, height: 600 }; }
 }
 
-for (const [scenario, extra] of [["trace A → run B → usage B", navigationReplay], ["issues сохраняет explicit rejected", historyReplay]]) {
+for (const [scenario, extra] of [["trace A → run B → usage B", navigationReplay], ["issues сохраняет explicit rejected", historyReplay], ["retry отличает ожидающий повтор от старого решения", retryReplay]]) {
 const scenarioReplay = replay + extra;
 test(`app.js DOM replay: ${scenario}`, async () => {
   const elements = new Map<string, Element>();
