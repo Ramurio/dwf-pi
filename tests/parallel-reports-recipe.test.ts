@@ -48,7 +48,7 @@ test("parallel-reports: публичная схема, редактирован�
   assert.equal(Object.values(plan.workflow.graphs).flatMap(g => g.nodes).some(n => n.kind === "integrate"), false);
 });
 
-for (const scenario of ["different-paths", "same-path", "failed-branch"] as const) {
+for (const scenario of ["different-paths", "same-path", "failed-branch", "blocked-first", "blocked-second", "synthesis-inconclusive"] as const) {
   test(`parallel-reports: реальные отчёты, изоляция и оболочки (${scenario})`, { timeout: 30000 }, async t => {
     const directory = await realpath(await mkdtemp(join(tmpdir(), "parallel-reports-")));
     const repo = join(directory, "repo"); await mkdir(repo);
@@ -83,7 +83,9 @@ for (const scenario of ["different-paths", "same-path", "failed-branch"] as cons
         if (scenario === "failed-branch" && value.assignment === "FIRST_ONLY") {
           return yield* Effect.fail(new Error("Проверочный отказ первой ветви"));
         }
-        const result = { status: "written", reportPath: value.reportPath, summary: value.assignment };
+        const blocked = (scenario === "blocked-first" && value.assignment === "FIRST_ONLY") ||
+          (scenario === "blocked-second" && value.assignment === "SECOND_ONLY");
+        const result = { status: blocked ? "blocked" : "written", reportPath: value.reportPath, summary: value.assignment };
         // Подставной агент использует тот же выбор cwd, что и настоящий worker.
         // Приватная граница читается только здесь; Git-выделение/журнал не подменены.
         const cwd = (runtime as unknown as { workspaceCwd(c: RuntimeContext): string }).workspaceCwd(context);
@@ -115,14 +117,21 @@ for (const scenario of ["different-paths", "same-path", "failed-branch"] as cons
         assert.equal(git(workspace.path, "show", `${workspace.head}:${result.reportPath}`), input[name].assignment);
       }
       // Намеренно ошибочное одобрение в failed-branch: корневой guard обязан отказать.
-      return { decision: "accepted", summary: "Проверочные отчёты собраны", reason: "Ответ подставного обобщающего агента" };
+      return { decision: scenario === "synthesis-inconclusive" ? "inconclusive" : "accepted",
+        summary: "Проверочные отчёты собраны", reason: "Ответ подставного обобщающего агента" };
     });
     const module = await loadGeneratedModule(plan, join(directory, "generated"));
     const output: any = await Effect.runPromise(module.run(runtime, input as Json));
     store.finish(run.id, token, { status: "succeeded", output });
     assert.deepEqual(output.reports, synthesisInput.reports);
     assert.deepEqual(Object.keys(output).sort(), ["reports", "synthesis"]);
-    assert.equal(store.get(run.id).taskOutcome?.decision, scenario === "failed-branch" ? "inconclusive" : "accepted", JSON.stringify(output));
+    const outcome = store.get(run.id).taskOutcome!;
+    assert.equal(outcome.decision, ["different-paths", "same-path"].includes(scenario) ? "accepted" : "inconclusive", JSON.stringify(output));
+    if (scenario === "failed-branch") assert.match(outcome.reason, /ветвь завершилась ошибкой/);
+    else if (scenario.startsWith("blocked-")) assert.match(outcome.reason, /отчёт не завершён/);
+    else assert.equal(outcome.reason, "Ответ подставного обобщающего агента");
+    // Исходное мнение модели сохраняется даже при отказе корневого guard.
+    assert.equal(output.synthesis.reason, "Ответ подставного обобщающего агента");
     assert.equal(git(repo, "rev-parse", "HEAD"), base);
     assert.equal(git(repo, "status", "--porcelain"), "");
     await assert.rejects(readFile(join(repo, input.first.reportPath)), { code: "ENOENT" });

@@ -277,12 +277,104 @@
         "kind": "finish",
         "decision": "inconclusive",
         "reason": {
-          "op": "ref",
-          "path": [
-            "nodes",
-            "synthesize",
-            "reason"
-          ]
+          "op": "select",
+          "when": {
+            "op": "all",
+            "items": [
+              {
+                "op": "eq",
+                "left": {
+                  "op": "ref",
+                  "path": [
+                    "nodes",
+                    "reports",
+                    "first",
+                    "status"
+                  ]
+                },
+                "right": {
+                  "op": "literal",
+                  "value": "succeeded"
+                }
+              },
+              {
+                "op": "eq",
+                "left": {
+                  "op": "ref",
+                  "path": [
+                    "nodes",
+                    "reports",
+                    "second",
+                    "status"
+                  ]
+                },
+                "right": {
+                  "op": "literal",
+                  "value": "succeeded"
+                }
+              }
+            ]
+          },
+          "then": {
+            "op": "select",
+            "when": {
+              "op": "all",
+              "items": [
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "reports",
+                      "first",
+                      "value",
+                      "result",
+                      "status"
+                    ]
+                  },
+                  "right": {
+                    "op": "literal",
+                    "value": "written"
+                  }
+                },
+                {
+                  "op": "eq",
+                  "left": {
+                    "op": "ref",
+                    "path": [
+                      "nodes",
+                      "reports",
+                      "second",
+                      "value",
+                      "result",
+                      "status"
+                    ]
+                  },
+                  "right": {
+                    "op": "literal",
+                    "value": "written"
+                  }
+                }
+              ]
+            },
+            "then": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "synthesize",
+                "reason"
+              ]
+            },
+            "otherwise": {
+              "op": "literal",
+              "value": "Хотя бы один отчёт не завершён; результат не принят. Подробности в reports, мнение обобщающего агента — в synthesis."
+            }
+          },
+          "otherwise": {
+            "op": "literal",
+            "value": "Хотя бы одна ветвь завершилась ошибкой; результат не принят. Подробности в reports, мнение обобщающего агента — в synthesis."
+          }
         },
         "evidence": {
           "op": "array",
