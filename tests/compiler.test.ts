@@ -5,7 +5,7 @@ import { pathToFileURL } from "node:url";
 import test, { type TestContext } from "node:test";
 import { Effect } from "effect";
 import ts from "typescript";
-import { compileWorkflow } from "../src/compiler.js";
+import { compileWorkflow, type CompilerVersion } from "../src/compiler.js";
 import type { Expr, Graph, Json, WorkflowDefinition } from "../src/graph.js";
 import type { RuntimeContext, WorkflowRuntime } from "../src/runtime-contract.js";
 import { chooseEdge } from "../src/expressions.js";
@@ -13,8 +13,8 @@ import { verifyExecutionPlan } from "../src/execution-plan.js";
 import { loadGeneratedModule } from "../src/generated-module.js";
 
 const literal = (value: Json): Expr => ({ op: "literal", value });
-test("golden v3 compiled agent plan still executes and routes on the current runtime contract", async t => {
-  const plan = verifyExecutionPlan(JSON.parse(await readFile(new URL("./fixtures/legacy-v3-plan.json", import.meta.url), "utf8")));
+for (const fixtureName of ["legacy-v3-plan.json", "frozen-role-defaults-plan.json"]) test(`golden ${fixtureName} still executes on the current runtime contract`, async t => {
+  const plan = verifyExecutionPlan(JSON.parse(await readFile(new URL(`./fixtures/${fixtureName}`, import.meta.url), "utf8")));
   const directory = await mkdtemp(join(process.cwd(), ".compiler-test-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const module = await loadGeneratedModule(plan, directory);
@@ -23,7 +23,16 @@ test("golden v3 compiled agent plan still executes and routes on the current run
   runtime.route = (context, edges, scope) => { routeCalls++; return Effect.try(() => chooseEdge(context.nodeId, edges, scope)); };
   assert.deepEqual(await Effect.runPromise(module.run(runtime, null)), { result: "legacy" });
   assert.equal(agentCalls, 1); assert.equal(routeCalls, 1);
-  assert.deepEqual(steps.map(step => step.nodeId), ["work", "done"]);
+  assert.deepEqual(steps.map(step => step.nodeId), [plan.workflow.graphs.main!.entry, "done"]);
+});
+test("agent/integrate source hashes for compiler v1-v9 remain unchanged", async () => {
+  const saved = JSON.parse(await readFile(new URL("./fixtures/compiler-v1-v9-operation-hashes.json", import.meta.url), "utf8"));
+  for (const [version, hash] of Object.entries(saved.hashes)) {
+    const compiled = compileWorkflow(saved.workflow, version as CompilerVersion);
+    assert.equal(compiled.hash, hash, version);
+    assert.doesNotMatch(compiled.source, /stepOperation/);
+  }
+  assert.match(compileWorkflow(saved.workflow).source, /stepOperation/);
 });
 const ref = (...path: string[]): Expr => ({ op: "ref", path });
 const definition = (graphs: Record<string, Graph>, entryGraph = "main"): WorkflowDefinition => ({
@@ -61,6 +70,13 @@ function recorder(agent?: WorkflowRuntime["agent"], check?: WorkflowRuntime["che
     collect: (_context, _id, work) => work().pipe(Effect.map(value => ({ status: "succeeded", value } as Json))),
     route: (context, edges, scope) => Effect.try(() => chooseEdge(context.nodeId, edges, scope)),
     step(context, work) { return Effect.suspend(() => { steps.push(structuredClone(context)); return work(); }); },
+    stepOperation(context, node, prepare) {
+      return this.step(context, () => Effect.try({ try: prepare, catch: error => error instanceof Error ? error : new Error(String(error)) }).pipe(Effect.flatMap(inputs => {
+        if (inputs.kind === "agent" && node.kind === "agent") return this.agent(context, node, inputs.task, inputs.input);
+        if (inputs.kind === "integrate" && node.kind === "integrate") return this.integrate(context, node, inputs.sources);
+        return Effect.fail(new Error("Mismatched fixture operation"));
+      })));
+    },
     agent: agent ?? (() => Effect.fail(new Error("Unexpected agent node"))),
     worktree: () => Effect.fail(new Error("Unexpected worktree node")),
     integrate: () => Effect.fail(new Error("Unexpected integrate node")),

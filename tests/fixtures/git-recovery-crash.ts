@@ -3,7 +3,7 @@ import { writeSync } from "node:fs";
 import { GitWorkspaces, type GitOperationOptions } from "../../src/workspaces.js";
 import { RunStore } from "../../src/run-store.js";
 const point = process.env.DYNAMICWF_TEST_GIT_CRASH_POINT;
-const supported = ["allocation-intent", "allocation-created", "worktree-staged", "worktree-committed", "worktree-checkpoint", "merge-first", "merge-last", "integration-checkpoint"];
+const supported = ["allocation-intent", "allocation-created", "worktree-staged", "worktree-committed", "worktree-checkpoint", "merge-first", "merge-last", "integration-checkpoint", "integrate-admission", "agent-admission"];
 if (!point || !supported.includes(point)) throw new Error("Unknown Git crash fixture point");
 function crash(): never {
   writeSync(2, `Fixture SIGKILL at ${point}\n`);
@@ -23,6 +23,12 @@ prototype.git = async function(cwd, args, options, expected) {
     if ((point === "merge-first" && merges === 1) || (point === "merge-last" && merges === 2)) crash();
   }
   return result;
+};
+const begin = RunStore.prototype.beginActivation;
+RunStore.prototype.beginActivation = function(id, token, context, options) {
+  const record = begin.call(this, id, token, context, options);
+  if (point === `${options.kind}-admission` && record.status === "running") crash();
+  return record;
 };
 const metadata = RunStore.prototype.setActivationMetadata;
 RunStore.prototype.setActivationMetadata = function(id, token, key, patch) {

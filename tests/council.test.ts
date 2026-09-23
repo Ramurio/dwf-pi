@@ -75,6 +75,13 @@ function runtime(results: Record<Perspective, Vote>, onCall?: (perspective: Pers
     wait: () => Effect.fail(new Error("Unexpected await node")),
     reuse: () => Effect.fail(new Error("Unexpected reuse node")),
     step(_context, work) { return Effect.suspend(work); },
+    stepOperation(context, node, prepare) {
+      return this.step(context, () => Effect.try({ try: prepare, catch: error => error instanceof Error ? error : new Error(String(error)) }).pipe(Effect.flatMap(inputs => {
+        if (inputs.kind === "agent" && node.kind === "agent") return this.agent(context, node, inputs.task, inputs.input);
+        if (inputs.kind === "integrate" && node.kind === "integrate") return this.integrate(context, node, inputs.sources);
+        return Effect.fail(new Error("Mismatched fixture operation"));
+      })));
+    },
     agent(_context, _node, task, input) {
       return Effect.sync(() => {
         assert.ok(input && typeof input === "object" && !Array.isArray(input));

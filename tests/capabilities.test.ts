@@ -52,7 +52,7 @@ test("prepare rejects unknown or unsupported required image capabilities and lea
     ], edges: [{ from: "work", to: "done" }] } },
   });
   const text = await prepareExecutionPlan(workflow(), { cwd: process.cwd(), availableModels: [{ provider: "offline", id: "fixture", thinkingLevels: ["off"] }] });
-  assert.equal(text.runtimeVersion, "dynamicwf-runtime-v9");
+  assert.equal(text.runtimeVersion, "dynamicwf-runtime-v10");
   assert.equal(text.agents.main!.work!.capabilities?.effective.input.state, "unknown");
   assert.deepEqual(text.agents.main!.work!.reasoning, { available: ["off"], requested: "medium", resolved: "off" });
   await assert.rejects(prepareExecutionPlan(workflow({ inputModalities: ["image"] }), { cwd: process.cwd(), availableModels: [{ provider: "offline", id: "fixture", thinkingLevels: ["off"] }] }), /unknown required image|Unsupported or unknown/);

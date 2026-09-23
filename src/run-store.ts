@@ -14,7 +14,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { RoutingDecision } from "./expressions.js";
 import { validateCollectedResult, type CollectedResult, type CollectionRecord } from "./collection.js";
 import { parseRetryProgress, permitsRetry, retryDelay, retryProgress, retryRemaining, RetryNotReady, type RetryRecord } from "./retry-policy.js";
-import { parseOperation } from "./operation-record.js";
+import { parseOperation, type OperationRecord } from "./operation-record.js";
 import { recoveryBlockers, recoveryCheckpoint } from "./recovery-inspection.js";
 import type { WorkspaceObservation } from "./recovery-files.js";
 import { parseReconciliationRequest, sameReconciliation, validateReconciledOutput, type ReconciliationRecord, type ReconciliationRequest } from "./reconciliation.js";
@@ -487,7 +487,7 @@ export class RunStore {
       this.event(id, `run.${outcome.status}`, outcome.status === "succeeded" ? { output: outcome.output, taskOutcome: JSON.parse(JSON.stringify(taskOutcome)) as Json } : outcome.status === "failed" ? { error: outcome.error, failure: JSON.parse(JSON.stringify(failure)) as Json } : {});
     });
   }
-  beginActivation(id: string, token: string, context: RuntimeContext, options: { kind: string; sideEffect: boolean; reconciliation?: string }): ActivationRecord {
+  beginActivation(id: string, token: string, context: RuntimeContext, options: { kind: string; sideEffect: boolean; reconciliation?: string; prepareOperation?: () => OperationRecord | null }): ActivationRecord {
     return this.transaction(() => {
       const run = this.owned(id, token);
       if (run.desired !== "running" || !["running", "waiting"].includes(run.status)) throw new RunNotAcceptingWork(run.desired, run.status);
@@ -507,11 +507,17 @@ export class RunStore {
         const node = run.plan.workflow.graphs[context.graphId]?.nodes.find(n => n.id === context.nodeId);
         recordedWorktreeTree(node, parseOperation(old.metadata.operation), old.metadata.workspacePhase);
       }
+      // Только синхронное вычисление/чтение журнала; callback не выполняет внешних действий.
+      // null означает ошибку подготовки: попытка сохранится, но operation не выдумывается.
+      const prepared = options.prepareOperation?.();
+      const operation = prepared === null || prepared === undefined ? undefined : parseOperation(prepared);
+      if (options.prepareOperation && (!["agent", "integrate"].includes(options.kind) || run.plan.workflow.graphs[context.graphId]?.nodes.find(node => node.id === context.nodeId)?.kind !== options.kind ||
+        prepared !== null && (!operation || operation.kind !== options.kind))) throw new Error("Invalid prepared operation for activation");
       // Preserve the complete prior checkpoint atomically before replacing the current attempt.
       if (old) this.database.prepare("INSERT INTO workflow_activation_history(run_id,activation_key,attempt,record) VALUES(?,?,?,?)")
         .run(id, key, old.attempt, JSON.stringify(allowed ? {...old,metadata:{...old.metadata,retry:retryProgress(decision!,"admitted")}} : old));
       const { failure: _previousFailure, failureCauses: _previousCauses, outputRepair: _previousRepair, retry: _previousRetry,
-        operation: _operation, sessionFile: _session, workerPid: _pid, workerToken: _worker, workerKind: _workerKind, workerLaunch: _workerLaunch,
+        operation: _operation, operationPreparationFailed: _preparationFailed, sessionFile: _session, workerPid: _pid, workerToken: _worker, workerKind: _workerKind, workerLaunch: _workerLaunch,
         workerGroupPid: _groupPid, workerGroupState: _groupState,
         cwd: _cwd, model: _model, thinking: _thinking, reconciliation: _reconciliation, workspaceRecovery: _workspaceRecovery, ...metadata } = old?.metadata ?? {};
       if (old?.kind === "worktree" && _operation !== undefined) metadata.operation = _operation;
@@ -526,6 +532,8 @@ export class RunStore {
         this.event(id, "run.running", {});
       }
       this.admitFrozenWriterIntent(run, id, context, options.kind, metadata);
+      if (operation) metadata.operation = JSON.parse(JSON.stringify(operation)) as Json;
+      if (prepared === null) metadata.operationPreparationFailed = true;
       this.database.prepare(`INSERT INTO workflow_activations(run_id,activation_key,context,kind,side_effect,status,attempt,owner_token,started_at,metadata)
         VALUES(?,?,?,?,?,'running',?,?,?,?) ON CONFLICT(run_id,activation_key) DO UPDATE SET
         status='running',attempt=excluded.attempt,owner_token=excluded.owner_token,started_at=excluded.started_at,finished_at=NULL,error=NULL,output=NULL,metadata=excluded.metadata`)

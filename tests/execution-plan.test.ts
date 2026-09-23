@@ -35,7 +35,7 @@ function rehash<T extends { hash: string }>(value: T): T { const { hash: _, ...d
 test("output repair is explicit, closed and frozen; policy changes invalidate the plan hash", async () => {
   const original = workflow({ outputRepair: { mode: "submit-only", maxRounds: 3 } });
   const plan = await prepareExecutionPlan(original, options);
-  assert.equal(plan.runtimeVersion, "dynamicwf-runtime-v9");
+  assert.equal(plan.runtimeVersion, "dynamicwf-runtime-v10");
   assert.deepEqual(plan.agents.main!.work!.outputRepair, { mode: "submit-only", maxRounds: 3 });
   assert.ok(Object.isFrozen(plan.agents.main!.work!.outputRepair));
   const changed = structuredClone(plan); changed.agents.main!.work!.outputRepair = { mode: "disabled" };

@@ -1,7 +1,7 @@
 import { parseOperation } from "./operation-record.js";
 import { expectedWorktreeTree, recordedWorktreeTree } from "./worktree-constraint.js";
 import { randomUUID, createHash } from "node:crypto";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { Cause, Effect, Exit, Option } from "effect";
 import { executionFailure, failureRecord, ExecutionFailure } from "./execution-failure.js";
@@ -13,9 +13,9 @@ import type { ExecutionPlan, FrozenAgent, PiWorkerRequest } from "./execution-ty
 import type { Json, Node } from "./graph.js";
 import { assertJson, createOutputValidator } from "./output-schema.js";
 import { runCheckProcess, runPiProcess, ProcessCancelled } from "./process-client.js";
-import { activationKey, RunNotAcceptingWork, RunStore, type RunRecord } from "./run-store.js";
+import { activationKey, RunNotAcceptingWork, RunStore, type ActivationRecord, type RunRecord } from "./run-store.js";
 import { GitWorkspaces, parseWorkspaceSources, type GitOperationOptions, type WorkspaceRecord } from "./workspaces.js";
-import type { RuntimeContext, WorkflowRuntime } from "./runtime-contract.js";
+import type { RuntimeContext, WorkflowRuntime, OperationInputs } from "./runtime-contract.js";
 import { explicitOutcome } from "./task-outcome.js";
 import { explainEdge, ExpressionError, type ExpressionScope } from "./expressions.js";
 import type { Edge } from "./graph.js";
@@ -181,6 +181,36 @@ export class JournalRuntime implements WorkflowRuntime {
     });
   }
   step(context: RuntimeContext, work: () => Effect.Effect<Json, Error>): Effect.Effect<Json, Error> {
+    return this.stepWithOperation(context, () => work());
+  }
+  stepOperation(context: RuntimeContext, _node: Extract<Node, { kind: "agent" | "integrate" }>, prepareInputs: () => OperationInputs): Effect.Effect<Json, Error> {
+    return Effect.suspend(() => {
+      let preparationFailure: Error | undefined;
+      return this.stepWithOperation(context, record => {
+        if (preparationFailure) return Effect.fail(preparationFailure);
+        const operation = parseOperation(record.metadata.operation);
+        const node = this.plan.workflow.graphs[context.graphId]?.nodes.find(item => item.id === context.nodeId);
+        if (operation?.kind === "agent" && node?.kind === "agent") return this.executeAgent(context, node, () => operation);
+        if (operation?.kind === "integrate" && node?.kind === "integrate") return this.executeIntegration(context, () => operation);
+        return Effect.fail(new Error("Missing admitted operation"));
+      }, () => {
+        preparationFailure = undefined;
+        try {
+          const inputs = prepareInputs();
+          const node = this.plan.workflow.graphs[context.graphId]?.nodes.find(item => item.id === context.nodeId);
+          if (inputs.kind === "agent" && node?.kind === "agent") return this.prepareAgentOperation(context, node, inputs.task, inputs.input);
+          if (inputs.kind === "integrate" && node?.kind === "integrate") return { kind: "integrate", target: this.workspaceCwd(context), sources: inputs.sources };
+          throw new Error("Prepared inputs differ from frozen node kind");
+        } catch (error) {
+          // Как и прежде, ошибки evaluate завершают зарегистрированную попытку.
+          // До её допуска никакая модель/Git не вызывается; recovery остаётся fail-closed.
+          preparationFailure = errorOf(error);
+          return null;
+        }
+      });
+    });
+  }
+  private stepWithOperation(context: RuntimeContext, work: (record: ActivationRecord) => Effect.Effect<Json, Error>, prepareOperation?: () => OperationRecord | null): Effect.Effect<Json, Error> {
     const runtime = this;
     return Effect.suspend(() => Effect.gen(function* () {
       const reconciliation = yield* Effect.tryPromise({ try: signal => runtime.retryGate(context,signal), catch: errorOf });
@@ -191,8 +221,9 @@ export class JournalRuntime implements WorkflowRuntime {
         Effect.try({ try: () => runtime.store.beginActivation(runtime.run.id, runtime.token, context, {
           kind: node.kind, sideEffect: ["agent", "check", "worktree", "integrate"].includes(node.kind),
           ...(reconciliation ? { reconciliation } : {}),
+          ...(prepareOperation ? { prepareOperation } : {}),
         }), catch: errorOf }),
-        record => record.status === "succeeded" ? Effect.succeed(structuredClone(record.output!)) : Effect.suspend(() => { executedAttempt=record.attempt;return work(); }).pipe(
+        record => record.status === "succeeded" ? Effect.succeed(structuredClone(record.output!)) : Effect.suspend(() => { executedAttempt=record.attempt;return work(record); }).pipe(
           Effect.tap(output => Effect.try({ try: () => {
             assertJson(output);
             runtime.store.completeActivation(runtime.run.id, runtime.token, record.key, output);
@@ -219,33 +250,46 @@ export class JournalRuntime implements WorkflowRuntime {
         const current = runtime.store.controlState(runtime.run.id);
         // A pause can race the outer gate and resume before this handler runs.
         // Retry admission only, never work that has already started.
-        if (error instanceof RunNotAcceptingWork && executedAttempt === undefined && current.ownerToken === runtime.token && current.desired !== "cancelled") return runtime.step(context, work);
-        if (error instanceof RetryNotReady) return runtime.step(context,work);
+        if (error instanceof RunNotAcceptingWork && executedAttempt === undefined && current.ownerToken === runtime.token && current.desired !== "cancelled") return runtime.stepWithOperation(context, work, prepareOperation);
+        if (error instanceof RetryNotReady) return runtime.stepWithOperation(context, work, prepareOperation);
         const decision = runtime.store.scheduledRetry(runtime.run.id,activationKey(context));
-        if (current.ownerToken === runtime.token && decision && decision.attempt === executedAttempt) return runtime.step(context,work);
+        if (current.ownerToken === runtime.token && decision && decision.attempt === executedAttempt) return runtime.stepWithOperation(context, work, prepareOperation);
         return Effect.failCause(cause);
       }));
     }));
   }
 
+  private prepareAgentOperation(context: RuntimeContext, node: Extract<Node, { kind: "agent" }>, task: string, input: Json): Extract<OperationRecord, { kind: "agent" }> {
+    const config = this.plan.agents[context.graphId]?.[node.id];
+    if (!config) throw new Error("Missing frozen agent configuration");
+    const sessionSlot = slotKey(context);
+    const previous = config.session === "continue-node" ? this.store.listActivations(this.run.id)
+      .filter(item => slotKey(item.context) === sessionSlot && item.context.visit < context.visit && item.status === "succeeded" && item.metadata.sessionFile)
+      .sort((a, b) => b.context.visit - a.context.visit)[0]?.metadata.sessionFile : undefined;
+    return { kind: "agent", cwd: this.workspaceCwd(context), task, input,
+      sessionDirectory: join(this.directory, "sessions", digest(sessionSlot)),
+      resourceDirectory: join(this.directory, "resources", randomUUID()),
+      ...(previous ? { continuedSessionFile: previous } : {}) };
+  }
   agent(context: RuntimeContext, node: Extract<Node, { kind: "agent" }>, task: string, input: Json): Effect.Effect<Json, Error> {
+    return this.executeAgent(context, node, () => {
+      const operation = this.prepareAgentOperation(context, node, task, input);
+      this.store.setActivationMetadata(this.run.id, this.token, activationKey(context), { operation });
+      return operation;
+    });
+  }
+  private executeAgent(context: RuntimeContext, node: Extract<Node, { kind: "agent" }>, operationForDispatch: () => Extract<OperationRecord, { kind: "agent" }>): Effect.Effect<Json, Error> {
     return processEffect(async signal => {
       const config = this.plan.agents[context.graphId]?.[node.id];
       if (!config) throw new Error("Missing frozen agent configuration");
       const validate = createOutputValidator(config.outputSchema);
-      const key = activationKey(context);
-      const workerToken = randomUUID();
-      const sessionSlot = slotKey(context);
-      const previous = config.session === "continue-node" ? this.store.listActivations(this.run.id)
-        .filter(item => slotKey(item.context) === sessionSlot && item.context.visit < context.visit && item.status === "succeeded" && item.metadata.sessionFile)
-        .sort((a, b) => b.context.visit - a.context.visit)[0]?.metadata.sessionFile : undefined;
+      const key = activationKey(context), operation = operationForDispatch(), input = operation.input;
+      const workerToken = basename(operation.resourceDirectory);
       const request: PiWorkerRequest = {
-        version: 1, config, task, input, cwd: this.workspaceCwd(context),
-        sessionDirectory: join(this.directory, "sessions", digest(sessionSlot)),
-        resourceDirectory: join(this.directory, "resources", workerToken),
-        ...(previous ? { sessionFile: previous } : {}),
+        version: 1, config, task: operation.task, input, cwd: operation.cwd,
+        sessionDirectory: operation.sessionDirectory, resourceDirectory: operation.resourceDirectory,
+        ...(operation.continuedSessionFile ? { sessionFile: operation.continuedSessionFile } : {}),
       };
-      this.store.setActivationMetadata(this.run.id,this.token,key,{operation:{kind:"agent",cwd:request.cwd,task,input,sessionDirectory:request.sessionDirectory,resourceDirectory:request.resourceDirectory,...(request.sessionFile?{continuedSessionFile:request.sessionFile}:{})}});
       this.store.startUsage(this.run.id, this.token, key);
       this.checkReviewInput(node, config, input);
       return withProcessCleanup(async () => {
@@ -352,9 +396,15 @@ export class JournalRuntime implements WorkflowRuntime {
     });
   }
   integrate(context: RuntimeContext, _node: Extract<Node, { kind: "integrate" }>, sources: Json): Effect.Effect<Json, Error> {
+    return this.executeIntegration(context, () => {
+      const operation: Extract<OperationRecord, { kind: "integrate" }> = { kind: "integrate", target: this.workspaceCwd(context), sources };
+      this.store.setActivationMetadata(this.run.id, this.token, activationKey(context), { operation });
+      return operation;
+    });
+  }
+  private executeIntegration(context: RuntimeContext, operationForDispatch: () => Extract<OperationRecord, { kind: "integrate" }>): Effect.Effect<Json, Error> {
     return processEffect(async signal => {
-      const key=activationKey(context),operation:Extract<OperationRecord,{kind:"integrate"}>={kind:"integrate",target:this.workspaceCwd(context),sources};
-      this.store.setActivationMetadata(this.run.id,this.token,key,{operation});
+      const key = activationKey(context), operation = operationForDispatch(), sources = operation.sources;
       const owned: WorkspaceRecord[] = [];
       for (const activation of this.store.listActivations(this.run.id)) {
         if (activation.kind === "worktree" && activation.status === "succeeded" && activation.output) owned.push(...parseWorkspaceSources([activation.output]));

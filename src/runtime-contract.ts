@@ -11,11 +11,17 @@ export interface RuntimeContext {
   readonly visit: number;
 }
 
+/** Вычисленные входы до внешних действий; подготовка синхронна и не выполняет I/O. */
+export type OperationInputs =
+  | { kind: "agent"; task: string; input: Json }
+  | { kind: "integrate"; sources: Json };
+
 /** Injectable execution boundary. Persistence, pause and provider policy belong to its implementation. */
 export interface WorkflowRuntime {
   collect(context: RuntimeContext, itemId: string, work: () => Effect.Effect<Json, Error>): Effect.Effect<Json, Error>;
   route(context: RuntimeContext, edges: readonly Edge[], scope: ExpressionScope): Effect.Effect<string, Error>;
   step(context: RuntimeContext, work: () => Effect.Effect<Json, Error>): Effect.Effect<Json, Error>;
+  stepOperation(context: RuntimeContext, node: Extract<Node, { kind: "agent" | "integrate" }>, prepareInputs: () => OperationInputs): Effect.Effect<Json, Error>;
   agent(context: RuntimeContext, node: Extract<Node, { kind: "agent" }>, task: string, input: Json): Effect.Effect<Json, Error>;
   worktree(context: RuntimeContext, node: Extract<Node, { kind: "worktree" }>, child: (scope: readonly string[]) => Effect.Effect<Json, Error>): Effect.Effect<Json, Error>;
   integrate(context: RuntimeContext, node: Extract<Node, { kind: "integrate" }>, sources: Json): Effect.Effect<Json, Error>;

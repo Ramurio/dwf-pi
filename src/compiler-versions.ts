@@ -1,13 +1,13 @@
 /** Central version feature predicates. Do not hard-code current-only lists at call sites. */
-export const compilerVersion = "dynamicwf-effect-v9";
-export const runtimeVersion = "dynamicwf-runtime-v9";
+export const compilerVersion = "dynamicwf-effect-v10";
+export const runtimeVersion = "dynamicwf-runtime-v10";
 export const compilerVersions = [
   "dynamicwf-effect-v1", "dynamicwf-effect-v2", "dynamicwf-effect-v3", "dynamicwf-effect-v4",
-  "dynamicwf-effect-v5", "dynamicwf-effect-v6", "dynamicwf-effect-v7", "dynamicwf-effect-v8", compilerVersion,
+  "dynamicwf-effect-v5", "dynamicwf-effect-v6", "dynamicwf-effect-v7", "dynamicwf-effect-v8", "dynamicwf-effect-v9", compilerVersion,
 ] as const;
 export const runtimeVersions = [
   "dynamicwf-runtime-v1", "dynamicwf-runtime-v2", "dynamicwf-runtime-v3", "dynamicwf-runtime-v4",
-  "dynamicwf-runtime-v5", "dynamicwf-runtime-v6", "dynamicwf-runtime-v7", "dynamicwf-runtime-v8", runtimeVersion,
+  "dynamicwf-runtime-v5", "dynamicwf-runtime-v6", "dynamicwf-runtime-v7", "dynamicwf-runtime-v8", "dynamicwf-runtime-v9", runtimeVersion,
 ] as const;
 export type CompilerVersion = typeof compilerVersions[number];
 export type RuntimeVersion = typeof runtimeVersions[number];
@@ -47,4 +47,8 @@ export function supportsFrozenCapabilities(version: string): boolean {
 }
 export function supportsReuseNodes(version: string): boolean {
   return compilerAtLeast(version, "dynamicwf-effect-v9") || runtimeAtLeast(version, "dynamicwf-runtime-v9");
+}
+
+export function supportsAtomicOperationAdmission(version: string): boolean {
+  return compilerAtLeast(version, "dynamicwf-effect-v10") || runtimeAtLeast(version, "dynamicwf-runtime-v10");
 }

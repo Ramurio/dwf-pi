@@ -4,7 +4,7 @@ import type { ExecutionPlan } from "./execution-types.js";
 import {
   compilerVersion, isCompilerVersion, supportsFailurePolicy, supportsFinishAwait,
   supportsFrozenCapabilities, supportsGeneratedRouting, supportsOutputRepair, supportsProviderRetry,
-  supportsRetryPolicy, supportsReuseNodes, type CompilerVersion,
+  supportsRetryPolicy, supportsReuseNodes, supportsAtomicOperationAdmission, type CompilerVersion,
 } from "./compiler-versions.js";
 export { compilerVersion, type CompilerVersion };
 export interface CompiledWorkflow {
@@ -123,9 +123,16 @@ ${node.children.map((child, index) => `              () => Effect.gen(function* 
           const visit = visits[node.id] ?? 0;
           visits[node.id] = visit + 1;
           const context: RuntimeContext = { graphId: ${quote(graphId)}, nodeId: node.id, scope: [...scope], visit };
-          const result = yield* runtime.step(context, () => Effect.gen(function* () {
+          const result = yield* ${supportsAtomicOperationAdmission(version) && (node.kind === "agent" || node.kind === "integrate")
+            ? node.kind === "agent" ? `runtime.stepOperation(context, node, () => {
+            const task = evaluate(node.task, { input, nodes });
+            if (typeof task !== "string") throw new Error("Agent task must evaluate to a string");
+            const value = node.input === undefined ? structuredClone(input) : evaluate(node.input, { input, nodes });
+            return { kind: "agent", task, input: value };
+          })` : `runtime.stepOperation(context, node, () => ({ kind: "integrate", sources: evaluate(node.sources, { input, nodes }) }))`
+            : `runtime.step(context, () => Effect.gen(function* () {
             ${work}
-          }));
+          }))`};
           nodes[node.id] = result;
           ${node.kind === "end" || node.kind === "finish" ? "return result;" : supportsGeneratedRouting(version)
             ? 'pc = yield* runtime.route(context, edges, { input, nodes });\n          break;'

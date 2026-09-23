@@ -1,0 +1,72 @@
+{
+  "baseline": "efbe9a45f0d4af5a792659d3f2fc4cbad76406a2",
+  "workflow": {
+    "schemaVersion": 1,
+    "id": "operation-compatibility",
+    "name": "Legacy operation compilation",
+    "revision": 1,
+    "entryGraph": "main",
+    "graphs": {
+      "main": {
+        "entry": "agent",
+        "nodes": [
+          {
+            "id": "agent",
+            "kind": "agent",
+            "role": "general",
+            "config": {
+              "tools": []
+            },
+            "task": {
+              "op": "literal",
+              "value": "Task from frozen plan"
+            }
+          },
+          {
+            "id": "merge",
+            "kind": "integrate",
+            "sources": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "agent"
+              ]
+            }
+          },
+          {
+            "id": "done",
+            "kind": "end",
+            "value": {
+              "op": "ref",
+              "path": [
+                "nodes",
+                "merge"
+              ]
+            }
+          }
+        ],
+        "edges": [
+          {
+            "from": "agent",
+            "to": "merge"
+          },
+          {
+            "from": "merge",
+            "to": "done"
+          }
+        ]
+      }
+    }
+  },
+  "hashes": {
+    "dynamicwf-effect-v1": "80bc78198ea51596f33051a6bf8620c643d398201231c8679660743bec134fa3",
+    "dynamicwf-effect-v2": "4145ed7c9be898627b4f65d83dd1884bfd583d6291909c78a785927c38b08359",
+    "dynamicwf-effect-v3": "421053af3c23ef343c23d13862fa489ba677b93b1a0d68b026a97e2518279cdc",
+    "dynamicwf-effect-v4": "5cd261c3af29f3b12b8f0a9ac2e882bde4dfdc047ca2e7dab6cda4acb11a6ce0",
+    "dynamicwf-effect-v5": "539c11b5cbd7f29365cce048b4ee5616cc5275994f2d1aa9153396ad4797cbe4",
+    "dynamicwf-effect-v6": "f3114e407989413ea6f03667c39fdb78e97985b28c4013e83f575e31f997322d",
+    "dynamicwf-effect-v7": "068b56d88193475abaa17957a64df4ada37ace2b3149abf3bf2a1b13ac2684a8",
+    "dynamicwf-effect-v8": "007d9f8b6124d8ee84fd07334336498e606347a5fd0a321ad841c0b59cde19cc",
+    "dynamicwf-effect-v9": "fbb46837b91516d85e0eadab37ad46661c23c3b537da52e0bdddd576be77627b"
+  }
+}

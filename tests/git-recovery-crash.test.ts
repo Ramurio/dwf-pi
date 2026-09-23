@@ -15,7 +15,15 @@ import type { Expr, Graph, Node, Json, WorkflowDefinition } from "../src/graph.j
 const literal = (value: Json): Expr => ({ op: "literal", value }), ref = (...path: string[]): Expr => ({ op: "ref", path });
 const sequence = (nodes: Node[]): Graph => ({ entry: nodes[0]!.id, nodes, edges: nodes.slice(1).map((node, index) => ({ from: nodes[index]!.id, to: node.id })) });
 const end = (value: Expr): Node => ({ id: "done", kind: "end", value });
-function definition(integration: boolean): WorkflowDefinition {
+function definition(integration: boolean | "agent"): WorkflowDefinition {
+  if (integration === "agent") return {
+    schemaVersion: 1, id: "agent_crash", name: "Actual agent admission crash", revision: 1, entryGraph: "main",
+    graphs: { main: sequence([
+      { id: "binding", kind: "transform", value: literal({ task: "Task from checkpoint", input: { exact: "nested value", secretFixture: "not public" } }) },
+      { id: "work", kind: "agent", role: "general", task: ref("nodes", "binding", "task"), input: ref("nodes", "binding", "input"), config: { tools: [], permission: "read-only" } },
+      end(ref("nodes", "work")),
+    ]) },
+  };
   const labels = integration ? ["left", "right"] : ["candidate"];
   const graphs: Record<string, Graph> = Object.fromEntries(labels.map(label => [label, sequence([
     { id: "write", kind: "check", command: process.execPath, args: ["-e", `const fs=require('node:fs');fs.appendFileSync('${label}.count','once\\n');fs.writeFileSync('${label}.txt','candidate data\\n');`] },
@@ -33,12 +41,12 @@ async function until<T>(read: () => T | undefined, description: string, timeout 
   const deadline = Date.now() + timeout;
   for (;;) { const result = read(); if (result !== undefined) return result; if (Date.now() > deadline) throw new Error(`Timed out: ${description}`); await sleep(30); }
 }
-async function crashedFixture(point: string, integration: boolean, work: (controller: RunController, id: string, repo: string, base: string, selected: ActivationRecord) => Promise<void>) {
+async function crashedFixture(point: string, integration: boolean | "agent", work: (controller: RunController, id: string, repo: string, base: string, selected: ActivationRecord) => Promise<void>) {
   const root = await realpath(await mkdtemp(join(tmpdir(), "dynamicwf-git-crash-"))), repo = join(root, "repo"), filename = join(root, "state.sqlite"); await mkdir(repo);
   git(repo, "init", "-b", "main"); await writeFile(join(repo, "base.txt"), "base\n"); git(repo, "add", "."); git(repo, "commit", "-m", "base"); const base = git(repo, "rev-parse", "HEAD");
   const controller = new RunController(filename), id = `run-${point}`; let child: ChildProcess | undefined, closed = false;
   try {
-    const plan = await prepareExecutionPlan(definition(integration), { cwd: repo, availableModels: [] });
+    const plan = await prepareExecutionPlan(definition(integration), { cwd: repo, availableModels: integration === "agent" ? [{ provider: "offline", id: "fixture", thinkingLevels: ["off"] }] : [] });
     controller.store.create({ id, plan, cwd: repo, input: null }); const { token } = controller.store.reserveLaunch(id);
     child = spawn(process.execPath, ["--import", import.meta.resolve("tsx"), "--import", resolve("tests/fixtures/git-recovery-crash.ts"), resolve("src/supervisor.ts"), "--store", filename, "--run", id, "--owner", token, "--directory", controller.directory(id)], {
       detached: true, stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, DYNAMICWF_TEST_GIT_CRASH_POINT: point },
@@ -51,7 +59,7 @@ async function crashedFixture(point: string, integration: boolean, work: (contro
     assert.equal(signal, "SIGKILL", stderr); assert.match(stderr, new RegExp(`Fixture SIGKILL at ${point}`));
     const observed = controller.observe(id); assert.equal(observed.supervisorAlive, false); assert.equal(observed.workersAlive, 0); assert.deepEqual(observed.unresolvedGroups, []);
     assert.equal(observed.run.status, "interrupted"); assert.equal(observed.run.ownerToken, null);
-    const selected = controller.store.listActivations(id).find(a => a.kind === (integration ? "integrate" : "worktree") && a.status === "interrupted")!;
+    const selected = controller.store.listActivations(id).find(a => a.kind === (integration === "agent" ? "agent" : integration ? "integrate" : "worktree") && a.status === "interrupted")!;
     assert.ok(selected); assert.equal(selected.attempt, 1); assert.ok(parseOperation(selected.metadata.operation));
     const before = git(repo, "rev-parse", "HEAD");
     await controller.control(id, "resume");
@@ -129,6 +137,36 @@ for (const point of ["worktree-staged", "worktree-committed", "worktree-checkpoi
   assert.equal(await readFile(join(allocation.path, "candidate.count"), "utf8"), "once\n");
   assert.equal(controller.store.listActivations(id).find(a => a.kind === "check")!.attempt, 1);
   const attempts = controller.store.attempts(id, selected.key); assert.equal(attempts.records.length, 1); assert.equal(attempts.current.attempt, 2); assert.deepEqual(attempts.records[0]!.metadata.operation, selected.metadata.operation);
+}));
+
+test("real agent admission SIGKILL preserves dynamic inputs without launching a worker", { timeout: 30_000 }, async () => crashedFixture("agent-admission", "agent", async (controller, id, repo, base, selected) => {
+  const operation = parseOperation(selected.metadata.operation)!;
+  assert.equal(operation.kind, "agent"); if (operation.kind !== "agent") return;
+  assert.equal(operation.task, "Task from checkpoint");
+  assert.deepEqual(operation.input, { exact: "nested value", secretFixture: "not public" });
+  assert.equal(operation.cwd, repo); assert.equal(operation.continuedSessionFile, undefined);
+  assert.ok(operation.sessionDirectory.startsWith(join(controller.directory(id), "sessions")));
+  assert.ok(operation.resourceDirectory.startsWith(join(controller.directory(id), "resources")));
+  assert.equal(selected.metadata.workerToken, undefined); assert.equal(selected.metadata.workerPid, undefined);
+  assert.equal(git(repo, "rev-parse", "HEAD"), base);
+  const output = { result: "Explicit operator replacement after inspecting an unstarted operation" };
+  await controller.reconcile(await decision(controller, id, selected, "accept", output));
+  assert.deepEqual((await complete(controller, id)).output, output);
+  // Явное accept материализуется отдельной попыткой без вызова модели.
+  assert.equal(controller.store.getActivation(id, selected.key)!.attempt, 2);
+}));
+
+test("real integrate admission SIGKILL preserves exact inputs and requires explicit retry", { timeout: 60_000 }, async () => crashedFixture("integrate-admission", true, async (controller, id, repo, base, selected) => {
+  const operation = parseOperation(selected.metadata.operation)!;
+  assert.equal(operation.kind, "integrate"); if (operation.kind !== "integrate") return;
+  assert.equal(operation.target, repo); assert.equal(operation.progress, undefined);
+  assert.deepEqual(operation.sources, controller.store.listActivations(id).filter(a => a.kind === "worktree").map(a => a.output));
+  assert.equal(git(repo, "rev-parse", "HEAD"), base);
+  await controller.reconcile(await decision(controller, id, selected, "retry"));
+  await complete(controller, id);
+  for (const label of ["left", "right"]) assert.equal(await readFile(join(repo, `${label}.count`), "utf8"), "once\n");
+  assert.equal(git(repo, "rev-list", "--first-parent", "--count", `${base}..HEAD`), "2");
+  assert.equal(controller.store.getActivation(id, selected.key)!.attempt, 2);
 }));
 
 for (const point of ["merge-first", "merge-last", "integration-checkpoint"]) test(`real ${point} SIGKILL reconciles the exact committed merge frontier`, { timeout: 60_000 }, async () => crashedFixture(point, true, async (controller, id, repo, base, selected) => {
