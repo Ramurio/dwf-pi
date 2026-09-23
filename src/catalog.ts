@@ -87,10 +87,16 @@ export function resolveAgentConfig(roleName: RoleName, overrides: AgentConfig = 
   if (!Object.hasOwn(roleCatalog, roleName)) throw new Error(`Unknown role: ${roleName}`);
   if (!Check(AgentConfigSchema, overrides)) throw new Error("Invalid agent configuration overrides");
   const config = { ...definition.defaults, ...overrides };
+  validateAgentConfig(config);
+  return deepFreeze(structuredClone(config));
+}
+
+/** Проверка готовых настроек без обращения к изменяемым значениям роли по умолчанию. */
+export function validateAgentConfig(config: unknown): asserts config is AgentConfig {
+  if (!Check(AgentConfigSchema, config)) throw new Error("Invalid agent configuration");
   if (config.permission === "read-only" && config.tools?.some((tool) => ["bash", "write", "edit"].includes(tool))) {
     throw new Error("read-only permission cannot grant bash, write or edit (including role defaults)");
   }
   const skillIssue = skillToolIssue(config.skills ?? [], config.tools ?? []);
   if (skillIssue) throw new Error(skillIssue);
-  return deepFreeze(structuredClone(config));
 }

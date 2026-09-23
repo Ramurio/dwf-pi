@@ -1,6 +1,6 @@
 import { Type } from "typebox";
 import { Check, Errors } from "typebox/value";
-import { AgentConfigSchema, roleNames, resolveAgentConfig, type AgentConfig, type RoleName } from "./catalog.js";
+import { AgentConfigSchema, roleNames, resolveAgentConfig, validateAgentConfig, skillToolIssue, type AgentConfig, type RoleName } from "./catalog.js";
 import { createOutputValidator, defaultOutputSchema } from "./output-schema.js";
 import type { TaskDecision } from "./task-outcome.js";
 import { RetryPolicySchema, type RetryPolicy } from "./retry-policy.js";
@@ -135,7 +135,20 @@ export function validateWorkflow(value: unknown, frozen?: ExecutionPlan["agents"
       for (const expression of expressions(item)) inspectExpr(expression, nodes, path, add);
       if (item.kind === "agent") {
         try {
-          const config = resolveAgentConfig(item.role, item.config);
+          let config: AgentConfig;
+          if (frozen === undefined) config = resolveAgentConfig(item.role, item.config);
+          else {
+            // Исходные overrides уже применены при prepare. Проверяем фактический
+            // снимок, иначе новые defaults могут сделать старый план недопустимым.
+            const snapshot = frozen[graphId]?.[item.id];
+            if (!snapshot) throw new Error(`Missing frozen agent fields: ${graphId}/${item.id}`);
+            const { skills, capabilities: _capabilities, adapterIdentity: _adapter, reasoning: _reasoning, ...settings } = snapshot;
+            const resolved = { ...settings, skills: [] };
+            validateAgentConfig(resolved);
+            config = resolved;
+            const issue = skillToolIssue(skills, config.tools ?? []);
+            if (issue) throw new Error(issue);
+          }
           try { createOutputValidator(structuredClone(config.outputSchema ?? defaultOutputSchema)); }
           catch (error) { add(`${path}.config.outputSchema`, error instanceof Error ? error.message : "Invalid output schema"); }
         } catch (error) { add(`${path}.config`, error instanceof Error ? error.message : "Invalid effective agent configuration"); }

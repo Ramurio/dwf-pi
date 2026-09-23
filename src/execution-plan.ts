@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { lstat, readdir, readFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { parseFrontmatter } from "@earendil-works/pi-coding-agent";
-import { resolveAgentConfig, skillToolIssue, type AgentConfig } from "./catalog.js";
+import { resolveAgentConfig, validateAgentConfig, skillToolIssue, type AgentConfig } from "./catalog.js";
 import { compileWorkflow, compilerVersion, type CompilerVersion } from "./compiler.js";
 import { assertParallelWriterIsolation } from "./parallel-isolation.js";
 import { runtimeVersion, type ExecutionPlan, type FrozenAgent, type SkillSnapshot } from "./execution-types.js";
@@ -120,9 +120,9 @@ function verifyAgent(value: unknown, location: string, runtime: string): void {
     if (agent.adapterIdentity !== null && !parseAdapterIdentity(agent.adapterIdentity)) throw new Error(`${location}: invalid adapter identity`);
     if (!parseReasoningSnapshot(agent.reasoning)) throw new Error(`${location}: invalid reasoning snapshot`);
   }
-  // Reuse config validation with all frozen values supplied; role defaults cannot alter the snapshot.
+  // Проверяем снимок без текущих defaults, в том числе для старых версий без новых полей.
   const { skills, capabilities: _capabilities, adapterIdentity: _adapter, reasoning: _reasoning, ...config } = agent;
-  resolveAgentConfig("general", { ...config, skills: [] } as AgentConfig);
+  validateAgentConfig({ ...config, skills: [] } as AgentConfig);
   for (const key of ["model", "thinking", "systemPrompt", "tools", "session", "permission", "outputSchema"]) if (agent[key] === undefined) throw new Error(`${location}: missing ${key}`);
   const skillIssue = skillToolIssue(skills, agent.tools as FrozenAgent["tools"]);
   if (skillIssue) throw new Error(`${location}: ${skillIssue}`);

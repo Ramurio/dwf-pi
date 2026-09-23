@@ -99,6 +99,30 @@ test("plan freezes concrete model, role defaults, schema and generated code inde
   assert.deepEqual(verifyExecutionPlan(JSON.parse(JSON.stringify(plan))), plan);
   assert.deepEqual(await prepareExecutionPlan(workflow(), options), plan);
 });
+// Снимок подготовлен отдельной копией каталога: general тогда имел workspace-write.
+// Сейчас тот же исходный граф недопустим, но разрешения старого плана не меняются.
+test("frozen plan survives role default changes without weakening new authoring", async () => {
+  const saved = JSON.parse(await readFile(new URL("./fixtures/frozen-role-defaults-plan.json", import.meta.url), "utf8"));
+  const plan = verifyExecutionPlan(saved);
+  assert.deepEqual(plan, saved);
+  assert.equal(plan.agents.main!.worker!.permission, "workspace-write");
+  assert.deepEqual(plan.agents.main!.worker!.tools, ["bash"]);
+  await assert.rejects(prepareExecutionPlan(saved.workflow, options), /read-only/);
+
+  const denied = structuredClone(plan);
+  denied.agents.main!.worker!.permission = "read-only";
+  assert.throws(() => verifyExecutionPlan(rehash(denied)), /read-only/);
+  const schema = structuredClone(plan);
+  schema.agents.main!.worker!.outputSchema = { type: "nonexistent-type" };
+  assert.throws(() => verifyExecutionPlan(rehash(schema)), /schema/i);
+  const missing = structuredClone(plan);
+  delete missing.agents.main!.worker;
+  assert.throws(() => verifyExecutionPlan(rehash(missing)), /fields/);
+  const skill = structuredClone(plan);
+  skill.agents.main!.worker!.tools = [];
+  skill.agents.main!.worker!.skills = [{ name: "needs-reader", hash: "invalid", files: [] }];
+  assert.throws(() => verifyExecutionPlan(rehash(skill)), /require the read or bash/);
+});
 test("explicit prompt replaces role prompt and output schema is frozen", async () => {
   const schema = { ...structuredClone(validSchemaCases["answer-override"].schema), required: [...validSchemaCases["answer-override"].schema.required] };
   const plan = await prepareExecutionPlan(workflow({ systemPrompt: "Assigned custom prompt", outputSchema: schema }), options);
