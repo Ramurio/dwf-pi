@@ -1,0 +1,30 @@
+--- a/dist/core/auth-storage.js
++++ b/dist/core/auth-storage.js
+@@ -56,10 +56,10 @@
+     }
+     withLock(fn) {
+         this.ensureParentDir();
+-        this.ensureFileExists();
+         let release;
+         try {
+             release = this.acquireLockSyncWithRetry(this.authPath);
++            this.ensureFileExists();
+             const current = existsSync(this.authPath) ? readFileSync(this.authPath, "utf-8") : undefined;
+             const { result, next } = fn(current);
+             if (next !== undefined) {
+@@ -116,7 +116,6 @@
+     async withLockAsync(fn, options) {
+         options?.signal?.throwIfAborted();
+         this.ensureParentDir();
+-        this.ensureFileExists();
+         let release;
+         let lockCompromised = false;
+         let lockCompromisedError;
+@@ -132,6 +131,7 @@
+             });
+             throwIfCompromised();
+             options?.signal?.throwIfAborted();
++            this.ensureFileExists();
+             const current = existsSync(this.authPath) ? readFileSync(this.authPath, "utf-8") : undefined;
+             const { result, next } = await fn(current);
+             throwIfCompromised();

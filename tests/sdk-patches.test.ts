@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 const installation = fileURLToPath(new URL("../", import.meta.url));
 const script = join(installation, "scripts/sdk-patches.mjs");
 const specs = [
+  ["@earendil-works/pi-coding-agent", "pi-coding-agent-0.85.1-auth-creation"],
   ["@earendil-works/pi-coding-agent", "pi-coding-agent-0.85.1-bash-signal"],
   ["@earendil-works/pi-ai", "pi-ai-0.85.1-provider-contracts"],
   ["@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai", "pi-ai-0.85.1-provider-contracts"],
@@ -45,7 +46,7 @@ test("SDK check is read-only and the unified installer validates all packages be
   assert.deepEqual(f.hashes().slice(0, -1), before.slice(0, -1));
   writeFileSync(last.path, bytes);
   assert.equal(f.invoke().status, 0); assert.deepEqual(f.hashes(), f.files.map(file => file.patched));
-  const after = f.hashes(); assert.equal(JSON.parse(f.invoke("--check").stdout).patches.length, 3);
+  const after = f.hashes(); assert.equal(JSON.parse(f.invoke("--check").stdout).patches.length, specs.length);
   assert.deepEqual(f.hashes(), after); assert.match(f.invoke().stdout, /already applied/);
 });
 

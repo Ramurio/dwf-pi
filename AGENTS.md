@@ -24,7 +24,7 @@ Dynamicwf — локальная среда исполнения графовы�
 
 - `npm ci`, `npm run typecheck`, `npm test`. Node >=22.19.0; зависимости закреплены в lockfile.
 - Общий postinstall применяет сохранённые в Git исправления `bash`-сигналов,
-  Bedrock-повторов и происхождения usage к SDK 0.85.1. При `--ignore-scripts`
+  Bedrock-повторов, происхождения usage и первого создания auth-файла к SDK 0.85.1. При `--ignore-scripts`
   выполните `npm run sdk:apply`; `npm run sdk:check` и `system.doctor` проверяют
   версии/SHA256 без изменения SDK. Известное частичное состояние допускает повторный
   apply, неизвестные файлы требуют `npm ci`. Не запускайте установку одновременно с исполнителями.

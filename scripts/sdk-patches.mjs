@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 
 const definitions = [
+  { id: "auth-creation", label: "SDK auth creation", packageName: "pi-coding-agent", file: "pi-coding-agent-0.85.1-auth-creation", candidates: ["@earendil-works/pi-coding-agent"] },
   { id: "bash-signal", label: "O07", packageName: "pi-coding-agent", file: "pi-coding-agent-0.85.1-bash-signal", candidates: ["@earendil-works/pi-coding-agent"] },
   { id: "provider-contracts", label: "SDK provider contracts", packageName: "local pi-ai", file: "pi-ai-0.85.1-provider-contracts", candidates: ["@earendil-works/pi-ai", "@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai"] },
 ];
