@@ -331,13 +331,16 @@ export class JournalRuntime implements WorkflowRuntime {
         : runtime.workspaces.allocate(runtime.workspaceCwd(context), key, node.base,
           runtime.gitOptions(context, signal), allocation => runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspace: { ...allocation } })));
       runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { workspacePhase: "children" });
-      recordedWorktreeTree(node, operation, previous.workspacePhase);
+      yield* Effect.try({ try: () => recordedWorktreeTree(node, operation, previous.workspacePhase), catch: errorOf });
       const result = Object.hasOwn(operation, "childResult") ? operation.childResult! : yield* child(childScope);
       runtime.store.setActivationMetadata(runtime.run.id,runtime.token,key,{operation:{...operation,childResult:result}});
-      const persisted = parseOperation(runtime.store.getActivation(runtime.run.id, key)!.metadata.operation);
-      if (persisted?.kind !== "worktree" || !Object.hasOwn(persisted, "childResult")) throw new Error("Missing persisted childResult");
-      const expectedTree = expectedWorktreeTree(node, persisted.childResult!);
-      runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { operation: { ...persisted, ...(expectedTree === undefined ? {} : { expectedTree }) } });
+      const expectedTree = yield* Effect.try({ try: () => {
+        const persisted = parseOperation(runtime.store.getActivation(runtime.run.id, key)!.metadata.operation);
+        if (persisted?.kind !== "worktree" || !Object.hasOwn(persisted, "childResult")) throw new Error("Missing persisted childResult");
+        const expected = expectedWorktreeTree(node, persisted.childResult!);
+        runtime.store.setActivationMetadata(runtime.run.id, runtime.token, key, { operation: { ...persisted, ...(expected === undefined ? {} : { expectedTree: expected }) } });
+        return expected;
+      }, catch: errorOf });
       for (;;) {
         yield* Effect.tryPromise({ try: signal => runtime.gate(signal), catch: errorOf });
         const admitted = yield* Effect.try({ try: () => runtime.store.admitWorkspaceCommit(runtime.run.id, runtime.token, key), catch: errorOf });

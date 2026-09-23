@@ -145,7 +145,6 @@ export class RunController {
     return (initialOnly ? ["queued"] : ["queued", "interrupted"]).includes(run.status) && run.desired === "running" && run.ownerToken === null;
   }
   private async continuationGitBlockers(id: string): Promise<ContinuationBlocker[]> {
-    const run = this.store.get(id);
     const activations = this.store.listActivations(id);
     const git = new GitWorkspaces(id, this.directory(id));
     const blockers: ContinuationBlocker[] = [];
@@ -154,7 +153,10 @@ export class RunController {
         blockers.push({ code: "missing-operation", key: record.key, message: "Missing operation evidence stops continuation; inspect the original attempt instead of inventing an output." });
         continue;
       }
-      try { await inspectUncertainWriterGit(git, record, activations, run.plan.workflow.graphs[record.context.graphId]?.nodes.find(n => n.id === record.context.nodeId)); }
+      // Продолжение сохраняет прежние эффекты по явному disposition, не принимает
+      // и не повторяет старый commit. Здесь нужна проверка владения; доказательство
+      // одобренного дерева остаётся обязательным для recovery accept/retry.
+      try { await inspectUncertainWriterGit(git, record, activations); }
       catch (error) { blockers.push(continuationGitBlocker(record, error)); }
     }
     return blockers;

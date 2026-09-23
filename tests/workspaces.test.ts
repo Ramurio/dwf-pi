@@ -527,6 +527,36 @@ test("postcheck rejects committed index drift and checks the captured head OID",
   }
 });
 
+test("collect preserves siblings when an expected tree selector is missing or malformed", async () => {
+  const f = await fixture(), directory = join(f.directory, "run"), store = new RunStore(join(f.directory, "state.sqlite"));
+  try {
+    const cases = { good: { approved: null }, missing: {}, malformed: { approved: 17 } };
+    const graphs: Record<string, Graph> = {
+      main: graph([{ id: "cases", kind: "parallel", failurePolicy: "collect",
+        children: Object.keys(cases).map(id => ({ id, graphId: id, input: literal(null) })) }, end(ref("nodes", "cases"))]),
+    };
+    for (const [id, value] of Object.entries(cases)) {
+      graphs[id] = graph([{ id: "candidate", kind: "worktree", graphId: `${id}-child`,
+        expectedTreeFromResult: ["approved"], input: literal(null) }, end(ref("nodes", "candidate"))]);
+      graphs[`${id}-child`] = graph([end(literal(value))]);
+    }
+    const plan = await prepareExecutionPlan(workflow(graphs), { cwd: f.repo, availableModels: [] });
+    store.create({ id: "run-collect", plan, input: null, cwd: f.repo });
+    const { run, token } = store.reserveLaunch("run-collect");
+    const module = await loadGeneratedModule(plan, directory);
+    const output: any = await Effect.runPromise(module.run(new JournalRuntime(store, run, token, directory), null));
+    assert.equal(output.good.status, "succeeded");
+    assert.equal(output.missing.status, "failed");
+    assert.match(output.missing.failure.message, /Missing expectedTreeFromResult/);
+    assert.equal(output.malformed.status, "failed");
+    assert.match(output.malformed.failure.message, /Invalid expectedTreeFromResult/);
+    for (const activation of store.listActivations(run.id).filter(a => a.kind === "worktree" && a.status === "failed")) {
+      assert.equal(activation.metadata.workspacePhase, "children", "Не допускаем commit при невалидной привязке");
+      assert.doesNotMatch(JSON.stringify(activation.metadata.failure), /interrupted/i);
+    }
+  } finally { store.close(); await rm(f.directory, { recursive: true, force: true }); }
+});
+
 test("runtime journals A before admission and rejects deterministic B drift", async () => {
   const f = await fixture(), directory = join(f.directory, "run"), store = new RunStore(join(f.directory, "state.sqlite"));
   try {

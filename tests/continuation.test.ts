@@ -697,6 +697,42 @@ async function continueWithRetain(
   });
 }
 
+test("invalid tree proof blocks recovery but allows explicit retain-effects continuation", { timeout: 30_000 }, async () => fixture(async (s, c, directory) => {
+  git(directory, "init", "-b", "main");
+  await writeFile(join(directory, ".gitignore"), "state.sqlite*\nruns/\n");
+  await writeFile(join(directory, "base.txt"), "base\n");
+  git(directory, "add", ".gitignore", "base.txt"); git(directory, "commit", "-m", "fixture");
+  const flow = worktreeFlow();
+  flow.graphs.main!.nodes[0] = { id: "tree", kind: "worktree", graphId: "child",
+    input: { op: "literal", value: null }, expectedTreeFromResult: ["approved"] };
+  await s.dispatch("workflow.create", { id: "invalid-proof", name: "invalid proof" });
+  const operations = Object.entries(flow.graphs).flatMap(([graphId, g]) => [
+    ...(graphId === "main" ? [] : [{ op: "addGraph", graphId }]),
+    ...g.nodes.map(node => ({ op: "addNode", graphId, node })),
+    ...g.edges.map(edge => ({ op: "connect", graphId, edge })),
+    { op: "setEntry", graphId, nodeId: g.entry },
+  ]);
+  await s.dispatch("workflow.patch", { id: "invalid-proof", expectedRevision: 1, operations });
+  const prepared = await s.dispatch("workflow.prepare", { id: "invalid-proof" }) as PreparedExecution;
+  const source = await s.dispatch("run.start", { preparedId: prepared.preparedId, idempotencyKey: "invalid-proof-source", input: null }) as { id: string };
+  await wait(c, source.id, "failed");
+  const failed = c.store.listActivations(source.id).find(a => a.kind === "worktree")!;
+  assert.match(failed.error ?? "", /Missing expectedTreeFromResult/);
+  const recovery = await s.dispatch("run.recovery", { id: source.id, key: failed.key }) as { blockers: { code: string }[] };
+  assert.ok(recovery.blockers.some(b => b.code === "worktree-constraint"));
+  const inspection = await s.dispatch("run.continuation.inspect", { id: source.id }) as { blockers: unknown[]; reusable: { key: string }[] };
+  assert.deepEqual(inspection.blockers, []);
+  assert.ok(!inspection.reusable.some(a => a.key === failed.key));
+  const next = await prepareSuccessor(s, "diagnostic-successor");
+  const continued = await continueWithRetain(s, source.id, next, "retain-invalid-proof", failed.key) as { id: string };
+  await wait(c, continued.id, "succeeded");
+  const unchanged = c.store.getActivation(source.id, failed.key)!;
+  assert.equal(unchanged.status, "failed"); assert.equal(unchanged.attempt, failed.attempt);
+  assert.equal(c.store.get(source.id).status, "failed");
+  const workspace = failed.metadata.workspace as { path: string; base: string };
+  assert.equal(git(workspace.path, "rev-parse", "HEAD"), workspace.base);
+}));
+
 test("continue reuses a succeeded null object-schema output without inference", { timeout: 30_000 }, async () => fixture(async (s, c) => {
   await author(s, "NullSource", [{ id: "done", kind: "end", value: { op: "literal", value: null } }]);
   const first = await s.dispatch("workflow.prepare", { id: "NullSource" }) as PreparedExecution;
