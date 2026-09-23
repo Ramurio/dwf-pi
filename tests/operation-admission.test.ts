@@ -129,3 +129,25 @@ test("atomic intent preserves continue-node selection without reading sibling or
   assert.equal(operation.task, "continued"); assert.equal(operation.input, null);
   assert.ok((await readdir(f.directory)).every(name => name.startsWith("state.sqlite")));
 });
+
+for (const point of ["history", "retry-event"] as const) test(`failed ${point} write rolls back repeated admission and preserves retry authorization`, async t => {
+  const f = await fixture(t, true), db = new DatabaseSync(f.filename);
+  try {
+    f.store.beginActivation("run", f.token, context, { kind: "agent", sideEffect: true, prepareOperation: () => null });
+    f.store.failActivation("run", f.token, key, "fixture", executionFailure("expression", "execution", "read-only", "fixture").failure, { retryEligible: true });
+    const attempts = f.store.attempts("run", key), events = f.store.events("run"), retries = f.store.retries("run", key);
+    db.exec(point === "history"
+      ? "CREATE TRIGGER deny_retry BEFORE INSERT ON workflow_activation_history BEGIN SELECT RAISE(ABORT,'injected history rejection'); END"
+      : "CREATE TRIGGER deny_retry BEFORE INSERT ON workflow_run_events WHEN NEW.type='retry.admitted' BEGIN SELECT RAISE(ABORT,'injected retry rejection'); END");
+    const result = await Effect.runPromiseExit(f.runtime.stepOperation(context, node, () => ({ kind: "agent", task: "New exact task", input: { retry: 2 } })));
+    assert.ok(Exit.isFailure(result));
+    assert.deepEqual(f.store.attempts("run", key), attempts);
+    assert.deepEqual(f.store.events("run"), events);
+    assert.deepEqual(f.store.retries("run", key), retries);
+    assert.ok((await readdir(f.directory)).every(name => name.startsWith("state.sqlite")));
+    db.exec("DROP TRIGGER deny_retry");
+    const next = f.store.beginActivation("run", f.token, context, { kind: "agent", sideEffect: true, prepareOperation: () => ({ kind: "agent", cwd: f.directory, task: "new", input: null, sessionDirectory: join(f.directory, "sessions"), resourceDirectory: join(f.directory, "resources", "new") }) });
+    assert.equal(next.attempt, 2); assert.equal(next.metadata.operationPreparationFailed, undefined);
+    assert.equal(f.store.attempts("run", key).records[0]!.metadata.operationPreparationFailed, true);
+  } finally { db.close(); }
+});

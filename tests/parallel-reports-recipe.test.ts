@@ -1,3 +1,4 @@
+import { replaceAgentExecution } from "./helpers/prepared-agent.js";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -12,7 +13,6 @@ import { loadGeneratedModule } from "../src/generated-module.js";
 import { JournalRuntime } from "../src/run-runtime.js";
 import { RunStore } from "../src/run-store.js";
 import type { Json } from "../src/graph.js";
-import type { RuntimeContext } from "../src/runtime-contract.js";
 
 const recipe = new URL("../skills/dynamic-workflows/recipes/parallel-reports/", import.meta.url);
 const json = async (name: string) => JSON.parse(await readFile(new URL(name, recipe), "utf8"));
@@ -71,8 +71,8 @@ for (const scenario of ["different-paths", "same-path", "failed-branch", "blocke
     let synthesisInput: any;
     // Заменяем только модельные ответы. Компилятор, журнал, collect, Git-выделение,
     // выбор cwd и фиксация отчётов остаются настоящими. Барьер доказывает параллелизм.
-    runtime.agent = (context, node, _task, supplied) => Effect.gen(function* () {
-      const value = supplied as any;
+    replaceAgentExecution(runtime, (context, node, operation) => Effect.gen(function* () {
+      const value = operation.input as any;
       if (node.role === "researcher") {
         assert.deepEqual(Object.keys(value).sort(), ["assignment", "criteria", "projectPolicy", "question", "reportPath", "sources"]);
         assert.deepEqual(value.sources, ["source.txt"]);
@@ -86,9 +86,9 @@ for (const scenario of ["different-paths", "same-path", "failed-branch", "blocke
         const blocked = (scenario === "blocked-first" && value.assignment === "FIRST_ONLY") ||
           (scenario === "blocked-second" && value.assignment === "SECOND_ONLY");
         const result = { status: blocked ? "blocked" : "written", reportPath: value.reportPath, summary: value.assignment };
-        // Подставной агент использует тот же выбор cwd, что и настоящий worker.
-        // Приватная граница читается только здесь; Git-выделение/журнал не подменены.
-        const cwd = (runtime as unknown as { workspaceCwd(c: RuntimeContext): string }).workspaceCwd(context);
+        // Подставной агент использует уже сохранённый cwd настоящей попытки.
+        // Git-выделение и журнал не подменяются.
+        const cwd = operation.cwd;
         assert.notEqual(cwd, repo);
         yield* Effect.tryPromise(async () => {
           assert.match(await readFile(join(cwd, "source.txt"), "utf8"), /Источник/);
@@ -119,7 +119,7 @@ for (const scenario of ["different-paths", "same-path", "failed-branch", "blocke
       // Намеренно ошибочное одобрение в failed-branch: корневой guard обязан отказать.
       return { decision: scenario === "synthesis-inconclusive" ? "inconclusive" : "accepted",
         summary: "Проверочные отчёты собраны", reason: "Ответ подставного обобщающего агента" };
-    });
+    }));
     const module = await loadGeneratedModule(plan, join(directory, "generated"));
     const output: any = await Effect.runPromise(module.run(runtime, input as Json));
     store.finish(run.id, token, { status: "succeeded", output });

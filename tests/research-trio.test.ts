@@ -1,3 +1,4 @@
+import { replaceAgentExecution } from "./helpers/prepared-agent.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mkdtemp, readFile, realpath, rm } from "node:fs/promises";
@@ -98,16 +99,16 @@ function attachAgent(
   plan: ExecutionPlan,
   handler: (context: RuntimeContext, node: Extract<Node, { kind: "agent" }>, task: string, input: Json) => Json | Promise<Json>,
 ) {
-  runtime.agent = (context, node, task, input) => Effect.tryPromise({
+  replaceAgentExecution(runtime, (context, node, operation) => Effect.tryPromise({
     try: async () => {
       const config = plan.agents[context.graphId]?.[node.id];
       if (!config) throw new Error("Missing frozen agent configuration");
-      const result = await handler(context, node, task, input);
+      const result = await handler(context, node, operation.task, operation.input);
       try { return createOutputValidator(config.outputSchema)(result); }
       catch { throw executionFailure("output", "output", "read-only", "Worker result failed strict output schema validation"); }
     },
     catch: error => error instanceof Error ? error : new Error(String(error)),
-  });
+  }));
 }
 
 async function executeRun(
