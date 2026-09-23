@@ -1,6 +1,25 @@
 --- a/dist/core/auth-storage.js
 +++ b/dist/core/auth-storage.js
-@@ -56,10 +56,10 @@
+@@ -13,6 +13,9 @@
+ import { isCommandConfigValue, resolveConfigValue } from "./resolve-config-value.js";
+ // The mode applies only on creation so administrator-managed modes and ACLs remain intact.
+ const AUTH_FILE_WRITE_OPTIONS = { encoding: "utf-8", mode: 0o600 };
++// Both lock paths must agree: a sync reader must not expire an async owner
++// before its first heartbeat (proper-lockfile defaults update to stale / 2).
++const AUTH_LOCK_STALE_MS = 30_000;
+ let sharedAuthFileReadState;
+ export class FileAuthStorageBackend {
+     authPath;
+@@ -36,7 +39,7 @@
+         let lastError;
+         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+             try {
+-                return lockfile.lockSync(path, { realpath: false });
++                return lockfile.lockSync(path, { realpath: false, stale: AUTH_LOCK_STALE_MS });
+             }
+             catch (error) {
+                 const code = typeof error === "object" && error !== null && "code" in error
+@@ -56,10 +59,10 @@
      }
      withLock(fn) {
          this.ensureParentDir();
@@ -12,7 +31,16 @@
              const current = existsSync(this.authPath) ? readFileSync(this.authPath, "utf-8") : undefined;
              const { result, next } = fn(current);
              if (next !== undefined) {
-@@ -116,7 +116,6 @@
+@@ -74,7 +77,7 @@
+         }
+     }
+     async acquireLockAsync(signal, onCompromised) {
+-        const staleMs = 30_000;
++        const staleMs = AUTH_LOCK_STALE_MS;
+         const maxDelayMs = 2_000;
+         const deadline = Date.now() + staleMs;
+         let retry = 0;
+@@ -116,7 +119,6 @@
      async withLockAsync(fn, options) {
          options?.signal?.throwIfAborted();
          this.ensureParentDir();
@@ -20,7 +48,7 @@
          let release;
          let lockCompromised = false;
          let lockCompromisedError;
-@@ -132,6 +131,7 @@
+@@ -132,6 +134,7 @@
              });
              throwIfCompromised();
              options?.signal?.throwIfAborted();

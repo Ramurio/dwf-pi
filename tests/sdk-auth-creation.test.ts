@@ -50,9 +50,15 @@ for (const first of ["withLock", "withLockAsync"]) for (const second of ["withLo
       }return found;};syncBuiltinESMExports();${load}
       await new FileAuthStorageBackend(${JSON.stringify(path)}).${first}(current=>({result:null,next:JSON.stringify({...JSON.parse(current),a:'FIXTURE-A'})}));`);
     await waitFile(ready);
-    const locked = existsSync(path + ".lock");
-    const b = child(t, `${load}await new FileAuthStorageBackend(${JSON.stringify(path)}).${second}(current=>({result:null,next:JSON.stringify({...JSON.parse(current),b:'FIXTURE-B'})}));`);
-    if (!locked) await b;
+    const locked = existsSync(path + ".lock"), busy = join(directory, "busy");
+    // Барьер именно EEXIST от mkdir(lock), а не только старта процесса B.
+    const contention = `import fs from 'node:fs';import {syncBuiltinESMExports} from 'node:module';
+      const sync=fs.mkdirSync,async=fs.mkdir;
+      const observed=(path,error)=>{if(path===${JSON.stringify(path + ".lock")}&&error?.code==='EEXIST')fs.writeFileSync(${JSON.stringify(busy)},'busy');};
+      fs.mkdirSync=function(path,...args){try{return sync(path,...args);}catch(error){observed(path,error);throw error;}};
+      fs.mkdir=function(path,...args){const callback=args.pop();return async(path,...args,(error,...values)=>{observed(path,error);callback(error,...values);});};syncBuiltinESMExports();`;
+    const b = child(t, `${contention}${load}await new FileAuthStorageBackend(${JSON.stringify(path)}).${second}(current=>({result:null,next:JSON.stringify({...JSON.parse(current),b:'FIXTURE-B'})}));`);
+    if (locked) await waitFile(busy); else await b;
     writeFileSync(gate, "go");
     await Promise.all([a, b]);
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), { a: "FIXTURE-A", b: "FIXTURE-B" });
@@ -105,4 +111,34 @@ test("SDK existing-file write preserves Darwin ACL", { skip: process.platform !=
   const before = inspect(); assert.match(before, /everyone allow read/);
   await child(t, `${load}const backend=new FileAuthStorageBackend(${JSON.stringify(path)});backend.withLock(()=>({result:null,next:'{"first":true}'}));await backend.withLockAsync(()=>({result:null,next:'{"second":true}'}));`);
   assert.equal(inspect(), before);
+});
+
+test("sync contender does not steal async lock before its first heartbeat", async t => {
+  const { path } = fixture(t);
+  await child(t, `import assert from 'node:assert/strict';import fs from 'node:fs';import {spawnSync} from 'node:child_process';${load}
+    const backend=new FileAuthStorageBackend(${JSON.stringify(path)});backend.ensureParentDir();
+    const release=await backend.acquireLockAsync(undefined,()=>{});
+    try{
+      // Детерминированная граница 10s < age < 15s: прежний sync stale=10s,
+      // async stale=30s/update=15s. Меняется только mtime временного lock.
+      const age=new Date(Date.now()-12000);fs.utimesSync(${JSON.stringify(path + ".lock")},age,age);
+      const contender=spawnSync(process.execPath,['--input-type=module','-e',${JSON.stringify(`${load}
+        try{new FileAuthStorageBackend(${JSON.stringify(path)}).withLock(()=>({result:null,next:'{"stolen":true}'}));}
+        catch(error){if(error.code!=='ELOCKED')throw error;process.stdout.write('ELOCKED');}`)}],{encoding:'utf8'});
+      assert.equal(contender.status,0,contender.stderr);assert.equal(contender.stdout,'ELOCKED');
+      assert.equal(fs.existsSync(${JSON.stringify(path)}),false);
+    }finally{await release();}`);
+});
+for (const phase of ["before-create", "during-callback"]) test(`compromised async lock prevents subsequent write (${phase})`, async t => {
+  const { path } = fixture(t);
+  await child(t, `import assert from 'node:assert/strict';import fs from 'node:fs';${load}
+    const backend=new FileAuthStorageBackend(${JSON.stringify(path)});let releaseCalls=0,compromise;
+    backend.acquireLockAsync=async(_signal,onCompromised)=>{compromise=onCompromised;
+      if(${JSON.stringify(phase)}==='before-create')onCompromised(Error('fixture lock compromised'));
+      return async()=>{releaseCalls++;};};
+    let callbackCalls=0;
+    await assert.rejects(backend.withLockAsync(async()=>{callbackCalls++;await Promise.resolve();compromise(Error('fixture lock compromised'));return {result:null,next:'{"mustNotWrite":true}'};}),/fixture lock compromised/);
+    assert.equal(releaseCalls,1);assert.equal(callbackCalls,${phase === "before-create" ? 0 : 1});
+    if(${JSON.stringify(phase)}==='before-create')assert.equal(fs.existsSync(${JSON.stringify(path)}),false);
+    else assert.equal(fs.readFileSync(${JSON.stringify(path)},'utf8'),'{}');`);
 });

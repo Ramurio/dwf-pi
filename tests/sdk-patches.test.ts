@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, lstatSync, symlinkSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync, lstatSync, symlinkSync, existsSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,7 +16,7 @@ const specs = [
   ["@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-ai", "pi-ai-0.85.1-provider-contracts"],
 ] as const;
 function fixture(t: TestContext) {
-  const cwd = mkdtempSync(join(tmpdir(), "dwf-sdk-recovery-"));
+  const cwd = realpathSync(mkdtempSync(join(tmpdir(), "dwf-sdk-recovery-")));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   const files: { path: string; original: string; patched: string }[] = [];
   for (const [name, specName] of specs) {
@@ -52,12 +52,18 @@ test("SDK check is read-only and the unified installer validates all packages be
 
 test("SDK publish failure rolls back earlier files across package boundaries", t => {
   const f = fixture(t), before = f.hashes();
-  const preload = join(f.cwd, "fail.cjs");
-  writeFileSync(preload, `const fs=require('node:fs');const rename=fs.renameSync;let count=0;
-fs.renameSync=function(...args){if(++count===6)throw Error('injected publish failure');return rename(...args)};
+  const preload = join(f.cwd, "fail.cjs"), publishedFile = join(f.cwd, "published.json");
+  const providerPrefix = join(f.cwd, "node_modules/@earendil-works/pi-ai") + "/";
+  const failAt = f.files.filter(file => file.path.startsWith(providerPrefix))[1]!.path;
+  writeFileSync(preload, `const fs=require('node:fs');const rename=fs.renameSync;const published=[];
+fs.renameSync=function(from,to){if(to===${JSON.stringify(failAt)}){fs.writeFileSync(${JSON.stringify(publishedFile)},JSON.stringify(published));throw Error('injected publish failure');}
+const result=rename(from,to);published.push(to);return result;};
 require('node:module').syncBuiltinESMExports();`);
   const result = spawnSync(process.execPath, ["--require", preload, script], { cwd: f.cwd, encoding: "utf8" });
   assert.notEqual(result.status, 0); assert.match(result.stderr, /injected publish failure/);
+  const published = JSON.parse(readFileSync(publishedFile, "utf8")) as string[];
+  assert.ok(published.some(path => path.startsWith(join(f.cwd, "node_modules/@earendil-works/pi-coding-agent") + "/")));
+  assert.ok(published.some(path => path.startsWith(providerPrefix)));
   assert.deepEqual(f.hashes(), before);
   assert.equal(f.invoke().status, 0); assert.deepEqual(f.hashes(), f.files.map(file => file.patched));
 });
