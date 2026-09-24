@@ -176,6 +176,8 @@ test("every advertised schema accepts representative arguments without dispatch"
   cases["workflow.create"] = { id: "demo", name: "Demo" };
   cases["workflow.patch"] = { id: "demo", expectedRevision: 1, operations: [{ op: "addGraph", graphId: "child" }] };
   cases["workflow.prepared"] = { preparedId };
+  cases["workflow.recipe.describe"] = { recipe: "implementation-loop", version: 1 };
+  cases["workflow.recipe.prepare"] = { recipe: "implementation-loop", version: 1, id: "demo", name: "Demo", task: "Implement", acceptanceCriteria: ["Pass"], projectPolicy: "Local only", contextFiles: [], checkCommand: "node", checkArgs: [], planner: { model: { provider: "test", id: "plan" }, thinking: "high" }, implementer: { model: { provider: "test", id: "write" }, thinking: "medium" }, reviewers: [{ id: "review", perspective: "Correctness", model: { provider: "test", id: "review" }, thinking: "high" }] };
   cases["run.resolve"] = { id: "demo", waitId: "wait", response: { $ref: "data" } };
   cases["preset.save"] = { id: "demo", name: "example" };
   cases["preset.inspect"] = cases["preset.run"] = { name: "example" };

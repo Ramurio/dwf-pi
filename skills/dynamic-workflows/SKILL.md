@@ -15,9 +15,12 @@ description: Создавай, запускай, наблюдай, приост�
 Закрытие CLI/MCP/приложения не отменяет запуск. Управлять им можно из другого приложения
 с этим пакетом инструкций (skill) и командной оболочкой/MCP.
 
-Для трёх независимых исследователей с общим итогом начни с
-[рецепта research-trio](recipes/research-trio/README.md): скопируй JSON и следуй порядку.
-Для рецепта не нужно предварительно читать `workflow.schema` и разделы восстановления/продолжения.
+Выбери путь до чтения большой схемы: для трёх независимых исследователей с общим итогом —
+[research-trio](recipes/research-trio/README.md); для локальной реализации с проверкой
+и 1..N независимыми ревьюерами — [implementation-loop v1](recipes/implementation-review/README.md#короткий-путь);
+для нестандартного графа — `workflow.create`/`workflow.patch` и `workflow.schema`.
+Для готовых рецептов полная схема графа не нужна. JSON-программы подготовки допустимы;
+они не должны самостоятельно исполнять оркестрацию.
 
 До выбора параллельной схемы различи чтение и запись: исследование только для чтения
 возвращает структурированные результаты без `bash`/`write`/`edit`. Если ветвям нужны
@@ -48,10 +51,14 @@ JSON
 
 ## Порядок работы
 
-1. Выбери CLI/MCP и задачу либо поставляемый [рецепт](recipes/research-trio/README.md).
+1. Выбери CLI/MCP и задачу либо поставляемый рецепт. Для implementation-loop после
+   `catalog.models` и `workflow.recipe.describe {"recipe":"implementation-loop","version":1}`
+   используй один `workflow.recipe.prepare` с явными моделями, командой и задачей.
+   Изучи компактную сводку, сохрани возвращённые `preparedId` и `input` и перейди к шагу 5.
+   Полный план при необходимости доступен через `workflow.prepared`.
 2. По текущему каталогу явно настрой модели/`thinking`, задание, `cwd` и store.
    Недоступную модель или уровень рассуждений не подменяй.
-3. `workflow.create` → `workflow.patch` с `id`/`expectedRevision`/`operations`. Проверяй ok,
+3. Для нестандартного графа: `workflow.create` → `workflow.patch` с `id`/`expectedRevision`/`operations`. Проверяй ok,
    для изменения также `result.validation.valid`.
 4. `workflow.validate` (`result.valid`) → `workflow.prepare`. Изучи `result.plan`, сохрани `preparedId`.
 5. `run.start` с `preparedId`/`input` и **заранее выбранным** `idempotencyKey`. Не используй

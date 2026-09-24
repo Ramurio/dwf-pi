@@ -251,3 +251,15 @@ Node должен удовлетворять engines; зависимости у�
 инициализацию, список инструментов/схемы, редактирование/подготовку, отдельный `check`,
 паузу, переподключение/продолжение, курсоры, ошибки, согласование протокола и чистоту
 stdout — без учётных данных и вызовов модели.
+
+## Рецепт implementation-loop
+
+CLI/MCP: `workflow.recipe.describe {"recipe":"implementation-loop","version":1}` →
+`workflow.recipe.prepare` с полями из describe → компактные `summary`, `preparedId`,
+`input` → `run.start` с этими `preparedId`/`input` и заранее сохранённым
+`idempotencyKey`. CLI принимает те же JSON-аргументы; MCP использует имена
+`workflow_recipe_describe`/`workflow_recipe_prepare`. Ошибки неизвестной версии,
+поля, модели/thinking отклоняются без fallback. Подготовка не запускает команду,
+workers или публикацию. Просмотрите полномочия в summary и при необходимости
+`workflow.prepared`; сохранённого draft нет. Не повторяйте подготовку вместо
+повторной доставки start после потерянного ответа.

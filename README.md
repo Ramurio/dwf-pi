@@ -26,6 +26,12 @@ dynamicwf catalog.models
 
 ## Дать задачу агенту
 
+Для типового локального цикла с произвольным числом ревьюеров используйте
+[короткий путь implementation-loop v1](skills/dynamic-workflows/recipes/implementation-review/README.md#короткий-путь):
+`catalog.models` → `workflow.recipe.describe` → один `workflow.recipe.prepare` →
+`run.start` с возвращённым input и заранее выбранным ключом идемпотентности.
+Этот путь не публикует PR и не выполняет merge.
+
 Агенту нужен установленный пакет инструкций (skill)
 [dynamic-workflows](skills/dynamic-workflows/SKILL.md) и доступ к командной оболочке или MCP. Например:
 

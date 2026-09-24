@@ -1,4 +1,5 @@
 import { CreateDraftSchema, PublicDraftPatchSchema } from "./authoring.js";
+import { recipePrepareSchema } from "./recipes.js";
 import { roleNames } from "./catalog.js";
 import { serviceToolNames, type ServiceToolName } from "./service.js";
 
@@ -57,6 +58,8 @@ const definitions: Record<ServiceToolName, { description: string; inputSchema: I
   "workflow.validate": { description: "Check a draft's graph structure and configuration before compilation or execution. Returns concrete validation issues.", inputSchema: byId(), readOnly: true },
   "workflow.compile": { description: "Machine-generate TypeScript + Effect from a valid draft. Returns deterministic source/hash; do not author or edit orchestration code yourself.", inputSchema: byId(), readOnly: true },
   "workflow.prepare": { description: "Persist a frozen execution plan without inference. Returns {preparedId,planHash,cwd,createdAt,plan}; use preparedId in run_start to execute these exact settings and skill snapshots in this workspace. Resolves concrete models/thinking; explicit unavailable requests fail.", inputSchema: prepare(), openWorld: true },
+  "workflow.recipe.describe": { description: "Describe the versioned local implementation loop and its compact parameters; no inference, workspace access or draft is created.", inputSchema: object({ recipe: { const: "implementation-loop" }, version: { const: 1 } }, ["recipe", "version"]), readOnly: true },
+  "workflow.recipe.prepare": { description: "Build and prepare a local implementation loop with explicit models and independent reviewers. Freezes a plan without creating a draft, running checks or starting agents. Inspect the summary and use returned preparedId/input with a saved idempotencyKey in run.start; no publication or merge.", inputSchema: recipePrepareSchema, openWorld: true },
   "workflow.prepared": { description: "Inspect a saved preparedId without rereading the draft, skills, workspace or provider catalog. Verifies frozen plan integrity. Handles are local to this journal.", inputSchema: object({ preparedId }, ["preparedId"]), readOnly: true },
   "run.start": { description: "Start a detached workflow by preparedId (recommended) with a stable idempotencyKey for delivery retries. Identical keyed requests return the same run, including after completion; conflicts fail. Prepared starts cannot override workspace or model. Alternatively id starts the current draft as a new, non-idempotent run. Return the run ID and watch command immediately. Workers can perform granted external effects; closing this client does not stop them.", inputSchema: start, destructive: true, openWorld: true },
   "run.status": { description: "Observe a run's status, current supervisor/worker liveness, frozen plan hash and resolved models. Reconciles verified missing processes without restarting work.", inputSchema: byId(), idempotent: true },

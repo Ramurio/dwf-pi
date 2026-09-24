@@ -176,3 +176,13 @@ Postcheck может обнаружить drift уже после создани
 а не отменяет его. Guard не проверяет качество ревью и игнорируемые файлы, не изолирует ОС
 и не блокирует внешних writers. `succeeded` по-прежнему не означает `accepted`.
 Регрессии: `workspaces`, `worktree-constraint`, `run-runtime`, `operation-record`, `graph`.
+
+## Локальный цикл не публикует PR
+
+`implementation-loop` v1 принимает только локальную работу. Для PR нужны отдельные
+сверка истории Git, remote head/base, проверенный CI SHA и контролируемое восстановление
+неопределённых push/merge; успех локального check не подтверждает их. Worktree — не
+sandbox, read-only ревьюеры не выполняют Bash. Prepared план не замораживает HEAD и
+файлы cwd. Тесты authoring/guards: `tests/recipe-authoring.test.ts`; старые
+`tests/implementation-recipes.test.ts` и `tests/prepared-start.test.ts` проверяют
+совместимость и доставку.
