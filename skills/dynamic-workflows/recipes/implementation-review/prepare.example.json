@@ -1,0 +1,20 @@
+{
+  "recipe": "implementation-loop",
+  "version": 1,
+  "id": "local-review-example",
+  "name": "Локальная реализация и ревью",
+  "cwd": "/path/to/project",
+  "task": "Исправьте локальный дефект в проекте",
+  "acceptanceCriteria": ["Проверки проходят", "Существующий контракт сохранён"],
+  "projectPolicy": "Изменяйте только файлы задачи; без публикации. Передавайте применимые инструкции проекта явно.",
+  "contextFiles": [],
+  "checkCommand": "node",
+  "checkArgs": ["--test"],
+  "planner": { "model": { "provider": "provider", "id": "model" }, "thinking": "high" },
+  "implementer": { "model": { "provider": "provider", "id": "model" }, "thinking": "medium" },
+  "reviewers": [
+    { "id": "correctness", "perspective": "Корректность и регрессии", "model": { "provider": "provider", "id": "model" }, "thinking": "high" },
+    { "id": "contract", "perspective": "Критерии и контракт", "model": { "provider": "provider", "id": "model" }, "thinking": "high" },
+    { "id": "evidence", "perspective": "Сила проверочных доказательств", "model": { "provider": "provider", "id": "model" }, "thinking": "high" }
+  ]
+}

@@ -1,4 +1,5 @@
 import { portableInputSchema, type InputSchema } from "./public-schema.js";
+import { buildImplementationRecipe, describeRecipe, parseRecipe, recipeSummary } from "./recipes.js";
 import { diagnoseSystem } from "./doctor.js";
 import { discoverWorkflowCatalog } from "./model-runtime.js";
 import { homedir } from "node:os";
@@ -20,7 +21,7 @@ import { canonicalContinuationRequest, continuationKind, parseContinuationReques
 
 export const serviceToolNames = [
   "catalog.list", "catalog.describe", "catalog.models", "system.doctor", "workflow.schema", "workflow.create", "workflow.list", "workflow.inspect",
-  "workflow.patch", "workflow.validate", "workflow.compile", "workflow.prepare", "run.start", "run.status",
+  "workflow.patch", "workflow.validate", "workflow.compile", "workflow.prepare", "workflow.recipe.describe", "workflow.recipe.prepare", "run.start", "run.status",
   "run.list", "run.inspect", "run.events", "run.usage", "run.pause", "run.resume", "run.cancel",
   "preset.save", "preset.list", "preset.inspect", "preset.run", "run.waits", "run.resolve", "run.trace", "workflow.prepared", "run.attempts", "run.collections", "run.retries", "run.recovery", "run.reconcile", "run.reconciliations", "run.continuation.inspect", "run.continue", "task.inspect", "task.usage",
 ] as const;
@@ -109,6 +110,30 @@ export class WorkflowService {
         const input = object(request, ["id"]);
         const workflow = this.getDrafts().get(identifier(input.id));
         return tool === "workflow.inspect" ? workflow : tool === "workflow.validate" ? validateWorkflow(workflow) : compileWorkflow(workflow);
+      }
+      case "workflow.recipe.describe": return describeRecipe(request);
+      case "workflow.recipe.prepare": {
+        const params = parseRecipe(request);
+        const cwd = await executionWorkspace(params.cwd === undefined ? this.cwd : resolve(this.cwd, params.cwd));
+        const { workflow, input } = await buildImplementationRecipe(params);
+        let plan;
+        try { plan = await prepareExecutionPlan(workflow, { ...this.executionOptions, cwd }); }
+        catch (error) {
+          if (error instanceof Error) {
+            const match = error.message.match(/^(pipeline\/(?:plan|implement)|review-([A-Za-z][A-Za-z0-9_-]*)\/review): (.*)$/s);
+            if (match) {
+              const index = params.reviewers.findIndex(r => r.id === match[2]);
+              const field = match[1] === "pipeline/plan" ? "planner" : match[1] === "pipeline/implement" ? "implementer" : `reviewers[${index}]`;
+              throw new Error(`${field}.${match[3]?.startsWith("Unsupported thinking") ? "thinking" : "model.id"}: ${match[3]}`);
+            }
+          }
+          throw error;
+        }
+        // Validate the compact projection before the first durable write: an
+        // unexpected projection error must not leave an unreturned prepared plan.
+        const summary = recipeSummary(plan);
+        const saved = await this.getPlans().save(plan, cwd);
+        return { recipe: params.recipe, version: params.version, preparedId: saved.preparedId, planHash: saved.planHash, cwd: saved.cwd, input, summary };
       }
       case "workflow.prepared": {
         const input = object(request, ["preparedId"]);
