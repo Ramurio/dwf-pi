@@ -6,6 +6,7 @@ import { collectActivity, type WorkerActivity } from "../monitor.js";
 import { summarizeUsage } from "../usage.js";
 import { publicReceipt } from "../lineage.js";
 import { publicAttempts } from "../service.js";
+import { collectExecutionOrder, type ExecutionOrder } from "./execution-order.js";
 import { graphSnapshot } from "./model.js";
 import type { Json } from "../graph.js";
 
@@ -56,7 +57,7 @@ export async function startGraphServer(
 ) {
   const files = new Map(
     await Promise.all(
-      ["index.html", "app.js", "layout.js", "usage-pages.js", "task-scope.js", "style.css"].map(
+      ["index.html", "app.js", "layout.js", "usage-pages.js", "task-scope.js", "navigation.js", "execution-data.js", "view-state.js", "workspace.js", "execution-details.js", "style.css"].map(
         async (name) =>
           [name, await readFile(new URL(name, import.meta.url))] as const,
       ),
@@ -73,7 +74,7 @@ export async function startGraphServer(
   const token = randomBytes(24).toString("hex");
   const activityCache = new Map<
     string,
-    { cursor: number; activity: Map<string, WorkerActivity> }
+    { cursor: number; activity: Map<string, WorkerActivity>; order: Map<string, ExecutionOrder> }
   >();
   const server = createServer(async (request, response) => {
     response.setHeader("Cache-Control", "no-store");
@@ -188,11 +189,12 @@ export async function startGraphServer(
         const observed = controller.snapshot(id);
         let cache = activityCache.get(id);
         if (!cache) {
-          cache = { cursor: 0, activity: new Map() };
+          cache = { cursor: 0, activity: new Map(), order: new Map() };
           activityCache.set(id, cache);
         }
         const events = store.events(id, cache.cursor);
         collectActivity(events, cache.activity);
+        collectExecutionOrder(events, cache.order);
         cache.cursor = events.at(-1)?.seq ?? cache.cursor;
         json({
           ...graphSnapshot(
@@ -202,6 +204,7 @@ export async function startGraphServer(
             store.waits(id),
             observed.presentation,
             store.transitionSummary(id),
+            cache.order,
           ),
           supervisorAlive: observed.supervisorAlive,
           workersAlive: observed.workersAlive,

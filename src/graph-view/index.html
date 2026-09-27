@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Dynamicwf · Запуски</title>
+    <title>DWF · Рабочее пространство</title>
     <link rel="stylesheet" href="style.css" />
     <script type="module" src="app.js"></script>
   </head>
@@ -13,20 +13,21 @@
         <span class="brand-icon">⌘</span>
         <div>dynamicwf<small>Рабочие процессы</small></div>
       </div>
-      <div class="sidebar-heading">ЗАПУСКИ <span id="run-count">0</span></div>
+      <div class="sidebar-heading">ЗАДАЧИ <span id="run-count">0</span></div>
       <label class="search"
         ><span>⌕</span
         ><input
           id="search"
-          placeholder="Найти запуск"
-          aria-label="Найти запуск"
+          placeholder="Найти задачу или запуск"
+          aria-label="Найти задачу или запуск"
       /></label>
-      <nav id="runs" aria-label="Запуски"><p class="muted">Загрузка…</p></nav>
+      <nav id="runs" aria-label="Задачи и запуски"><p class="muted">Загрузка…</p></nav>
+      <nav id="outline" aria-label="Этапы и выполнения"></nav>
       <div class="local"><i></i> Локально на этом компьютере</div>
     </aside>
     <main>
       <header class="topbar">
-        <span>МОНИТОР ПРОЦЕССОВ</span
+        <span>РАБОЧЕЕ ПРОСТРАНСТВО</span
         ><span id="connection" role="status">Подключение…</span>
       </header>
       <div id="notice" class="notice" role="alert" hidden></div>
@@ -40,11 +41,11 @@
       <section id="workspace" hidden>
         <div class="run-heading">
           <div>
-            <div class="eyebrow" id="run-id"></div>
+            <div class="eyebrow" id="task-context"></div>
             <h1 id="run-name"></h1>
             <div class="run-subtitle">
               <span id="run-status" class="badge"></span
-              ><span id="result"></span><span id="cwd"></span>
+              ><span id="result"></span>
             </div>
           </div>
           <div class="controls">
@@ -53,6 +54,10 @@
             ><button id="cancel" class="danger">Отменить</button>
           </div>
         </div>
+        <section id="run-summary" class="run-summary" aria-label="Состояние и следующее действие"></section>
+        <details id="run-details" class="run-details">
+          <summary>Результат, доказательства и сведения о запуске</summary>
+          <div class="run-metadata"><span id="run-id"></span><span id="cwd"></span></div>
         <div class="metrics" id="metrics"></div>
         <details id="execution-plan" class="execution-plan">
           <summary>План запуска</summary>
@@ -63,14 +68,17 @@
         <section id="task-lineage" class="outcome lineage" hidden aria-label="Продолжение задачи"></section>
         <section id="task-outcome" class="outcome" hidden aria-label="Результат задачи"></section>
         <section id="wait-summary" class="outcome waiting" hidden aria-label="Ожидания запуска"></section>
+        </details>
         <nav class="tabs" aria-label="Разделы запуска">
-          <button data-tab="graph" aria-pressed="true">Граф</button
-          ><button data-tab="now">Сейчас <span id="active-count"></span></button
-          ><button data-tab="history">История</button
-          ><button data-tab="trace">Трасса</button
-          ><button data-tab="tokens">Токены</button>
+          <button data-tab="graph" aria-pressed="true">Обзор</button
+          ><button data-tab="now">Работа и ответы <span id="active-count"></span></button
+          ><button data-tab="history">Последовательность</button
+          ><button data-tab="trace">Переходы</button
+          ><button data-tab="tokens">Расход</button>
         </nav>
-        <div class="work-area">
+        <nav id="breadcrumbs" class="breadcrumbs" aria-label="Положение в графе"></nav>
+        <p id="selection-context" class="selection-context"></p>
+        <div class="work-area" id="work-area">
           <section class="surface">
             <div id="graph-panel">
               <div class="graph-toolbar">
@@ -91,11 +99,12 @@
                   ><button id="fit">Вместить</button>
                 </div>
               </div>
+              <p id="graph-context" class="selection-context" role="status"></p>
               <div class="canvas">
                 <svg
                   id="graph"
                   aria-label="Граф workflow"
-                  aria-description="Стрелки показывают возможные переходы, цвет блоков — состояние по журналу. Для масштаба используйте колесо, для перемещения перетаскивайте фон."
+                  aria-description="Стрелки показывают возможные переходы, цвет блоков — состояние по журналу. Колесо и +/− меняют масштаб, стрелки и перетаскивание фона перемещают схему, Home вмещает её целиком."
                 ></svg>
               </div>
               <div class="graph-legend">
@@ -109,12 +118,14 @@
                 >
               </div>
             </div>
+            <section id="activity-strip" aria-label="Выполнения текущего графа"></section>
             <div id="content-panel" hidden></div>
           </section>
           <aside
             id="inspector"
             class="inspector"
-            aria-label="Детали узла"
+            aria-label="Детали выбранного выполнения"
+            hidden
           ></aside>
         </div>
       </section>

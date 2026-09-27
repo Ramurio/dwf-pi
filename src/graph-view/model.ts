@@ -1,3 +1,4 @@
+import type { ExecutionOrder } from "./execution-order.js";
 import { parseExecutionFailure, parseFailureCauses } from "../execution-failure.js";
 import { parseOutputRepairProgress } from "../output-repair.js";
 import { parseRetryProgress } from "../retry-policy.js";
@@ -15,6 +16,7 @@ export function graphSnapshot(
   waits: readonly WaitRecord[] = [],
   presentation = projectRun(run, records),
   trace: ReturnType<RunStore["transitionSummary"]> = { supported: false, count: 0, failed: 0, lastSeq: 0, edges: [] },
+  order: ReadonlyMap<string, ExecutionOrder> = new Map(),
 ) {
   // Старые журналы ещё не имели waitResolved: источник истины — сохранённый ответ.
   const resolved = new Set(waits.filter(wait => wait.status === "resolved").map(wait => JSON.stringify([wait.key, wait.id])));
@@ -71,6 +73,7 @@ export function graphSnapshot(
             activations.map((a) => JSON.stringify(a.context.scope)),
           ).size,
           id: node.id,
+          label: node.label ?? null,
           kind: node.kind,
           failurePolicy: node.kind === "map" || node.kind === "parallel" ? node.failurePolicy ?? "fail-fast" : null,
           retryPolicy: node.kind === "agent" || node.kind === "check" ? node.retryPolicy ?? null : null,
@@ -89,6 +92,7 @@ export function graphSnapshot(
           activations: ordered.map((a) => ({
             scope: JSON.stringify(a.context.scope),
             key: a.key,
+            order: order.get(a.key) ?? null,
             path: activationPath(a),
             basePath: activationPath(a, false),
             status: activationState(a, run),

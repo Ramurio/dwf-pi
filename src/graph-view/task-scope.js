@@ -140,7 +140,7 @@ export function applyTaskScopeError(state, seq, taskId, message) {
 }
 
 /**
- * @param {{ runId?: string | null, graphId?: string | null, node?: { id?: string | null } | null, nodeId?: string | null, scope?: string | null }} activation
+ * @param {{ runId?: string | null, graphId?: string | null, node?: { id?: string | null } | null, nodeId?: string | null, key?: string, attempt?: number, scope?: string | null }} activation
  * @param {string | null | undefined} currentRunId
  * @returns {ActivationTarget}
  */
@@ -150,11 +150,13 @@ export function activationTarget(activation, currentRunId) {
     graphId: activation.graphId ?? null,
     nodeId: activation.node?.id ?? activation.nodeId ?? null,
     scope: activation.scope ?? "",
+    ...(activation.key ? { key: activation.key } : {}),
+    ...(activation.attempt ? { attempt: activation.attempt } : {}),
   };
 }
 
 /**
- * @param {{ key?: string, runId?: string | null }} report
+ * @param {{ key?: string, attempt?: number, runId?: string | null }} report
  * @param {Array<{ key?: string, runId?: string | null, graphId?: string | null, node?: { id?: string | null } | null, nodeId?: string | null }>} activations
  * @param {string | null | undefined} currentRunId
  * @returns {ActivationTarget | null}
@@ -163,7 +165,7 @@ export function reportOrigin(report, activations, currentRunId) {
   const activation = activations.find(
     (item) => item.key === report.key && (!report.runId || !item.runId || item.runId === report.runId),
   );
-  if (activation) return activationTarget(activation, report.runId ?? currentRunId);
+  if (activation) return activationTarget({ ...activation, ...(report.attempt ? { attempt: report.attempt } : {}) }, report.runId ?? currentRunId);
   if (report.runId) return { runId: report.runId, graphId: null, nodeId: null, scope: "" };
   return null;
 }

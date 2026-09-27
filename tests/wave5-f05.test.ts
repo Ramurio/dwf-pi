@@ -76,7 +76,9 @@ test("token report origin is opened as a whole activation target", () => {
   const app = readFileSync(new URL("../src/graph-view/app.js", import.meta.url), "utf8");
   assert.match(app, /void openActivation\(a\)/);
   assert.match(app, /void openActivation\(origin\)/);
-  assert.match(app, /state\.scope = target\.scope/);
+  assert.match(app, /scope: target\.scope/);
+  assert.match(app, /key: activation\.key/);
+  assert.match(app, /attempt: activation\.attempt/);
   assert.doesNotMatch(
     app,
     /openActivation\(\{\s*runId: origin\.runId,\s*graphId: origin\.graphId,\s*nodeId: origin\.nodeId/,

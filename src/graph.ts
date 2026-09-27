@@ -17,7 +17,7 @@ export type Expr =
   | { op: "select"; when: Expr; then: Expr; otherwise: Expr }
   | { op: "eq" | "ne" | "gt" | "gte" | "lt" | "lte"; left: Expr; right: Expr }
   | { op: "not" | "exists"; value: Expr };
-export type Node = { id: string } & (
+export type Node = { id: string; label?: string } & (
   | { kind: "agent"; role: RoleName; task: Expr; input?: Expr; config?: AgentConfig; retryPolicy?: RetryPolicy }
   | { kind: "transform" | "end"; value: Expr }
   | { kind: "finish"; decision: TaskDecision; reason: Expr; evidence: Expr; value: Expr }
@@ -41,7 +41,7 @@ const id = Type.String({ pattern: "^[A-Za-z][A-Za-z0-9_-]*$" });
 const expr = Type.Ref("Expr");
 const json = Type.Ref("Json");
 const tagged = (op: string, fields: Record<string, import("typebox").TSchema>) => Type.Object({ op: Type.Literal(op), ...fields }, closed);
-const node = (kind: string, fields: Record<string, import("typebox").TSchema>) => Type.Object({ id, kind: Type.Literal(kind), ...fields }, closed);
+const node = (kind: string, fields: Record<string, import("typebox").TSchema>) => Type.Object({ id, label: Type.Optional(Type.String({ minLength: 1 })), kind: Type.Literal(kind), ...fields }, closed);
 const positiveInt = Type.Integer({ minimum: 1 });
 const definitions = {
   Json: Type.Union([Type.Null(), Type.Boolean(), Type.Number(), Type.String(), Type.Array(json), Type.Record(Type.String(), json)]),

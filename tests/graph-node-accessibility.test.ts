@@ -12,6 +12,16 @@ import { layoutGraph } from "../src/graph-view/layout.js";
 import * as pages from "../src/graph-view/usage-pages.js";
 // @ts-expect-error browser module
 import * as taskScope from "../src/graph-view/task-scope.js";
+// @ts-expect-error browser module
+import * as navigation from "../src/graph-view/navigation.js";
+// @ts-expect-error browser module
+import * as executionData from "../src/graph-view/execution-data.js";
+// @ts-expect-error browser module
+import * as viewState from "../src/graph-view/view-state.js";
+// @ts-expect-error browser module
+import * as workspace from "../src/graph-view/workspace.js";
+// @ts-expect-error browser module
+import { createExecutionDetails } from "../src/graph-view/execution-details.js";
 
 const root = new URL("../src/graph-view/", import.meta.url);
 // Only disable network startup/polling. All UI functions and event registrations run unchanged.
@@ -102,7 +112,7 @@ for (let repeat = 0; repeat < 2; repeat++) {
   const titles = children.filter(c => c.tagName.toLowerCase() === 'title');
   check(titles.length === 1 && children[0] === titles[0], 'one direct first title');
   check(titles[0].textContent.includes(n.role) && titles[0].textContent.includes(n.id), 'full tooltip');
-  check(g.getAttribute('aria-label') === n.role + ': ' + n.id + ', В работе', 'full aria label');
+  check(g.getAttribute('aria-label') === n.role + ': ' + n.id + ', последнее состояние узла: В работе', 'full aria label');
   for (const [cls, value, limit] of [['node-title', n.role, 25], ['node-meta', n.id, 30]]) {
    const text = children.find(c => c.getAttribute('class') === cls).textContent;
    check(text === (value.length > limit ? value.slice(0, limit - 1) + '…' : value), 'visible shortening');
@@ -192,7 +202,7 @@ test("app.js accessibility: selection, text, keyboard, trace, scope and run iden
     querySelectorAll: () => [],
   };
   await runInNewContext(app.replace(/^import[\s\S]*?from "[^"\n]+";\n/gm, "") + "\n(async () => {" + replay + "})()", {
-    ...pages, ...taskScope, layoutGraph, document, Event,
+    ...pages, ...taskScope, ...navigation, ...executionData, ...viewState, ...workspace, createExecutionDetails, layoutGraph, document, Event,
     window: { addEventListener() {} }, ResizeObserver: class { observe() {} },
     fetch() { throw new Error("Unexpected network request"); },
   });
@@ -219,7 +229,7 @@ test("local Chrome fixture QA: native DOM replay and trusted Space without scrol
       return;
     }
     const name = req.url?.slice(1) || "index.html";
-    if (!["index.html", "app.js", "style.css", "layout.js", "usage-pages.js", "task-scope.js"].includes(name)) { res.writeHead(404).end(); return; }
+    if (!["index.html", "app.js", "style.css", "layout.js", "usage-pages.js", "task-scope.js", "navigation.js", "execution-data.js", "view-state.js", "workspace.js", "execution-details.js"].includes(name)) { res.writeHead(404).end(); return; }
     res.setHeader("Connection", "close");
     res.setHeader("Content-Type", name.endsWith("js") ? "text/javascript" : name.endsWith("css") ? "text/css" : "text/html");
     if (name === "index.html") {
@@ -242,14 +252,143 @@ window.harvestQA = () => {
   const node=nodes[10].getBoundingClientRect(), frame=$('graph').getBoundingClientRect();
   const visible=node.top>=frame.top&&node.bottom<=frame.bottom&&node.left>=frame.left&&node.right<=frame.right;
   renderPanel(); const kept=document.activeElement.dataset.nodeId==='n10';
-  camera={x:0,y:0,width:50000,height:40000}; zoom(1.25);
+  camera={x:0,y:0,width:50000,height:40000,viewportWidth:700}; zoom(1.25);
   const outward=camera.width; zoom(0.8); const inward=camera.width;
+  const retainedViewport=camera.viewportWidth===700;
   // Полное имя доступно, но видимые строки не выходят за карточку.
   graph.nodes=[{...graph.nodes[0],id:'Ш'.repeat(30)}];graph.entry=graph.nodes[0].id;graph.edges=[];
   renderPanel();const group=document.querySelector('#graph [role="button"]');
   const width=Number(group.querySelector('rect').getAttribute('width'));
   const textFits=Array.from(group.querySelectorAll('text')).every(t=>t.getComputedTextLength()<=width-32);
-  return {visible,kept,outward,inward,textFits,fullName:group.getAttribute('aria-label').includes('Ш'.repeat(30))};
+  return {visible,kept,outward,inward,retainedViewport,textFits,fullName:group.getAttribute('aria-label').includes('Ш'.repeat(30))};
+};
+window.checkOutlineQA = async () => {
+  const graph=state.run.graphs[0]; state.graph=graph.id; state.scope='';state.node=graph.nodes[0].id;state.key=null;state.tab='graph';
+  graph.nodes[0].activations=[{key:'native-outline',scope:'["graph","main"]',path:'main / node',visit:1,attempt:1,status:'succeeded',startedAt:1,finishedAt:2,findings:[]}];
+  renderPanel();
+  const old=document.querySelectorAll('#outline .outline-node .outline-link')[1];
+  old.focus({preventScroll:true});
+  graph.nodes[0].label='Updated label'; renderPanel();
+  const next=document.querySelectorAll('#outline .outline-node .outline-link')[1];
+  const immediate=document.activeElement===next;
+  await new Promise(resolve=>setTimeout(resolve,100)); // Native toggle event queued by restoring details.open.
+  const afterToggle=document.activeElement===next, connected=next.isConnected, open=next.closest('details').open;
+  const schema=document.querySelectorAll('#outline .outline-node .outline-link')[0];schema.focus({preventScroll:true});
+  graph.nodes[0].label='Another label';renderPanel();
+  const schemaFocused=document.activeElement===document.querySelectorAll('#outline .outline-node .outline-link')[0];
+  return {immediate,afterToggle,connected,open,schemaFocused};
+};
+window.checkTraceQA = async () => {
+  state.tab='trace';state.run.trace={supported:true,count:2,failed:0,lastSeq:2};
+  const record={seq:1,key:'route0',attempt:1,at:1,context:{graphId:state.graph,scope:[],visit:0},
+    decision:{from:'route',to:'end',reason:'condition',evaluations:[{edgeIndex:0,to:'end',result:'true'}]}};
+  const page=tracePages.get(state.id);
+  Object.assign(page,{opened:true,reports:[record],cursor:1,hasMore:true,error:null,loading:false});
+  renderPanel();
+  const details=document.querySelector('#content-panel .transition-details details');
+  details.open=true;details.querySelector('summary').focus({preventScroll:true});
+  const savedFetch=globalThis.fetch;
+  let finish;globalThis.fetch=()=>new Promise(resolve=>{finish=resolve;});
+  try {
+    Array.from(document.querySelectorAll('#content-panel button')).find(b=>b.textContent.includes('Загрузить следующие переходы')).click();
+    for(let i=0;i<5&&typeof finish!=='function';i++) await Promise.resolve();
+    finish({ok:true,status:200,json:async()=>({records:[{...record,seq:2}],nextAfter:2,hasMore:false})});
+    await new Promise(resolve=>setTimeout(resolve,100));
+    const updated=document.querySelector('#content-panel .transition-details details');
+    return {open:updated.open,focused:document.activeElement===updated.querySelector('summary'),loaded:page.reports.length===2};
+  } finally {globalThis.fetch=savedFetch;}
+};
+window.checkBreadcrumbQA = async () => {
+  const main=state.run.graphs[0], parent=main.nodes[0];
+  parent.kind='subworkflow'; parent.children=[{id:'child',graphId:'child'}];
+  parent.activations=[{key:'native-parent',scope:'["graph","main"]',path:'main / parent',visit:1,attempt:1,status:'succeeded',startedAt:1,finishedAt:2,findings:[]}];
+  const scope=JSON.stringify(['graph','main','node',parent.id,'visit','0','graph','child']);
+  state.run.graphs.push({id:'child',entry:'nested',edges:[],nodes:[{...parent,id:'nested',children:[],activations:[{...parent.activations[0],key:'native-child',scope}]}]});
+  state.graph='child';state.scope=scope;state.node=null;state.key=null;state.tab='graph';renderPanel();
+  const before=document.querySelectorAll('#breadcrumbs .crumb')[1];before.focus({preventScroll:true});
+  const oldFetch=globalThis.fetch;
+  globalThis.fetch=async()=>({ok:true,status:200,json:async()=>({...state.run,usage:{...state.run.usage,totalTokens:25}})});
+  try { await refreshSnapshot(); } finally { globalThis.fetch=oldFetch; }
+  const after=document.querySelectorAll('#breadcrumbs .crumb')[1];
+  return {changed:before!==after,focused:document.activeElement===after,key:before.dataset.uiKey===after.dataset.uiKey};
+};
+window.checkAutoTraceQA = async () => {
+  const page=tracePages.get(state.id), oldFetch=globalThis.fetch;
+  state.tab='trace';state.run.trace={supported:true,count:2,failed:0,lastSeq:2};
+  Object.assign(page,{opened:true,cursor:2,hasMore:false,loading:false,error:null});renderPanel();
+  const panel=$('content-panel');panel.style.height='70px';panel.style.overflow='auto';
+  const detail=panel.querySelector('.transition-details details');detail.open=true;detail.querySelector('summary').focus({preventScroll:true});
+  panel.scrollTop=25;const beforeScroll=panel.scrollTop;
+  let finish;
+  globalThis.fetch=path=>path.startsWith('snapshot?')
+    ? Promise.resolve({ok:true,status:200,json:async()=>({...state.run,trace:{...state.run.trace,count:3,lastSeq:3}})})
+    : new Promise(resolve=>{finish=resolve});
+  try {
+    await refreshSnapshot();
+    const during=panel.querySelector('.transition-details details');
+    const immediate=during.open&&document.activeElement===during.querySelector('summary')&&panel.scrollTop===beforeScroll;
+    for(let i=0;i<5&&typeof finish!=='function';i++)await Promise.resolve();
+    finish({ok:true,status:200,json:async()=>({records:[{...page.reports[0],seq:3}],nextAfter:3,hasMore:false})});
+    await new Promise(resolve=>setTimeout(resolve,100));
+    const after=panel.querySelector('.transition-details details');
+    return {immediate,open:after.open,focused:document.activeElement===after.querySelector('summary'),scrolled:beforeScroll>0&&panel.scrollTop===beforeScroll,loaded:page.reports.length===3};
+  } finally {globalThis.fetch=oldFetch;panel.style.height='';panel.style.overflow='';}
+};
+window.checkArchiveQA = async () => {
+  const graph=state.run.graphs[0], node=graph.nodes[0], activation=node.activations[0];
+  state.graph=graph.id;state.scope=activation.scope;state.node=node.id;
+  state.key=activation.key;state.attempt=1;state.tab='graph';
+  const identity=JSON.stringify([state.id,activation.key]);
+  Object.assign(attemptPages.get(identity),{opened:true,reports:[],cursor:0,hasMore:false});
+  attemptPages.snapshots.set(identity,{current:{attempt:1,status:'running',startedAt:1,finishedAt:null,metadata:{},output:{value:'STALE_CURRENT'}},missingArchived:0});
+  renderPanel();
+  const inspector=$('inspector');inspector.style.height='90px';inspector.style.overflow='auto';
+  const before=inspector.querySelector('.node-definition');before.open=true;
+  before.querySelector('summary').focus({preventScroll:true});
+  inspector.scrollTop=25;const scroll=inspector.scrollTop;
+  const originalFetch=globalThis.fetch;let finish;
+  const newer={...state.run,graphs:state.run.graphs.map(g=>({...g,nodes:g.nodes.map(n=>({...n,
+    activations:n.activations.map(a=>a.key===activation.key?{...a,attempt:2}:a)}))}))};
+  globalThis.fetch=path=>path.startsWith('snapshot?')
+    ? Promise.resolve({ok:true,status:200,json:async()=>newer})
+    : path.startsWith('attempts?') ? new Promise(resolve=>{finish=resolve;}) : Promise.reject(Error(path));
+  const read=()=>({rows:inspector.querySelectorAll(':scope > .detail-run').length,
+    open:inspector.querySelector('.node-definition').open,
+    focused:document.activeElement===inspector.querySelector('.node-definition summary'),
+    scroll:scroll>0&&inspector.scrollTop===scroll,
+    stale:inspector.textContent.includes('STALE_CURRENT')});
+  try {
+    await refreshSnapshot();const pending=read();
+    finish({ok:true,status:200,json:async()=>({records:[{attempt:1,status:'failed',startedAt:1,finishedAt:2,metadata:{},error:'ARCHIVED'}],
+      current:{attempt:2,status:'succeeded',startedAt:2,finishedAt:3,metadata:{}},nextAfter:1,hasMore:false,missingArchived:0})});
+    await new Promise(resolve=>setTimeout(resolve,100));
+    return {pending,finished:read(),archived:inspector.textContent.includes('ARCHIVED')};
+  } finally {globalThis.fetch=originalFetch;inspector.style.height='';inspector.style.overflow='';}
+};
+window.prepareInspectorCloseQA = () => {
+  state.tab='history';state.node=state.run.graphs.find(g=>g.id===state.graph).nodes[0].id;
+  state.key=null;state.attempt=null;renderPanel();
+  const close=document.querySelector('#inspector .inspector-close');close.focus({preventScroll:true});
+  return {focused:document.activeElement===close,shown:!$('inspector').hidden,graphHidden:$('graph-panel').hidden};
+};
+window.checkInspectorCloseQA = () => ({closed:$('inspector').hidden,tab:state.tab,
+  focused:document.activeElement===$('search'),visible:!$('search').closest('[hidden]')});
+window.prepareHistoryFilterQA = () => {
+  state.tab='history';state.filter='all';state.node=null;state.key=null;renderPanel();
+  const panel=$('content-panel');panel.style.flex='0 0 70px';panel.style.height='70px';panel.style.overflow='auto';
+  const filter=panel.querySelector('select[aria-label="Фильтр истории"]');
+  filter.focus({preventScroll:true});panel.scrollTop=15;
+  window.filterBefore=filter;window.filterScroll=panel.scrollTop;window.filterTrusted=null;window.filterKeys=[];
+  filter.addEventListener('keydown',event=>{window.filterKeys.push([event.key,event.isTrusted]);});
+  filter.addEventListener('change',event=>{window.filterTrusted=event.isTrusted;});
+  return {focused:document.activeElement===filter,scroll:window.filterScroll>0};
+};
+window.checkHistoryFilterQA = () => {
+  const panel=$('content-panel'), filter=panel.querySelector('select[aria-label="Фильтр истории"]');
+  const result={trustedKey:window.filterKeys.some(([key,trusted])=>key==='ArrowDown'&&trusted),
+    changeDelivered:window.filterTrusted===false,changed:filter!==window.filterBefore,focused:document.activeElement===filter,
+    selected:filter.value,scroll:panel.scrollTop===window.filterScroll,oldRemoved:!window.filterBefore.isConnected};
+  panel.style.flex='';panel.style.height='';panel.style.overflow='';return result;
 };
 window.prepareWaitQA = () => {
   state.run = {...state.run,status:'paused',desired:'paused',waits:[{id:'native-wait',key:'native-key',status:'open',reason:'Ответ',input:{},responseSchema:{type:'object'}}]};
@@ -346,11 +485,67 @@ await fetch('/replay-result', { method: 'POST', body: document.body.getAttribute
       assert.equal(observation.result.value.pressed, "true");
       assert.equal(observation.result.value.focused, true);
       const harvest = await send("Runtime.evaluate", { expression: "window.harvestQA()", returnByValue: true });
-      assert.deepEqual(harvest.result.value, {visible:true,kept:true,outward:62500,inward:50000,textFits:true,fullName:true});
+      assert.deepEqual(harvest.result.value, {visible:true,kept:true,outward:62500,inward:50000,retainedViewport:true,textFits:true,fullName:true});
+      const outlineQA=await send("Runtime.evaluate",{expression:"window.checkOutlineQA()",awaitPromise:true,returnByValue:true});
+      assert.deepEqual(outlineQA.result.value,{immediate:true,afterToggle:true,connected:true,open:true,schemaFocused:true});
+      const traceQA=await send("Runtime.evaluate",{expression:"window.checkTraceQA()",awaitPromise:true,returnByValue:true});
+      assert.ok(!traceQA.exceptionDetails, JSON.stringify(traceQA.exceptionDetails));
+      assert.deepEqual(traceQA.result.value,{open:true,focused:true,loaded:true});
+      const breadcrumbQA=await send("Runtime.evaluate",{expression:"window.checkBreadcrumbQA()",awaitPromise:true,returnByValue:true});
+      assert.ok(!breadcrumbQA.exceptionDetails, JSON.stringify(breadcrumbQA.exceptionDetails));
+      assert.deepEqual(breadcrumbQA.result.value,{changed:true,focused:true,key:true});
+      const autoTraceQA=await send("Runtime.evaluate",{expression:"window.checkAutoTraceQA()",awaitPromise:true,returnByValue:true});
+      assert.ok(!autoTraceQA.exceptionDetails, JSON.stringify(autoTraceQA.exceptionDetails));
+      assert.deepEqual(autoTraceQA.result.value,{immediate:true,open:true,focused:true,scrolled:true,loaded:true});
+      const archiveQA=await send("Runtime.evaluate",{expression:"window.checkArchiveQA()",awaitPromise:true,returnByValue:true});
+      assert.ok(!archiveQA.exceptionDetails, JSON.stringify(archiveQA.exceptionDetails));
+      assert.deepEqual(archiveQA.result.value,{pending:{rows:1,open:true,focused:true,scroll:true,stale:false},finished:{rows:1,open:true,focused:true,scroll:true,stale:false},archived:true});
+      const preparedClose=await send("Runtime.evaluate",{expression:"window.prepareInspectorCloseQA()",returnByValue:true});
+      assert.deepEqual(preparedClose.result.value,{focused:true,shown:true,graphHidden:true});
+      await send("Input.dispatchKeyEvent",{type:"keyDown",key:"Enter",code:"Enter",text:"\r",unmodifiedText:"\r",windowsVirtualKeyCode:13,nativeVirtualKeyCode:13});
+      await send("Input.dispatchKeyEvent",{type:"keyUp",key:"Enter",code:"Enter",windowsVirtualKeyCode:13,nativeVirtualKeyCode:13});
+      const closeQA=await send("Runtime.evaluate",{expression:"window.checkInspectorCloseQA()",returnByValue:true});
+      assert.deepEqual(closeQA.result.value,{closed:true,tab:'history',focused:true,visible:true});
       await send("Runtime.evaluate",{expression:"window.prepareWaitQA()"});
       await send("Input.insertText",{text:JSON.stringify({answer:Array.from({length:50},(_,i)=>'строка '+i)},null,2)});
       const waitQA=await send("Runtime.evaluate",{expression:"window.checkWaitQA()",returnByValue:true});
       assert.deepEqual(waitQA.result.value,{trusted:true,kept:true,scrolled:true,submitKept:true});
+      const filterReady=await send("Runtime.evaluate",{expression:"window.prepareHistoryFilterQA()",returnByValue:true});
+      assert.deepEqual(filterReady.result.value,{focused:true,scroll:true});
+      await send("Input.dispatchKeyEvent",{type:"keyDown",key:"ArrowDown",code:"ArrowDown",windowsVirtualKeyCode:40,nativeVirtualKeyCode:40});
+      await send("Input.dispatchKeyEvent",{type:"keyUp",key:"ArrowDown",code:"ArrowDown",windowsVirtualKeyCode:40,nativeVirtualKeyCode:40});
+      // Headless Chrome delivers trusted keys but does not commit native select
+      // popups through CDP. Dispatch change on the focused real DOM element.
+      await send("Runtime.evaluate",{expression:`(() => {
+        window.filterBefore.value='issues';window.filterBefore.dispatchEvent(new Event('change',{bubbles:true}));
+      })()`});
+      const filterQA=await send("Runtime.evaluate",{expression:"window.checkHistoryFilterQA()",returnByValue:true});
+      assert.deepEqual(filterQA.result.value,{trustedKey:true,changeDelivered:true,changed:true,focused:true,selected:'issues',scroll:true,oldRemoved:true});
+      // Real CSS cascade at mobile/zoom widths. A stacked sidebar must not trap main
+      // below a 100dvh body with scrolling disabled (notably 651–700px).
+      for (const width of [650, 680, 700, 701]) {
+        await send("Emulation.setDeviceMetricsOverride",{width,height:800,deviceScaleFactor:1,mobile:false});
+        const responsive=await send("Runtime.evaluate",{expression:`(() => {
+          document.body.style.removeProperty('height');document.body.style.removeProperty('overflow');
+          document.documentElement.style.removeProperty('overflow');window.scrollTo(0,0);
+          const side=document.querySelector('.sidebar').getBoundingClientRect();
+          const main=document.querySelector('main').getBoundingClientRect();
+          const display=getComputedStyle(document.body).display;
+          window.scrollTo(0,10000);
+          return {width:innerWidth,display,sidebarHeight:side.height,mainTop:main.top,mainWidth:main.width,
+            canPageScroll:window.scrollY>0};
+        })()`,returnByValue:true});
+        assert.ok(!responsive.exceptionDetails,JSON.stringify(responsive.exceptionDetails));
+        const value=responsive.result.value;
+        assert.equal(value.width,width);assert.ok(value.mainWidth>0,JSON.stringify(value));
+        if(width<=700){
+          assert.equal(value.display,'block',JSON.stringify(value));
+          assert.ok(value.sidebarHeight<800,JSON.stringify(value));
+          assert.ok(value.mainTop<800,JSON.stringify(value));
+          assert.equal(value.canPageScroll,true,JSON.stringify(value));
+        }else assert.equal(value.display,'grid',JSON.stringify(value));
+      }
+      await send("Emulation.clearDeviceMetricsOverride");
     } finally { socket.close(); }
   } finally {
     clearTimeout(deadline);

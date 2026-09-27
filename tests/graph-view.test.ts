@@ -97,7 +97,7 @@ const headers = (url: string) => ({
 test("local UI serves all assets and a safe projection; read-only requests preserve journal events", async () =>
   fixture(async (f) => {
     const before = f.store.events("run-ui");
-    for (const name of ["", "app.js", "layout.js", "usage-pages.js", "task-scope.js", "style.css"]) {
+    for (const name of ["", "app.js", "layout.js", "usage-pages.js", "task-scope.js", "navigation.js", "execution-data.js", "view-state.js", "workspace.js", "execution-details.js", "style.css"]) {
       const response = await fetch(f.url + name);
       assert.equal(response.status, 200);
       assert.match(

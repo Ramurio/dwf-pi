@@ -129,11 +129,12 @@ test("task-scope agent and report links open the producer run and activation", (
     runId: "run-qa-original",
     graphId: "main",
     nodeId: "plan",
+    key: "plan-key",
     scope: "",
   });
   assert.deepEqual(
     reportOrigin({ key: "plan-key", runId: "run-qa-original" }, [planner], "run-qa-target"),
-    { runId: "run-qa-original", graphId: "main", nodeId: "plan", scope: "" },
+    { runId: "run-qa-original", graphId: "main", nodeId: "plan", key: "plan-key", scope: "" },
   );
   assert.deepEqual(activationTarget({ graphId: "main", node: { id: "broken" } }, "run-qa-target"), {
     runId: "run-qa-target",

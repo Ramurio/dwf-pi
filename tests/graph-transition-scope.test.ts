@@ -12,6 +12,16 @@ import { layoutGraph } from "../src/graph-view/layout.js";
 import * as pages from "../src/graph-view/usage-pages.js";
 // @ts-expect-error browser module
 import * as taskScope from "../src/graph-view/task-scope.js";
+// @ts-expect-error browser module
+import * as navigation from "../src/graph-view/navigation.js";
+// @ts-expect-error browser module
+import * as executionData from "../src/graph-view/execution-data.js";
+// @ts-expect-error browser module
+import * as viewState from "../src/graph-view/view-state.js";
+// @ts-expect-error browser module
+import * as workspace from "../src/graph-view/workspace.js";
+// @ts-expect-error browser module
+import { createExecutionDetails } from "../src/graph-view/execution-details.js";
 
 const root = new URL("../src/graph-view/", import.meta.url);
 // Only disable network startup/polling. All UI functions and event registrations run unchanged.
@@ -34,7 +44,7 @@ Object.assign(tracePages.get(state.id), { opened: true, reports: records, cursor
 const selected = expected => {
  const shown = $('inspector').textContent.includes('ВЫБРАННЫЙ ПЕРЕХОД');
  const paths = descendants($('graph')).filter(n => (n.getAttribute('class') || '').split(' ').includes('trace-selected'));
- check(shown === expected, 'inspector selection mismatch');
+ check(shown === expected, 'inspector selection mismatch: ' + JSON.stringify({expected,shown,graph:state.graph,scope:state.scope,node:state.node,key:state.key,missing:state.missing,transition:state.transition,inspector:$('inspector').textContent.slice(0,300)}));
  check(paths.length === (expected ? 1 : 0), 'SVG selection mismatch');
 };
 const choose = i => { setTab('trace'); const cards = Array.from($('content-panel').children).filter(n => n.className.includes('trace-card'));
@@ -195,7 +205,7 @@ test(`app.js DOM replay: ${scenario}`, async () => {
     querySelectorAll: () => [],
   };
   await runInNewContext(app.replace(/^import[\s\S]*?from "[^"\n]+";\n/gm, "") + `(async () => { ${scenarioReplay} })()`, {
-    ...pages, ...taskScope, layoutGraph, document, Event,
+    ...pages, ...taskScope, ...navigation, ...executionData, ...viewState, ...workspace, createExecutionDetails, layoutGraph, document, Event,
     window: { addEventListener() {} }, ResizeObserver: class { observe() {} },
     fetch() { throw new Error("Unexpected network request"); },
   });
@@ -222,7 +232,7 @@ test(`local Chrome fixture QA: ${scenario}`, { skip: !chrome, timeout: 30000 }, 
       return;
     }
     const name = req.url?.slice(1) || "index.html";
-    if (!["index.html", "app.js", "style.css", "layout.js", "usage-pages.js", "task-scope.js"].includes(name)) { res.writeHead(404).end(); return; }
+    if (!["index.html", "app.js", "style.css", "layout.js", "usage-pages.js", "task-scope.js", "navigation.js", "execution-data.js", "view-state.js", "workspace.js", "execution-details.js"].includes(name)) { res.writeHead(404).end(); return; }
     res.setHeader("Connection", "close");
     res.setHeader("Content-Type", name.endsWith("js") ? "text/javascript" : name.endsWith("css") ? "text/css" : "text/html");
     if (name === "index.html") {

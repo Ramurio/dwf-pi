@@ -1,3 +1,8 @@
+import { createExecutionDetails } from "./execution-details.js";
+import { readLocation, locationFor, resolveLocation } from "./navigation.js";
+import { executions, taskGroups, childExecutions, scopeLabel, transitionTarget, executionSequence } from "./execution-data.js";
+import { ViewMemory } from "./view-state.js";
+import { renderWorkspace } from "./workspace.js";
 import { layoutGraph } from "./layout.js";
 import { UsagePages, TracePages, AttemptPages, CollectionPages, RetryPages } from "./usage-pages.js";
 import {
@@ -16,21 +21,6 @@ const tracePages = new TracePages();
 const attemptPages = new AttemptPages();
 const collectionPages = new CollectionPages();
 const retryPages = new RetryPages();
-const recoveryInspections = new Map();
-const reconciliationRecords = new Map();
-const reconciliationGenerations = new Map();
-const inspectionGenerations = new Map();
-function nextInspectionRead(identity) {
-  const generation = (inspectionGenerations.get(identity) ?? 0) + 1;
-  inspectionGenerations.set(identity, generation);
-  return () => inspectionGenerations.get(identity) === generation;
-}
-function nextReconciliationRead(identity) {
-  const generation = (reconciliationGenerations.get(identity) ?? 0) + 1;
-  reconciliationGenerations.set(identity, generation);
-  return () => reconciliationGenerations.get(identity) === generation;
-}
-const recoveryDrafts = new Map();
 const routingLabels = { true: "Условие выполнено", false: "Условие не выполнено", "not-evaluated": "Не проверялось", fallback: "Выбран запасной переход", error: "Ошибка проверки" };
 const waitDrafts = new Map();
 
@@ -87,6 +77,10 @@ const state = {
   scope: "",
   node: null,
   transition: null,
+  key: null,
+  attempt: null,
+  missing: null,
+  historyLimit: 100,
   signature: "",
   listSignature: "",
   filter: "all",
@@ -98,12 +92,51 @@ const state = {
   listRequest: 0,
   taskLoad: null,
   runSelection: 0,
+  navigationRevision: 0,
+  pendingActivation: null,
+  pendingTaskReconcile: null,
   usageScope: "run",
   taskUsage: null,
   linkedRuns: [],
   taskFetch: 0,
   taskUsageError: null,
 };
+const memory = new ViewMemory();
+function remember(root, context, render) {
+  if (root.dataset.context) memory.capture(root, root.dataset.context, document);
+  render();
+  root.dataset.context = context;
+  memory.restore(root, context);
+}
+function writeLocation(mode = "push") {
+  if (!window.location?.href || !window.history) return;
+  const url = locationFor(window.location.href, state);
+  if (url.href !== window.location.href) window.history[mode === "replace" ? "replaceState" : "pushState"]({}, "", url);
+}
+function navigate(target) {
+  if (!state.run) return; // Retained links cannot navigate through a loading run.
+  state.pendingActivation = null;
+  state.navigationRevision++;
+  Object.assign(state, { node: null, key: null, attempt: null, scope: "", transition: null, missing: null }, target);
+  if (state.run) Object.assign(state, resolveLocation(state.run, state));
+  if (state.node) memory.expanded.set(JSON.stringify([state.id, state.graph, state.scope, state.node]), true);
+  writeLocation(); renderPanel();
+}
+function hideNavigation() {
+  for (const name of ["outline", "breadcrumbs", "selection-context"]) $(name).hidden = true;
+}
+let navigationRender = 0;
+function renderNavigation() {
+  for (const name of ["outline", "breadcrumbs", "selection-context"]) $(name).hidden = false;
+  const id = state.id, visit = state.runSelection, generation = ++navigationRender;
+  // Identical polls replace the decoded snapshot object without rebuilding the DOM.
+  const current = () => state.id === id && state.runSelection === visit && Boolean(state.run) && navigationRender === generation;
+  remember($("breadcrumbs"), JSON.stringify([state.id, state.graph, state.scope, "breadcrumbs"]), () =>
+    remember($("outline"), JSON.stringify([state.id, state.graph, state.scope, "outline"]), () =>
+      renderWorkspace({ state, el, button, title, names, memory, document, graphForScope: selectedGraph,
+        navigate: target => { if (current()) navigate(target); },
+        openActivation: activation => { if (current()) void openActivation(activation); } })));
+}
 const number = (value) => new Intl.NumberFormat("ru-RU").format(value);
 const duration = (ms) => {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -120,6 +153,7 @@ const date = (at) =>
     hour: "2-digit",
     minute: "2-digit",
   });
+const { renderRecovery, renderRecoveryForm, failureView, retryView, renderRetries, renderCollection, outputRepairView, renderAttempts, renderReconciliations, operationView, recoveryDrafts, recoveryInspections, reconciliationRecords } = createExecutionDetails({ state, api, el, button, badge, clock, number, date, duration, renderInspector, notice, refreshSnapshot, attemptPages, collectionPages, retryPages, document, navigate, newDecisionId: () => crypto.randomUUID() });
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -150,7 +184,8 @@ function attention(node) {
       return true;
     })
     .some((a) =>
-      /request_changes|rejected|inconclusive|exit [1-9]|не принят/.test(a.result ?? "") ||
+      (a.findings?.length ?? 0) > 0 ||
+        /request_changes|rejected|inconclusive|exit [1-9]|не принят/.test(a.result ?? "") ||
         Number(a.collectionSummary?.failed) > 0,
     );
 }
@@ -169,6 +204,7 @@ function badge(status) {
   return el("span", `badge ${status}`, names[status] ?? status);
 }
 function title(node) {
+  if (node.label?.trim()) return node.label;
   return node.role
     ? (roles[node.role] ?? node.role)
     : (kinds[node.kind] ?? node.kind);
@@ -193,14 +229,22 @@ async function api(path, options, isCurrent = () => true) {
   if (!response.ok) throw new Error(value.error ?? `HTTP ${response.status}`);
   return value;
 }
-function allActivations() {
-  return (
-    state.run?.graphs.flatMap((g) =>
-      g.nodes.flatMap((n) =>
-        n.activations.map((a) => ({ ...a, node: n, graphId: g.id })),
-      ),
-    ) ?? []
-  );
+function allActivations() { return executions(state.run); }
+function showingWait(runId, waitId) {
+  return state.id === runId && state.run && state.tab === "now" &&
+    state.run.waits?.some(wait => wait.id === waitId && wait.status === "open");
+}
+function showingTrace(runId) {
+  if (state.id !== runId || !state.run) return false;
+  if (state.tab === "trace" || state.tab === "history") return true;
+  return Boolean(state.key && allActivations().some(a => a.key === state.key && a.graphId === state.graph &&
+    a.node.id === state.node && (!state.scope || a.scope === state.scope)));
+}
+function showingUsage(runId, pageKey) {
+  if (state.id !== runId || !state.run || state.tab !== "tokens") return false;
+  const task = taskUsageForView(state);
+  if (state.usageScope === "task" && state.run.lineage?.taskId && !task) return false;
+  return (task ? `task:${task.taskId}` : runId) === pageKey;
 }
 function sum(records) {
   let input = 0,
@@ -225,9 +269,8 @@ function sum(records) {
   };
 }
 function selectedGraph() {
-  const original =
-    state.run.graphs.find((g) => g.id === state.graph) ?? state.run.graphs[0];
-  if (!state.scope) return original;
+  const original = state.run.graphs.find((g) => g.id === state.graph);
+  if (!original || !state.scope) return original;
   return {
     ...original,
     nodes: original.nodes.map((n) => {
@@ -249,58 +292,71 @@ function tokenTotalLabel(summary) {
   return `${number(summary.totalTokens)} ток.${summary.partial ? " · известная часть" : ""}`;
 }
 function renderRuns() {
-  const filter = $("search").value.toLowerCase();
-  $("runs").replaceChildren();
-  $("run-count").textContent = state.runs.length;
-  const runs = state.runs.filter((r) =>
-    `${r.name} ${r.id}`.toLowerCase().includes(filter),
-  );
-  for (const run of runs) {
-    const item = button(
-      "",
-      () => selectRun(run.id),
-      `run-item${run.id === state.id ? " selected" : ""}`,
-    );
-    item.title = run.name;
-    item.append(
-      el("strong", "", run.name),
-      el(
-        "small",
-        "",
-        `${run.presentation.outcomeLabel ?? run.presentation.statusLabel} · ${date(run.createdAt)}`,
-      ),
-      el(
-        "small",
-        "mini-id",
-        `${run.id.slice(-8)} · ${tokenTotalLabel(run.usage)}${run.lineage?.role === "continuation" ? " · продолжение" : run.lineage?.successorRunId ? " · есть продолжение" : ""}`,
-      ),
-    );
-    $("runs").append(item);
-  }
-  if (!runs.length)
-    $("runs").append(
-      el("p", "muted", filter ? "Ничего не найдено" : "Запусков пока нет"),
-    );
-}
-async function selectRun(id, navigation = "push") {
-  if (navigation !== "none") {
-    const url = new URL(window.location.href);
-    if (url.searchParams.get("run") !== id) {
-      url.searchParams.set("run", id);
-      window.history[navigation === "replace" ? "replaceState" : "pushState"]({}, "", url);
+  const changed = $("runs").dataset.selectedRun !== state.id;
+  remember($("runs"), "run-list", () => {
+    const filter = $("search").value.toLowerCase();
+    $("runs").replaceChildren();
+    $("run-count").textContent = taskGroups(state.runs).length;
+    for (const group of taskGroups(state.runs)) {
+      if (!group.runs.some(r => `${r.name} ${r.id} ${group.taskId ?? ""}`.toLowerCase().includes(filter))) continue;
+      const latest = group.runs.at(-1), original = group.runs.find(r => !r.lineage?.parentRunId) ?? group.runs[0];
+      const box = el("details", "task-group"); box.dataset.uiKey = group.id;
+      box.open = group.runs.some(r => r.id === state.id);
+      const heading = el("summary");
+      heading.append(el("strong", "", original.name), el("small", "", `${group.runs.length} ${group.runs.length === 1 ? "запуск" : "запусков"} · ${latest.presentation.outcomeLabel ?? latest.presentation.statusLabel}`));
+      heading.title = original.name; box.append(heading);
+      for (const run of group.runs) {
+        const item = button("", () => selectRun(run.id), `run-item${run.id === state.id ? " selected" : ""}`);
+        item.dataset.uiKey = run.id; item.setAttribute("aria-current", run.id === state.id ? "true" : "false");
+        item.title = run.name;
+        item.setAttribute("aria-label", `${run.name} · ${run.lineage?.parentRunId ? "Продолжение" : "Запуск"} ${run.id} · ${run.presentation.outcomeLabel ?? run.presentation.statusLabel}`);
+        item.append(el("strong", "", run.name), el("small", "", `${run.lineage?.parentRunId ? "Продолжение" : "Запуск"} · ${date(run.createdAt)}`), el("small", "mini-id", `${run.id.slice(-8)} · ${tokenTotalLabel(run.usage)}`));
+        box.append(item);
+      }
+      $("runs").append(box);
     }
+    if (!$("runs").children.length) $("runs").append(el("p", "muted", "Ничего не найдено"));
+  });
+  if (changed) for (const group of $("runs").children) {
+    if (Array.from(group.children ?? []).some(item => item.dataset?.uiKey === state.id)) group.open = true;
   }
-  if (state.id === id) return;
+  $("runs").dataset.selectedRun = state.id;
+}
+async function selectRun(id, navigation = "push", pendingTarget = null) {
+  const route = navigation !== "push" && window.location?.href ? readLocation(window.location.href) : null;
+  if (state.id === id) {
+    if (navigation === "push" && state.pendingActivation) {
+      state.pendingActivation = null;
+      state.navigationRevision++;
+      Object.assign(state, { graph: null, scope: "", node: null, key: null, attempt: null, missing: null });
+      writeLocation();
+    }
+    // A second popstate can arrive while the first visit's snapshot is in flight.
+    if (navigation === "pop" && route?.id === id) {
+      Object.assign(state, state.run ? resolveLocation(state.run, route) : route, { transition: null });
+      if (state.run) renderPanel();
+    }
+    return;
+  }
   closeCancelDialog();
+  state.pendingActivation = null;
   const selection = ++state.runSelection;
   const { previousTaskId } = beginRunSelection(state, id);
+  state.pendingTaskReconcile = { selection, previousTaskId };
+  Object.assign(state, { key: null, attempt: null, missing: null, historyLimit: 100 });
+  if (route?.id === id) Object.assign(state, route);
+  if (pendingTarget) {
+    Object.assign(state, pendingTarget);
+    state.pendingActivation = { id, selection, intent: state.navigationRevision };
+  }
+  if (navigation !== "none" && navigation !== "pop") writeLocation(navigation);
   $("workspace").hidden = true;
   $("empty").hidden = true;
+  hideNavigation();
   for (const name of ["pause", "resume", "cancel"]) $(name).disabled = true;
   renderRuns();
   await refreshSnapshot();
   if (state.id !== id || selection !== state.runSelection) return;
-  reconcileTaskScopeAfterSnapshot(state, previousTaskId);
   if (state.run) {
     renderHeader();
     renderPanel();
@@ -337,13 +393,16 @@ function loadTaskScope(taskId) {
 async function openActivation(activation) {
   const target = activationTarget(activation, state.id);
   if (!target.runId) return;
-  if (target.runId !== state.id) await selectRun(target.runId);
-  if (state.id !== target.runId || !state.run) return;
-  state.transition = null;
-  if (target.graphId) state.graph = target.graphId;
-  if (target.nodeId) state.node = target.nodeId;
-  state.scope = target.scope;
-  renderPanel();
+  if (target.runId !== state.id) {
+    // The target survives a superseded initial snapshot; only an accepted snapshot
+    // commits one history entry for this cross-run execution selection.
+    await selectRun(target.runId, "none", { graph: target.graphId ?? null, node: target.nodeId,
+      scope: target.scope, key: activation.key ?? null, attempt: activation.attempt ?? null });
+    return;
+  }
+  if (!state.run) return;
+  navigate({ graph: target.graphId ?? state.graph, node: target.nodeId, scope: target.scope, key: activation.key ?? null, attempt: activation.attempt ?? null });
+
 }
 function taskActivations() {
   return linkedRunsForView(state).flatMap((run) =>
@@ -400,6 +459,27 @@ function renderMetrics() {
   $("active-count").textContent = active.length;
 }
 function renderHeader() {
+  remember($("run-details"), JSON.stringify([state.id, "header"]), renderHeaderBody);
+  remember($("run-summary"), JSON.stringify([state.id, "summary"]), renderSummary);
+}
+function renderSummary() {
+  const r = state.run, panel = $("run-summary");
+  panel.className = `run-summary ${r.status}`;
+  $("task-context").textContent = r.lineage?.taskId ? `ЗАДАЧА ${r.lineage.taskId.slice(-8)} · ${r.lineage.parentRunId ? "ПРОДОЛЖЕНИЕ" : "ЗАПУСК"} ${r.id.slice(-8)}` : `ЗАПУСК ${r.id.slice(-8)} · БЕЗ СВЯЗАННОЙ ЗАДАЧИ`;
+  panel.replaceChildren();
+  const text = el("div", "summary-copy");
+  const waits = (r.waits ?? []).filter(w => w.status === "open");
+  const active = allActivations().filter(a => r.activeKeys?.includes(a.key));
+  const heading = r.failure ? "Требуется разбор сбоя" : waits.length && !waitResponseBlocker(r) ? `Нужен ответ · ${waits.length}` : r.presentation.outcomeLabel ?? r.presentation.statusLabel;
+  text.append(el("strong", "", heading), el("p", "", r.failure?.message ?? r.taskOutcome?.reason ?? (waits.length && !waitResponseBlocker(r) ? waits.map(w => w.reason).join(" · ") : r.status === "paused" ? "Работа приостановлена. Для следующего шага нажмите «Продолжить»." : active.length ? active.map(a => `${title(a.node)} · ${a.node.id}`).join(" · ") : r.presentation.liveness.label)));
+  panel.append(text);
+  if (waits.length && !waitResponseBlocker(r)) panel.append(button("Ответить", () => setTab("now"), "primary"));
+  else if (r.failure) panel.append(button("Разобрать сбой", () => { $("run-details").open = true; setTab("now"); }, "primary"));
+  else if (active.length) panel.append(button(`В работе: ${active.length}`, () => setTab("now"), "primary"));
+  else if (r.taskOutcome) panel.append(button("Доказательства", () => { $("run-details").open = true; }, "child-button"));
+  if (r.lineage?.successorRunId) panel.append(button("Открыть продолжение →", () => selectRun(r.lineage.successorRunId), "primary"));
+}
+function renderHeaderBody() {
   const r = state.run;
   $("workspace").hidden = false;
   $("empty").hidden = true;
@@ -503,11 +583,21 @@ function renderHeader() {
 }
 function setTab(tab) {
   state.tab = tab;
+  writeLocation();
   for (const b of document.querySelectorAll("[data-tab]"))
     b.setAttribute("aria-pressed", String(b.dataset.tab === tab));
   if (state.run) renderPanel();
 }
 function renderPanel() {
+  if (!state.run) return; // A background completion cannot draw an unloaded visit.
+  const context = JSON.stringify([state.id, state.tab, state.graph, state.scope, state.node, state.key, state.attempt]);
+  remember($("content-panel"), context, renderPanelBody);
+  renderNavigation();
+  for (const b of document.querySelectorAll("[data-tab]")) b.setAttribute("aria-pressed", String(b.dataset.tab === state.tab));
+  $("activity-strip").hidden = state.tab !== "graph";
+  if (state.tab === "graph") renderActivityStrip();
+}
+function renderPanelBody() {
   // Обновления соседних узлов не сворачивают данные открытого ожидания.
   for (const details of document.querySelectorAll("details[data-wait-details]")) {
     const draft = waitDrafts.get(details.dataset.waitDetails);
@@ -542,15 +632,31 @@ function selectNode(graphId, id) {
   state.transition = null;
   state.graph = graphId;
   state.node = id;
+  state.key = null; state.attempt = null; state.missing = null;
+  writeLocation();
   renderPanel();
 }
 function renderInspector() {
+  if (!state.run) return; // Background reads may finish while this visit's snapshot is loading.
+  const context = JSON.stringify([state.id, state.graph, state.scope, state.node, state.key, state.attempt, "inspector"]);
+  remember($("inspector"), context, renderInspectorBody);
+}
+function renderInspectorBody() {
   const focused = document.activeElement, recoveryField = focused?.dataset?.recoveryField ? focused.id : null;
   const selection = recoveryField && typeof focused.selectionStart === "number" ? [focused.selectionStart, focused.selectionEnd] : null;
   const scroll = $("inspector").scrollTop;
   const aside = $("inspector");
   aside.replaceChildren();
-  const node = selectedGraph().nodes.find((n) => n.id === state.node);
+  const node = selectedGraph()?.nodes.find((n) => n.id === state.node);
+  aside.hidden = !node && !state.missing;
+  $("work-area").setAttribute("data-inspector", String(!aside.hidden));
+  if (aside.hidden) return;
+  const close = button("Закрыть детали ×", () => {
+    navigate({ graph: state.graph, scope: state.scope });
+    (state.tab === "graph" ? $("fit") : $("search")).focus({ preventScroll: true });
+  }, "inspector-close");
+  aside.append(close);
+  if (state.missing) aside.append(el("p", "notice", state.missing));
   if (!node) {
     const hint = el("div", "inspector-placeholder");
     hint.append(
@@ -566,12 +672,14 @@ function renderInspector() {
     return;
   }
   aside.append(
-    el("h2", "", title(node)),
-    el("div", "eyebrow", node.id),
-    el("p", "", names[node.status] ?? node.status),
+    el("h2", "", node.label || node.id),
+    el("p", "definition", `${title(node)} · ${state.key ? "Конкретное выполнение" : "Определение узла"}`),
+    el("p", "muted", state.key ? "Выбрано выполнение из журнала" : `Сводка узла: ${names[node.status] ?? node.status}`),
   );
+  const definition = el("details", "node-definition");
+  definition.append(el("summary", "", "Определение и возможные переходы"));
   if (node.model)
-    aside.append(
+    definition.append(
       el(
         "p",
         "definition",
@@ -579,23 +687,23 @@ function renderInspector() {
       ),
     );
   if (node.kind === "agent")
-    aside.append(
+    definition.append(
       el(
         "p",
         "definition",
-        `Токены: ${node.usage.reported ? number(node.usage.totalTokens) : node.activations.length ? "нет отчёта" : "—"}${node.usage.partial ? " · неполные данные" : ""}`,
+        `Все проходы узла · токены: ${node.usage.reported ? number(node.usage.totalTokens) : node.activations.length ? "нет отчёта" : "—"}${node.usage.partial ? " · неполные данные" : ""}`,
       ),
     );
   if (node.kind === "reuse") {
-    aside.append(el("p", "definition", `Повторное использование: ${node.bindingId ?? "binding"}. Модель не вызывалась.`));
+    definition.append(el("p", "definition", `Повторное использование: ${node.bindingId ?? "binding"}. Модель не вызывалась.`));
     for (const activation of node.activations) {
       const reused = activation.reused;
       if (!reused?.sourceRunId) continue;
-      aside.append(el("p", "", `Источник: попытка ${reused.sourceAttempt} · ${reused.outputDigest ?? ""}`));
-      aside.append(button(`Открыть исходный запуск ${reused.sourceRunId}`, () => selectRun(reused.sourceRunId), "child-button"));
+      definition.append(el("p", "", `Источник: попытка ${reused.sourceAttempt} · ${reused.outputDigest ?? ""}`));
+      definition.append(button(`Открыть исходный запуск ${reused.sourceRunId}`, () => selectRun(reused.sourceRunId), "child-button"));
     }
   }
-  aside.append(
+  definition.append(
     el(
       "p",
       "definition",
@@ -603,30 +711,31 @@ function renderInspector() {
     ),
   );
   if (node.children.length) {
-    if (node.failurePolicy === "collect") aside.append(el("p", "notice", "Сбор результатов с ошибками. Завершение этого узла означает, что результаты собраны; решения детей проверяются отдельно."));
-    aside.append(el("h3", "", "ВЛОЖЕННЫЕ ГРАФЫ"));
-    for (const child of node.children)
-      aside.append(
-        button(
-          `${child.id} → ${child.graphId}`,
-          () => {
-            state.graph = child.graphId;
-            state.scope = "";
-            state.node = null;
-            setTab("graph");
-          },
-          "child-button",
-        ),
-      );
+    if (node.failurePolicy === "collect") definition.append(el("p", "notice", "Сбор результатов с ошибками. Завершение этого узла означает, что результаты собраны; решения детей проверяются отдельно."));
+    definition.append(el("h3", "", "ВЛОЖЕННЫЕ ГРАФЫ"));
+    for (const child of node.children) {
+      const parent = state.key ? node.activations.find(a => a.key === state.key) : null;
+      const scopes = parent && state.attempt === parent.attempt
+        ? [...new Set(childExecutions(allActivations(), { ...parent, node }, child).map(a => a.scope))] : [];
+      for (const scope of scopes) definition.append(button(
+        `Открыть ${child.id} · этот проход · ${scopeLabel(scope)}`,
+        () => navigate({ graph: child.graphId, scope, tab: "graph" }), "child-button"));
+      definition.append(button(
+        `Схема ${child.id} → ${child.graphId} · все вызовы (без выбора выполнения)`,
+        () => navigate({ graph: child.graphId, tab: "graph" }), "child-button"));
+      if (parent && !scopes.length) definition.append(el("p", "muted", state.attempt !== parent.attempt
+        ? "Связь с дочерним вызовом архивной попытки не записана в снимке."
+        : "Для этого прохода дочерний вызов не найден в снимке."));
+    }
   }
   const outgoing = selectedGraph().edges.filter((e) => e.from === node.id);
-  if (node.retryPolicy) aside.append(el("p", "notice", `Повторы по политике: ${node.retryPolicy.codes.join(", ")} · задержка ${number(node.retryPolicy.delayMs)} мс · ${node.retryPolicy.maxAttempts === undefined ? "без лимита попыток" : `всего попыток до ${node.retryPolicy.maxAttempts}`}. Допускаются только подтверждённые not-started / read-only ошибки.`));
-  if (node.retryPolicy?.provider) aside.append(el("p","muted",`Ошибки провайдера: ${node.retryPolicy.provider.statuses ? `только HTTP ${node.retryPolicy.provider.statuses.join(", ")}; без HTTP-статуса повтор не допускается` : "без фильтра HTTP-статусов"}. Retry-After: ${node.retryPolicy.provider.retryAfter === "honor" ? "учитывается как минимальная задержка" : "не изменяет задержку политики"}.`));
+  if (node.retryPolicy) definition.append(el("p", "notice", `Повторы по политике: ${node.retryPolicy.codes.join(", ")} · задержка ${number(node.retryPolicy.delayMs)} мс · ${node.retryPolicy.maxAttempts === undefined ? "без лимита попыток" : `всего попыток до ${node.retryPolicy.maxAttempts}`}. Допускаются только подтверждённые not-started / read-only ошибки.`));
+  if (node.retryPolicy?.provider) definition.append(el("p","muted",`Ошибки провайдера: ${node.retryPolicy.provider.statuses ? `только HTTP ${node.retryPolicy.provider.statuses.join(", ")}; без HTTP-статуса повтор не допускается` : "без фильтра HTTP-статусов"}. Retry-After: ${node.retryPolicy.provider.retryAfter === "honor" ? "учитывается как минимальная задержка" : "не изменяет задержку политики"}.`));
   if (state.transition?.runId === state.id && state.transition.context.graphId === state.graph && state.transition.decision.from === node.id && JSON.stringify(state.transition.context.scope) === state.scope) {
-    aside.append(el("h3", "", "ВЫБРАННЫЙ ПЕРЕХОД"), transitionDetails(state.transition));
+    definition.append(el("h3", "", "ВЫБРАННЫЙ ПЕРЕХОД"), transitionDetails(state.transition));
   }
   if (outgoing.length) {
-    aside.append(el("h3", "", "ДАЛЬШЕ ПО ГРАФУ"));
+    definition.append(el("h3", "", "ДАЛЬШЕ ПО ГРАФУ"));
     for (const edge of outgoing) {
       const details = el("details", "detail-run");
       details.append(
@@ -643,10 +752,12 @@ function renderInspector() {
             : "Резервный переход, если ни одно условие исходящих переходов не выполнено.",
         ),
       );
-      aside.append(details);
+      definition.append(details);
     }
   }
-  aside.append(el("h3", "", "ЗАПУСКИ ЭТОГО УЗЛА"));
+  aside.append(definition);
+  aside.append(el("h3", "", state.key ? "ВЫБРАННОЕ ВЫПОЛНЕНИЕ" : "ВЫПОЛНЕНИЯ ЭТОГО УЗЛА"));
+  if (state.key) aside.append(button("Все проходы этого узла", () => navigate({ graph: state.graph, scope: state.scope, node: state.node }), "child-button"));
   if (!node.activations.length)
     aside.append(
       el(
@@ -655,8 +766,18 @@ function renderInspector() {
         "Узел ещё не запускался. Не все ветки обязательно будут выполнены.",
       ),
     );
-  for (const a of node.activations) {
-    const row = el("div", "detail-run");
+  for (const a of node.activations.filter(a => !state.key || a.key === state.key)) {
+    const row = el("div", "detail-run"); row.dataset.uiKey = a.key;
+    if (!state.key) row.append(button(`Проход ${a.visit ?? "—"} · попытка ${a.attempt}`, () => openActivation({ ...a, node, graphId: state.graph }), "child-button"));
+    else row.append(el("strong", "", `Проход ${a.visit ?? "—"} · попытка ${state.attempt}`));
+    if (state.key && state.attempt !== a.attempt) {
+      row.append(el("p", "muted", "Выбрана архивная попытка. Результат последней попытки сюда не подставляется."));
+      renderAttempts(row, a); aside.append(row); continue;
+    }
+    for (const child of node.children ?? []) {
+      const matches = childExecutions(allActivations(), { ...a, node }, child);
+      for (const scope of new Set(matches.map(item => item.scope))) row.append(button(`Открыть ${child.id} · этот проход`, () => navigate({ graph: child.graphId, scope, tab: "graph" }), "child-button"));
+    }
     row.append(
       badge(a.status),
       el("div", "path", a.path),
@@ -667,10 +788,12 @@ function renderInspector() {
         el(
           "p",
           "",
-          `${number(a.usage.totalTokens)} ток. · вход без кэша ${number(a.usage.input)} · кэш ${a.usage.cacheRead === undefined ? "н/д" : number(a.usage.cacheRead)} · выход ${number(a.usage.output)}${a.usageComplete === false ? " · частично" : ""}`,
+          `Расход выполнения за все попытки (накопленный): ${number(a.usage.totalTokens)} ток. · вход без кэша ${number(a.usage.input)} · кэш ${a.usage.cacheRead === undefined ? "н/д" : number(a.usage.cacheRead)} · выход ${number(a.usage.output)}${a.usageComplete === false ? " · частично" : ""}`,
         ),
       );
     if (a.result) row.append(el("p", "", a.result));
+    else row.append(el("p", "muted", "Краткий результат не записан. Полный сохранённый вывод доступен в попытках."));
+    if (state.key) renderExecutionTransitions(row, a);
     if (a.retry) row.append(retryView(a.retry, a.status === "retrying"));
     if (node.retryPolicy) renderRetries(row,a);
     if (node.failurePolicy === "collect") renderCollection(row, a);
@@ -695,238 +818,6 @@ function renderInspector() {
   }
 }
 const svgNS = "http://www.w3.org/2000/svg";
-function renderRecovery(container, activation) {
-  const id = state.id, identity = JSON.stringify([id, activation.key]);
-  const cached = recoveryInspections.get(identity) ?? {};
-  const inspectState = async () => {
-    recoveryInspections.set(identity, { ...cached, loading: true, error: null }); renderInspector();
-    const current = nextReconciliationRead(identity);
-    const currentInspection = nextInspectionRead(identity);
-    try {
-      const suffix = `id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}`;
-      const [value, records] = await Promise.all([api(`recovery?${suffix}`, undefined, currentInspection), api(`reconciliations?${suffix}`, undefined, () => currentInspection() && current())]);
-      if (!currentInspection()) return;
-      recoveryInspections.set(identity, { value, records: current() ? records : reconciliationRecords.get(identity)?.value ?? cached.records ?? [] });
-      if (current()) reconciliationRecords.set(identity, { value: records, at: Date.now() });
-    } catch (error) { if (currentInspection()) recoveryInspections.set(identity, { ...(recoveryInspections.get(identity) ?? cached), loading: false, error: error.message }); }
-    if (state.id === id) renderInspector();
-  };
-  const inspect = button(cached.loading ? "Сканирование состояния…" : cached.value ? "Обновить инспекцию" : "Проверить состояние для восстановления", inspectState, "child-button");
-  inspect.disabled = !!cached.loading; container.append(inspect);
-  if (cached.error) container.append(el("p", "notice", cached.error));
-  if (!cached.value) return;
-  const value = cached.value, details = el("details");
-  details.append(el("summary", "", `Инспекция · попытка ${value.attempt}`), el("p", "muted", `Данные на ${date(value.observedAt)}. Получение снимка не разрешает повтор или принятие результата.`));
-  if (value.attempt !== activation.attempt) details.append(el("p", "notice", "Началась другая попытка. Обнови инспекцию."));
-  const labels = { "run-not-stopped": "Запуск ещё не остановлен либо уже завершён.", cancelled: "Отменённый запуск нельзя восстановить.", "attempt-not-failed": "Эта попытка не завершилась ошибкой.", "structural-checkpoint": "Выбери конкретную операцию внутри этого узла.", "missing-operation": "Параметры операции не были записаны.", "completed-parent": "Результат уже использован завершённым родителем.", "collected-item": "Результат уже включён в сохранённую коллекцию.", "live-processes": "Процессы запуска ещё работают.", "unresolved-groups": "Нужна проверка оставшихся групп процессов." };
-  for (const blocker of value.blockers) details.append(el("p", "notice", labels[blocker.code] ?? blocker.message));
-  if (value.workspace) {
-    details.append(el("p", "", `Проверено записей: ${number(value.workspace.entries)} · байтов: ${number(value.workspace.bytes)}`), el("pre", "", value.workspace.roots.join("\n")),
-      el("p", "muted", "Проверены выбранные рабочие папки и данные Git. Содержимое целей вложенных ссылок и внешние действия требуют отдельных доказательств."));
-  } else details.append(el("p", "muted", "Файлы не сканировались: сначала нужно устранить препятствия выше."));
-  const raw = el("details"); raw.append(el("summary", "", "Checkpoint, файлы и контракт результата"), el("pre", "", JSON.stringify(value, null, 2)));
-  details.append(raw); container.append(details);
-  if (value.workspace && !value.blockers.length && value.attempt === activation.attempt) renderRecoveryForm(container, activation, cached, inspectState);
-}
-function renderRecoveryForm(container, activation, inspection, inspectState) {
-  const id = state.id, identity = JSON.stringify([id, activation.key, activation.attempt]), snapshot = inspection.value;
-  let draft = recoveryDrafts.get(identity);
-  if (!draft) { draft = { action: "", actor: "", reason: "", evidence: "", output: "", replace: false, request: null, receipt: null, busy: false, error: null }; recoveryDrafts.set(identity, draft); }
-  const card = el("section", "recovery-form"), pending = (inspection.records ?? []).find(record => record.request.action === "retry" && !record.application && !record.supersededBy);
-  card.append(el("h4", "", "Решение о восстановлении"));
-  if (draft.receipt) {
-    card.append(el("p", "notice", "Решение сохранено. После разрешения остальных ошибок запуск можно продолжить отдельной кнопкой «Продолжить»."),
-      button("Подготовить другое решение", async () => { draft.request = null; draft.receipt = null; draft.replace = false; await inspectState(); }, "child-button"));
-    container.append(card); return;
-  }
-  const frozen = !!draft.request || draft.busy;
-  const field = (name, label, tag = "textarea") => {
-    const wrapper = el("label", "", label), input = el(tag);
-    input.id = `recovery-${encodeURIComponent(identity)}-${name}`; input.dataset.recoveryField = "1"; input.setAttribute("aria-label", label);
-    input.value = draft[name]; input.disabled = frozen; if (tag === "textarea") input.rows = name === "output" ? 6 : 3;
-    input.addEventListener("input", () => { draft[name] = input.value; }); wrapper.append(input); card.append(wrapper); return input;
-  };
-  const action = field("action", "Действие", "select");
-  for (const [value, label] of [["", "Выбери действие"], ["accept", "Принять готовый результат"], ["retry", "Разрешить один повтор"]]) {
-    const option = el("option", "", label); option.value = value; action.append(option);
-  }
-  action.value = draft.action; action.addEventListener("change", () => { draft.action = action.value; renderInspector(); });
-  field("actor", "Автор решения", "input"); field("reason", "Причина решения"); field("evidence", "Что проверено: файлы, проверки и внешние действия");
-  if (draft.action === "accept") field("output", "Принятый результат (JSON)");
-  if (pending) {
-    card.append(el("p", "notice", `Есть разрешение повтора от ${pending.request.actor}: ${pending.request.reason}`));
-    const label = el("label", ""), replace = el("input"); replace.type = "checkbox"; replace.checked = draft.replace; replace.disabled = frozen;
-    replace.id = `recovery-${encodeURIComponent(identity)}-replace`; replace.dataset.recoveryField = "1";
-    replace.addEventListener("change", () => { draft.replace = replace.checked; }); label.append(replace, document.createTextNode(" Заменить прежнее неприменённое решение")); card.append(label);
-  }
-  card.append(el("p", "muted", draft.action === "retry" ? "Разрешение действует на одну следующую попытку. Перед допуском файлы проверяются заново." : "Результат должен соответствовать контракту узла. Его принятие сохраняет исходную ошибку и расход в истории."));
-  card.append(el("p", "muted", "Сохранение решения не запускает работу и не снимает паузу."));
-  const submit = button(draft.busy ? "Сохраняем решение…" : draft.request ? "Повторить отправку того же решения" : "Сохранить решение", async () => {
-    if (draft.busy) return;
-    const selection = state.runSelection;
-    draft.error = null;
-    try {
-      if (!draft.request) {
-        if (!["accept", "retry"].includes(draft.action) || !draft.actor.trim() || !draft.reason.trim() || !draft.evidence.trim()) throw new Error("Выбери действие и заполни автора, причину и проверенные основания.");
-        if (pending && !draft.replace) throw new Error("Для замены прежнего разрешения отметь соответствующий пункт.");
-        const output = draft.action === "accept" ? JSON.parse(draft.output) : undefined;
-        draft.request = { id, key: activation.key, attempt: snapshot.attempt, checkpoint: snapshot.checkpoint, workspaceDigest: snapshot.workspace.digest,
-          decisionId: crypto.randomUUID(), action: draft.action, actor: draft.actor.trim(), reason: draft.reason.trim(), evidence: [{ description: draft.evidence.trim() }],
-          ...(draft.action === "accept" ? { output } : {}), ...(pending ? { supersedes: pending.request.decisionId } : {}) };
-      }
-      draft.busy = true; renderInspector();
-      draft.receipt = await api("reconcile", { method: "POST", headers: { "Content-Type": "application/json", "X-Dynamicwf-View": "1" }, body: JSON.stringify(draft.request) });
-      nextReconciliationRead(JSON.stringify([id, activation.key]));
-      nextInspectionRead(JSON.stringify([id, activation.key]));
-      const latest = recoveryInspections.get(JSON.stringify([id, activation.key])) ?? inspection;
-      const records = [...(latest.records ?? []).filter(record => record.request.decisionId !== draft.receipt.request.decisionId).map(record => record.request.decisionId === draft.receipt.request.supersedes ? { ...record, supersededBy: draft.receipt.request.decisionId } : record), draft.receipt];
-      recoveryInspections.set(JSON.stringify([id, activation.key]), { ...latest, loading: false, records });
-      reconciliationRecords.set(JSON.stringify([id, activation.key]), { value: records, at: Date.now(), saved: true });
-      if (state.id === id && state.runSelection === selection) { notice("Решение о восстановлении сохранено. Запуск продолжится по отдельной команде."); await refreshSnapshot(); }
-    } catch (error) { draft.error = error.message; }
-    finally { draft.busy = false; if (state.id === id) renderInspector(); }
-  }, "child-button");
-  submit.id = `recovery-${encodeURIComponent(identity)}-submit`; submit.dataset.recoveryField = "1";
-  submit.disabled = draft.busy || !!inspection.loading; card.append(submit);
-  if (draft.error) { const error = el("p", "notice", draft.error); error.setAttribute("role", "alert"); card.append(error); }
-  if (draft.request && !draft.busy) card.append(el("p", "muted", `ID решения: ${draft.request.decisionId}. Повторная отправка использует те же данные.`),
-    button("Проверить состояние и изменить решение", async () => { draft.request = null; draft.error = null; draft.replace = false; await inspectState(); }, "child-button"));
-  container.append(card);
-}
-function failureView(failure, runScope = false) {
-  const labels = { configuration:"Настройки",resource:"Ресурсы",provider:"Ответ провайдера",output:"Формат результата",process:"Процесс",protocol:"Обмен с worker",cancelled:"Прерывание",interrupted:"Потерян процесс","expression":"Выражение графа","uncertain-effect":"Нужна сверка действий",unknown:"Причина не уточнена" };
-  const phases = { setup:"подготовка",execution:"исполнение",output:"приём результата",routing:"выбор перехода",recovery:"восстановление",cleanup:"завершение процессов" };
-  const effects = { "not-started":"Исполнение задачи не началось.","read-only":"Операция выполнялась только с доступом на чтение.",unknown:"Результат внешних действий не подтверждён. Перед повтором нужна сверка." };
-  const panel=el("div","failure-detail");
-  panel.append(el("strong","",`${labels[failure.code] ?? labels.unknown} · ${phases[failure.phase] ?? "этап неизвестен"}`),el("p","",failure.message),el("p","muted",runScope ? "Это причина остановки. Состояние действий показано в деталях отдельных узлов." : effects[failure.effects] ?? effects.unknown));
-  if (failure.providerResponse) panel.append(el("p","",`HTTP-ответ: ${failure.providerResponse.status}${failure.providerResponse.retryAfterMs===undefined?"":` · Retry-After: ${number(failure.providerResponse.retryAfterMs)} мс`}`));
-  if (failure.diagnostic) {
-    const dispatch = { "not-dispatched": "запрос не отправлялся", "fetch-attempted": "транспорт вызван, получение не подтверждено", "http-observed": "получен HTTP-ответ", unknown: "отправка не установлена" };
-    panel.append(el("p","muted", `${failure.diagnostic.subcode ? `Код: ${failure.diagnostic.subcode}. ` : ""}Отправка: ${dispatch[failure.diagnostic.dispatch] ?? dispatch.unknown}${failure.diagnostic.sentReasoning ? ` · reasoning: ${failure.diagnostic.sentReasoning}` : failure.diagnostic.dispatch === "not-dispatched" ? " · reasoning неизвестен" : ""}`));
-  }
-  return panel;
-}
-function retryView(progress, pending = false) {
-  const historical = progress.status === "scheduled" && !pending;
-  const labels = {scheduled:historical ? "ранее планировалась" : "запланирована",admitted:"допущена",abandoned:"снята без допуска"};
-  const panel = el("div","notice"), when = progress.dueAt !== null && Number.isFinite(new Date(progress.dueAt).getTime()) ? date(progress.dueAt) : `задержка ${number(progress.delayMs)} мс`;
-  panel.append(el("strong","",`Попытка ${progress.nextAttempt}: ${labels[progress.status] ?? progress.status}`),el("p","muted",`После ошибки попытки ${progress.attempt} · ${historical ? "срок исходного решения" : "не раньше"} ${when}`));
-  panel.append(el("p","muted",`Назначенная задержка: ${number(progress.delayMs)} мс.`));
-  if (progress.status === "scheduled") panel.append(el("p","muted",historical ? "Сохранённое решение само по себе не означает, что повтор сейчас ожидается." : "Новая попытка ещё не началась. Для допуска запуск должен работать и срок задержки должен истечь."));
-  return panel;
-}
-function renderRetries(container,activation) {
-  const id=state.id,identity=JSON.stringify([id,activation.key]),page=retryPages.get(identity);
-  const load=button(page.loading?"Загружаем решения…":!page.opened?"Решения о повторах":page.hasMore?"Ещё решения о повторах":"Обновить решения о повторах",async()=>{
-    const pending=retryPages.load(identity,async(_key,cursor)=>{
-      const response=await api(`retries?id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}&after=${cursor}`);
-      return {reports:response.records,nextAfter:response.nextAfter,hasMore:response.hasMore};
-    });renderInspector();await pending;if(state.id===id)renderInspector();
-  },"child-button");load.disabled=page.loading;container.append(load);
-  if(page.error)container.append(el("p","notice",page.error));
-  for(const record of page.reports){const details=el("details");details.append(el("summary","",`Решение: попытка ${record.attempt} → ${record.nextAttempt} · ${date(record.at)}`));for(const cause of record.causes??[record.failure])details.append(failureView(cause));details.append(el("p","muted",`Задержка ${number(record.delayMs)} мс. Фактический допуск и состояние — в истории попыток.`));container.append(details);}
-}
-function renderCollection(container, activation) {
-  if (activation.collectionSummary) container.append(el("p", "notice", `Собрано результатов: ${activation.collectionSummary.total} · успешно ${activation.collectionSummary.succeeded} · ошибок ${activation.collectionSummary.failed}`));
-  const id = state.id, identity = JSON.stringify([id, activation.key]), page = collectionPages.get(identity);
-  const load = button(page.loading ? "Загружаем результаты…" : !page.opened ? "Результаты веток" : page.hasMore ? "Ещё результаты веток" : "Обновить результаты веток", async () => {
-    const pending = collectionPages.loadCollection(identity, (_identity, cursor) => api(`collections?id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}&after=${cursor}`));
-    renderInspector(); await pending; if (state.id === id) renderInspector();
-  }, "child-button");
-  load.disabled = page.loading; container.append(load);
-  if (page.error) container.append(el("p", "notice", page.error));
-  const summary = collectionPages.summaries.get(identity);
-  if (summary) container.append(el("p", "muted", `На момент запроса: собрано ${summary.total} · успешно ${summary.succeeded} · ошибок ${summary.failed}`));
-  for (const record of page.reports) {
-    const details = el("details");
-    details.append(el("summary", "", `${record.itemId} · ${record.result.status === "succeeded" ? "результат получен" : "ошибка ветки"} · попытка родителя ${record.attempt}`));
-    if (record.result.status === "failed") details.append(failureView(record.result.failure));
-    else details.append(el("pre", "", JSON.stringify(record.result.value, null, 2)));
-    container.append(details);
-  }
-}
-function outputRepairView(progress, status) {
-  const labels = { running: status === "running" ? "выполняется" : "завершение не подтверждено", succeeded: "формат принят", invalid: "результат не прошёл проверку", failed: "прерван ошибкой или отменой" };
-  const panel = el("div", "notice");
-  panel.append(el("strong", "", `Исправление формата · раунд ${progress.round}: ${labels[progress.status] ?? progress.status}`));
-  panel.append(el("p", "muted", "Та же сессия; в раунде доступен только submit_result. Принятый формат не подтверждает качество результата."));
-  panel.append(el("p", "muted", progress.status === "running" ? "Итоговые границы расхода раунда не подтверждены. Уже полученные отчёты включены в сумму узла." : progress.throughReport > progress.afterReport ? `Отчёты SDK этого раунда: ${progress.afterReport + 1}–${progress.throughReport}. Расход включён в сумму узла.` : "В завершённых отчётах SDK этого раунда расход не зафиксирован."));
-  return panel;
-}
-function renderAttempts(container, activation) {
-  renderReconciliations(container, activation);
-  const id=state.id, identity=JSON.stringify([id,activation.key]), page=attemptPages.get(identity);
-  const load=button(page.loading ? "Загружаем попытки…" : !page.opened ? `Попытки: ${activation.attempt}` : page.hasMore ? "Ещё попытки" : "Обновить попытки", async()=>{
-    const work=attemptPages.loadAttempts(identity,(_identity,cursor)=>api(`attempts?id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}&after=${cursor}`));
-    renderInspector(); await work; if(state.id===id)renderInspector();
-  },"child-button");
-  load.disabled=page.loading;container.append(load);
-  if(page.error)container.append(el("p","notice",page.error));
-  const snapshot=attemptPages.snapshots.get(identity);
-  if(!snapshot)return;
-  if(snapshot.missingArchived)container.append(el("p","notice",`Не сохранено прежних попыток: ${snapshot.missingArchived}. Старый журнал не содержит их полных записей.`));
-  container.append(el("p","muted","Попытки на момент запроса. Расход ниже относится к каждой попытке отдельно."));
-  for(const record of [...page.reports,snapshot.current]) {
-    const card=el("section","attempt-card");
-    card.append(el("strong","",`Попытка ${record.attempt}${record.attempt===snapshot.current.attempt ? " · последняя" : ""}`),badge(record.status));
-    card.append(el("p","muted",`${date(record.startedAt)} · ${record.finishedAt===null ? "не завершена на момент запроса" : duration(record.finishedAt-record.startedAt)}`));
-    if(record.metadata.reconciliation?.action === "accept") card.append(el("p","notice","Результат принят при восстановлении. Нового вызова модели или команды не было; прежний расход сохранён в исходной попытке."));
-    else if(record.kind==="agent")card.append(el("p","",record.accounting.usage ? `${number(record.accounting.usage.totalTokens)} ток. · ответов ${record.accounting.responses}${record.accounting.complete ? "" : " · частично"}` : "Расход этой попытки неизвестен: нет отчётов SDK."));
-    if(record.metadata.outputRepair)card.append(outputRepairView(record.metadata.outputRepair,record.status));
-    if(record.metadata.retry)card.append(retryView(record.metadata.retry, false));
-    if(record.metadata.failureCauses)for(const cause of record.metadata.failureCauses)card.append(failureView(cause));
-    else if(record.metadata.failure)card.append(failureView(record.metadata.failure));
-    else if(record.error)card.append(el("pre","",record.error));
-    if(Object.hasOwn(record,"output"))card.append(el("pre","",JSON.stringify(record.output,null,2)));
-    if(record.metadata.operation)card.append(operationView(record.metadata.operation));
-    if(Object.keys(record.metadata).length){const details=el("details");details.append(el("summary","","Данные попытки"),el("pre","",JSON.stringify(record.metadata,null,2)));card.append(details);}
-    container.append(card);
-  }
-}
-function renderReconciliations(container, activation) {
-  const id = state.id, identity = JSON.stringify([id, activation.key]), cached = reconciliationRecords.get(identity) ?? {};
-  const load = button(cached.loading ? "Загружаем решения…" : cached.value ? "Обновить решения о восстановлении" : "Решения о восстановлении", async () => {
-    reconciliationRecords.set(identity, { ...cached, loading: true, error: null }); renderInspector();
-    const current = nextReconciliationRead(identity);
-    try {
-      const value = await api(`reconciliations?id=${encodeURIComponent(id)}&key=${encodeURIComponent(activation.key)}`, undefined, current);
-      if (current()) {
-        reconciliationRecords.set(identity, { value, at: Date.now() });
-        const inspection = recoveryInspections.get(identity);
-        if (inspection) recoveryInspections.set(identity, { ...inspection, records: value });
-      }
-    } catch (error) { if (current()) reconciliationRecords.set(identity, { ...cached, error: error.message }); }
-    if (state.id === id) renderInspector();
-  }, "child-button");
-  load.disabled = !!cached.loading; container.append(load);
-  if (cached.error) container.append(el("p", "notice", cached.error));
-  if (!cached.value) return;
-  if (cached.saved) container.append(el("p", "notice", ["interrupted", "paused"].includes(state.run.status) ? "Решение сохранено. После разрешения остальных ошибок нажми «Продолжить»." : "Решение сохранено в истории восстановления."));
-  container.append(el("p", "muted", `Решения на ${date(cached.at)}. ${cached.value.length ? "" : "Сохранённых решений нет."}`));
-  for (const record of cached.value) {
-    const r = record.request, panel = el("details"), status = record.supersededBy ? "заменено" : record.application ? `применено к попытке ${record.application.attempt}` : "ожидает допуска";
-    panel.append(el("summary", "", `${r.action === "accept" ? "Приём результата" : "Разрешение повтора"} · ${status}`),
-      el("p", "", `${r.actor} · ${date(record.createdAt)} · исходная попытка ${r.attempt}`), el("p", "", r.reason),
-      el("p", "muted", "Основания заявил автор решения. Они не являются автоматическим подтверждением всех внешних действий."),
-      el("pre", "", JSON.stringify(record, null, 2)));
-    container.append(panel);
-  }
-}
-function operationView(operation) {
-  const details=el("details");details.append(el("summary","","Операция этой попытки"),el("p","muted","Записанные параметры и этапы операции. Они не подтверждают завершение внешних действий."));
-  const field=(label,value)=>{if(value!==undefined)details.append(el("strong","",label),el("pre","",typeof value==="string"?value:JSON.stringify(value,null,2)));};
-  field("Рабочая папка",operation.cwd??operation.source??operation.target);
-  if(operation.kind==="agent") {
-    field("Каталог сессий из запроса",operation.sessionDirectory);field("Каталог ресурсов из запроса",operation.resourceDirectory);field("Продолжение сессии",operation.continuedSessionFile);
-    const input=el("details");input.append(el("summary","","Задание и вход агента"),el("pre","",operation.task),el("pre","",JSON.stringify(operation.input,null,2)));details.append(input);
-  } else if(operation.kind==="check") {field("Команда",operation.command);field("Аргументы",operation.args);}
-  else if(operation.kind==="worktree") {field("Базовая ревизия из запроса",operation.base);field("Дочерняя область",operation.childScope);if(Object.hasOwn(operation,"childResult"))field("Результат детей перед commit",operation.childResult);}
-  else if(operation.kind==="integrate") {
-    field("Источники интеграции",operation.sources);
-    if(operation.progress){const progress=operation.progress;field("Последний записанный этап",{ready:"До начала слияний",merging:"Перед запуском merge",between:"После одного из слияний",complete:"После всех слияний"}[progress.phase]??progress.phase);field("Целевая ветка",progress.branch);field("Исходный HEAD",progress.originalHead);field("Записанные завершённые слияния",progress.merged);field("Допущенный merge",progress.current);field("Прочитанный итоговый HEAD",progress.head);}
-  }
-  return details;
-}
 function svgEl(tag, attrs = {}, text) {
   const node = document.createElementNS(svgNS, tag);
   for (const [key, value] of Object.entries(attrs))
@@ -937,7 +828,7 @@ function svgEl(tag, attrs = {}, text) {
 const shorten = (s, n) => (s.length > n ? s.slice(0, n - 1) + "…" : s);
 let layout, camera;
 function cameraKey() {
-  return `${state.id}/${state.graph}`;
+  return JSON.stringify([state.id, state.graph, state.scope]);
 }
 function applyCamera() {
   if (camera)
@@ -953,6 +844,7 @@ function fit() {
   const width = Math.max(layout.width, layout.height * ratio),
     height = width / ratio;
   camera = {
+    viewportWidth: box.width,
     x: (layout.width - width) / 2,
     y: (layout.height - height) / 2,
     width,
@@ -967,6 +859,7 @@ function zoom(factor) {
   if (!Number.isFinite(width) || width <= 0) return;
   const height = (width / camera.width) * camera.height;
   camera = {
+    ...camera,
     x: camera.x + (camera.width - width) / 2,
     y: camera.y + (camera.height - height) / 2,
     width,
@@ -988,11 +881,22 @@ function revealGraphNode(pos) {
 }
 function renderGraph() {
   const graph = selectedGraph();
+  const select = $("graph-select");
+  if (!graph) {
+    select.replaceChildren(...state.run.graphs.map(g => { const option = el("option", "", g.id); option.value = g.id; return option; }));
+    const missing = el("option", "", `Недоступный граф: ${state.graph}`);
+    missing.value = state.graph; select.prepend(missing); select.value = state.graph;
+    $("scope-select").hidden = true;
+    $("graph").replaceChildren(); layout = null; camera = null;
+    $("graph-context").textContent = state.missing ?? "Выбранный граф отсутствует в плане.";
+    return;
+  }
+  $("graph-context").textContent = state.key && state.attempt !== allActivations().find(a => a.key === state.key)?.attempt
+    ? "Выбрана архивная попытка. Схема показывает последнее состояние узлов, не результат архивной попытки."
+    : "Схема показывает последнее состояние узлов; конкретные попытки доступны в дереве и последовательности.";
   const graphIdentity = JSON.stringify([state.id, state.runSelection, graph.id, state.scope]);
   const focusedNode = document.activeElement?.dataset?.graphIdentity === graphIdentity ? document.activeElement.dataset.nodeId : null;
   let restoreFocus = null;
-  state.graph = graph.id;
-  const select = $("graph-select");
   select.replaceChildren(
     ...state.run.graphs.map((g) => {
       const option = el(
@@ -1086,7 +990,7 @@ function renderGraph() {
         tabindex: 0,
         role: "button",
         "aria-pressed": String(selected),
-        "aria-label": `${title(node)}: ${node.id}, ${names[node.status] ?? node.status}`,
+        "aria-label": `${title(node)}: ${node.id}, последнее состояние узла: ${names[node.status] ?? node.status}`,
       });
     g.dataset.graphIdentity = graphIdentity; g.dataset.nodeId = node.id;
     if (focusedNode === node.id) restoreFocus = g;
@@ -1147,13 +1051,16 @@ function renderGraph() {
   camera = state.cameras.get(cameraKey());
   if (!camera) {
     const box = svg.getBoundingClientRect();
-    const width = (box.width || 700) / 0.9,
-      height = (box.height || 500) / 0.9;
+    // Fit small diagrams on entry; keep large ones readable and navigable.
+    const scale = Math.max(0.55, Math.min(0.9, (box.width || 700) / layout.width, (box.height || 500) / layout.height));
+    const width = (box.width || 700) / scale,
+      height = (box.height || 500) / scale;
     const active = graph.nodes.find((n) => n.status === "running");
     const pos = active ? layout.positions.get(active.id) : null;
     camera = {
+      viewportWidth: box.width,
       x: (layout.width - width) / 2,
-      y: pos ? Math.max(0, pos.y - height / 3) : 0,
+      y: pos ? Math.max(0, pos.y - height / 3) : Math.min(0, (layout.height - height) / 2),
       width,
       height,
     };
@@ -1189,6 +1096,9 @@ function taskRow(a) {
         ? "Токены: н/д"
         : "",
   );
+  row.dataset.uiKey = JSON.stringify([a.runId ?? state.id, a.key, a.attempt]);
+  row.setAttribute("data-selected", String(state.key === a.key && state.attempt === a.attempt && (!a.runId || a.runId === state.id)));
+  body.append(el("small", "execution-identity", `Проход ${a.visit ?? "—"} · последняя попытка ${a.attempt}${state.key === a.key && state.attempt !== a.attempt ? " · выбрана архивная попытка " + state.attempt : ""}`));
   right.append(clock(el("small"), a.startedAt, a.finishedAt));
   row.append(badge(a.status), body, right);
   return row;
@@ -1218,6 +1128,7 @@ function renderNow() {
     let draft = waitDrafts.get(wait.id);
     if (!draft) { draft = { text: "", busy: false, error: null }; waitDrafts.set(wait.id, draft); }
     const card = el("section", "wait-card"), selectedRun = state.id;
+    card.dataset.uiKey = JSON.stringify([state.id, wait.id]);
     card.append(el("h3", "", wait.reason));
     const activation = byKey.get(wait.key);
     card.append(el("p", "muted", activation?.path ?? `Активация: ${wait.key}`), el("p", "muted", `Ожидание: ${wait.id}`));
@@ -1249,10 +1160,12 @@ function renderNow() {
       draft.busy = true; draft.error = null; submit.disabled = true;
       try {
         const response = JSON.parse(draft.text);
-        await api("resolve", { method: "POST", headers: { "Content-Type": "application/json", "X-Dynamicwf-View": "1" }, body: JSON.stringify({ id: selectedRun, waitId: wait.id, response }) }, current);
+        // Decode the original POST even after navigation: a stale 400 belongs to
+        // this draft, while api's captured visit still forbids a stale 401 reload.
+        await api("resolve", { method: "POST", headers: { "Content-Type": "application/json", "X-Dynamicwf-View": "1" }, body: JSON.stringify({ id: selectedRun, waitId: wait.id, response }) });
         if (current()) await refreshSnapshot();
       } catch (error) { draft.error = error.message; }
-      finally { draft.busy = false; if (state.id === selectedRun && state.tab === "now") renderPanel(); }
+      finally { draft.busy = false; if (showingWait(selectedRun, wait.id)) renderPanel(); }
     }, "child-button");
     submit.id = `wait-submit-${wait.id}`; submit.dataset.waitControl = "1";
     submit.disabled = draft.busy;
@@ -1306,7 +1219,7 @@ function renderNow() {
   );
 }
 function renderHistory() {
-  const panel = $("content-panel");
+  const panel = $("content-panel"), id = state.id, visit = state.runSelection;
   panel.replaceChildren();
   const heading = sectionHeading("История выполнения"),
     filter = el("select");
@@ -1322,8 +1235,9 @@ function renderHistory() {
   }
   filter.value = state.filter;
   filter.addEventListener("change", () => {
+    if (state.id !== id || state.runSelection !== visit || !state.run || state.tab !== "history") return;
     state.filter = filter.value;
-    renderHistory();
+    renderPanel();
   });
   heading.append(filter);
   panel.append(
@@ -1331,30 +1245,84 @@ function renderHistory() {
     el(
       "p",
       "muted",
-      "Новые результаты сверху. Проход — повтор узла, попытка — восстановление того же прохода.",
+      "От начала к результату. Каждая строка — отдельный проход; попытки доступны в деталях. Параллельные работы могут пересекаться по времени.",
     ),
   );
   const records = allActivations()
-    .filter((a) => a.status !== "running" && (!structural.has(a.node.kind) || a.collectionSummary))
-    .sort((a, b) => (b.finishedAt ?? 0) - (a.finishedAt ?? 0))
+    .sort(executionSequence)
     .filter(
       (a) =>
         state.filter === "all" ||
         (state.filter === "agent" && a.node.kind === "agent") ||
         (state.filter === "issues" &&
           (a.error ||
+            (a.findings?.length ?? 0) > 0 ||
             Number(a.collectionSummary?.failed) > 0 ||
             /request_changes|rejected|inconclusive|exit [1-9]|не принят/.test(
               a.result ?? "",
             ))),
     );
-  for (const a of records) panel.append(taskRow(a));
+  panel.append(traceLoader());
+  const decisions = tracePages.get(state.id).reports;
+  for (const a of records.slice(0, state.historyLimit)) {
+    const row = taskRow(a);
+    row.append(el("time", "event-time", date(a.startedAt)));
+    const transition = decisions.find(t => t.key === a.key && t.attempt === a.attempt);
+    if (transition) row.append(transitionCard(transition));
+    panel.append(row);
+  }
+  if (records.length > state.historyLimit) panel.append(button(`Показать ещё · осталось ${records.length-state.historyLimit}`, () => { state.historyLimit += 100; renderPanel(); }, "child-button"));
   if (!records.length)
     panel.append(el("p", "muted", "Таких результатов пока нет."));
 }
+function renderActivityStrip() {
+  const panel = $("activity-strip");
+  remember(panel, JSON.stringify([state.id, state.graph, state.scope, "activity"]), () => {
+    const heading = sectionHeading("Выполнения в этом графе");
+    heading.append(button("Вся последовательность →", () => setTab("history")));
+    panel.replaceChildren(heading);
+    const records = allActivations().filter(a => a.graphId === state.graph && (!state.scope || a.scope === state.scope)).sort((a,b) => executionSequence(b,a));
+    for (const a of records.slice(0, 20)) panel.append(taskRow(a));
+    if (records.length > 20) panel.append(el("p", "muted", `Последние 20 из ${records.length}. Все проходы доступны в последовательности.`));
+    if (!records.length) panel.append(el("p", "muted", "Вызовы ещё не записаны. Граф выше показывает план."));
+  });
+}
+function traceLoader() {
+  const page = tracePages.get(state.id), id = state.id, row = el("div", "trace-loader");
+  if (!state.run.trace?.supported) { row.append(el("p", "muted", "Причины переходов не записывались в этом плане.")); return row; }
+  row.append(el("small", "muted", `Причины переходов: загружено ${page.reports.length} из ${state.run.trace.count}. Выбор пути не доказывает запуск следующего узла.`));
+  const load = button(page.loading ? "Загрузка…" : page.hasMore ? "Ещё причины переходов" : page.opened ? "Обновить причины переходов" : "Загрузить причины переходов", async () => {
+    const pending = tracePages.load(id, async (runId, cursor) => { const data = await api(`trace?id=${encodeURIComponent(runId)}&after=${cursor}`); return { ...data, reports: data.records }; });
+    load.disabled = true; await pending; if (showingTrace(id)) renderPanel();
+  }, "child-button");
+  load.dataset.uiKey = "trace-load";
+  load.disabled = page.loading; row.append(load);
+  if (page.error) row.append(el("p", "notice", page.error));
+  return row;
+}
+function transitionCard(record) {
+  const details = el("details", "transition-event"); details.dataset.uiKey = `transition:${record.seq}`;
+  const reason = { condition: "по записанному условию", fallback: "запасной переход", "no-match": "подходящий переход не найден", error: "ошибка условия" }[record.decision.reason];
+  details.append(el("summary", "", `→ ${record.decision.to ?? "Ошибка маршрутизации"} · ${reason}`), transitionDetails(record));
+  const target = transitionTarget(record, allActivations());
+  if (target) details.append(button(`Открыть следующий проход: ${target.node.id} · ${target.visit}`, () => openActivation(target), "child-button"));
+  else details.append(el("p", "muted", "Следующее выполнение не найдено в снимке. Решение само по себе не означает его допуск."));
+  return details;
+}
+function renderExecutionTransitions(row, activation) {
+  const records = tracePages.get(state.id).reports.filter(t => t.key === activation.key && t.attempt === (state.attempt ?? activation.attempt));
+  row.append(traceLoader());
+  for (const record of records) row.append(transitionCard(record));
+}
 function transitionDetails(record) {
   const block = el("div", "transition-details"), decision = record.decision;
-  block.append(el("p", "", decision.error ?? (decision.reason === "condition" ? "Выбрано первое выполненное условие." : "Условия не выбрали путь; использован запасной переход.")));
+  const explanations = {
+    condition: "Выбрано первое выполненное условие.",
+    fallback: "Условия не выбрали путь; использован запасной переход.",
+    "no-match": "Ни одно условие не выбрало путь; запасной переход отсутствует.",
+    error: "Проверка условия завершилась ошибкой; переход не выбран.",
+  };
+  block.append(el("p", "", decision.error ?? explanations[decision.reason] ?? "Причина перехода неизвестна."));
   for (const evaluation of decision.evaluations) {
     const details = el("details");
     details.append(el("summary", "", `Ребро #${evaluation.edgeIndex + 1} → ${evaluation.to}: ${routingLabels[evaluation.result]}`));
@@ -1365,22 +1333,25 @@ function transitionDetails(record) {
   return block;
 }
 function renderTrace() {
-  const panel = $("content-panel"), id = state.id, summary = state.run.trace, page = tracePages.get(id);
+  const panel = $("content-panel"), id = state.id, visit = state.runSelection, summary = state.run.trace, page = tracePages.get(id);
+  // Start the automatic tail read without a nested renderPanel: the outer remember()
+  // must restore its captured disclosures/focus before any asynchronous redraw.
+  const automatic = summary.supported && !page.loading && !page.error && (!page.opened || !page.hasMore && summary.lastSeq > page.cursor);
+  if (automatic) void load(true);
   panel.replaceChildren(sectionHeading("Фактические переходы"));
   if (!summary.supported) {
     panel.append(el("p", "muted", "Этот план создан до записи трассы. Исторические переходы неизвестны; цвет узлов их не доказывает.")); return;
   }
   panel.append(el("p", "muted", `Записано решений: ${summary.count} · ошибок маршрутизации: ${summary.failed}. Выбор ребра не означает, что следующий узел уже запущен.`));
-  const load = async () => {
+  async function load(automatic = false) {
     const request = tracePages.load(id, async (runId, cursor) => {
       const data = await api(`trace?id=${encodeURIComponent(runId)}&after=${cursor}`);
       return { ...data, reports: data.records };
     });
-    if (state.id === id && state.tab === "trace") renderTrace();
+    if (!automatic && state.id === id && state.runSelection === visit && state.tab === "trace") renderPanel();
     await request;
-    if (state.id === id && state.tab === "trace") renderTrace();
-  };
-  if (!page.loading && !page.error && (!page.opened || !page.hasMore && summary.lastSeq > page.cursor)) { void load(); return; }
+    if (showingTrace(id)) renderPanel();
+  }
   if (page.loading) panel.append(el("p", "muted", "Загружаем переходы…"));
   if (page.error) panel.append(el("p", "notice", page.error));
   for (const record of page.reports) {
@@ -1389,9 +1360,9 @@ function renderTrace() {
       el("p", "muted", `${record.context.graphId} · проход ${record.context.visit + 1} · попытка ${record.attempt} · ${date(record.at)}`),
       el("div", "path", JSON.stringify(record.context.scope)), transitionDetails(record),
       button("Показать источник на графе", () => {
-        state.graph = record.context.graphId; state.scope = JSON.stringify(record.context.scope); state.node = record.decision.from; state.transition = record;
-        setTab("graph");
-        const pos = layout.positions.get(record.decision.from);
+        navigate({ graph: record.context.graphId, scope: JSON.stringify(record.context.scope), node: record.decision.from,
+          key: record.key ?? null, attempt: record.key ? record.attempt : null, transition: record, tab: "graph" });
+        const pos = layout?.positions.get(record.decision.from);
         if (pos && camera) { camera.x = pos.x + pos.width / 2 - camera.width / 2; camera.y = pos.y + pos.height / 2 - camera.height / 2; applyCamera(); }
       }, "child-button"));
     panel.append(card);
@@ -1407,16 +1378,17 @@ function renderTokens() {
   const u = taskMode ? taskUsage.summary : state.run.usage;
   panel.replaceChildren(sectionHeading("Расход токенов"));
   if (taskId) {
-    const selectedRun = state.id;
+    const selectedRun = state.id, visit = state.runSelection;
+    const current = () => state.id === selectedRun && state.runSelection === visit && Boolean(state.run);
     const toggle = el("div", "usage-scope");
     toggle.append(
-      button("Этот запуск", () => { state.usageScope = "run"; renderTokens(); }, state.usageScope === "run" ? "child-button selected" : "child-button"),
+      button("Этот запуск", () => { if (!current()) return; state.usageScope = "run"; renderPanel(); }, state.usageScope === "run" ? "child-button selected" : "child-button"),
       button("Вся задача", async () => {
+        if (!current()) return;
         state.usageScope = "task";
-        const id = state.run.lineage?.taskId;
-        const pending = id ? loadTaskScope(id) : Promise.resolve(false);
-        renderTokens(); await pending;
-        if (state.id === selectedRun && state.tab === "tokens") renderTokens();
+        const pending = loadTaskScope(taskId);
+        renderPanel(); await pending;
+        if (current() && state.tab === "tokens") renderPanel();
       }, state.usageScope === "task" ? "child-button selected" : "child-button"),
     );
     panel.append(toggle);
@@ -1488,7 +1460,7 @@ function renderTokens() {
     load.disabled = true;
     load.textContent = "Загрузка…";
     await pending;
-    if (state.id === selectedRun && state.tab === "tokens" && (!taskMode || (state.usageScope === "task" && state.run?.lineage?.taskId === taskUsage.taskId))) renderTokens();
+    if (showingUsage(selectedRun, pageKey)) renderPanel();
   }, "child-button");
   load.disabled = page.loading;
   panel.append(load, ledger);
@@ -1542,7 +1514,17 @@ async function refreshSnapshot() {
     if (!current()) return;
     state.snapshotAt = Date.now();
     state.run = run;
+    if (state.pendingTaskReconcile?.selection === state.runSelection) {
+      reconcileTaskScopeAfterSnapshot(state, state.pendingTaskReconcile.previousTaskId);
+      state.pendingTaskReconcile = null;
+    }
     state.graph ??= run.entryGraph;
+    Object.assign(state, resolveLocation(run, state));
+    const pending = state.pendingActivation;
+    if (pending && pending.id === id && pending.selection === state.runSelection && pending.intent === state.navigationRevision) {
+      state.pendingActivation = null;
+      writeLocation();
+    }
     const signature = JSON.stringify({
       ...run,
       presentation: { ...run.presentation, liveness: { ...run.presentation.liveness, observedAt: null } },
@@ -1557,7 +1539,7 @@ async function refreshSnapshot() {
     if (state.usageScope === "task" && run.lineage?.taskId) {
       const taskId = run.lineage.taskId;
       void loadTaskScope(taskId).then((applied) => {
-        if (applied && state.id === id && state.usageScope === "task" && state.run?.lineage?.taskId === taskId && state.tab === "tokens") renderTokens();
+        if (applied && state.id === id && state.usageScope === "task" && state.run?.lineage?.taskId === taskId && state.tab === "tokens") renderPanel();
       });
     }
     notice(state.controlError ?? (run.failure ? null : run.error));
@@ -1637,16 +1619,10 @@ $("search").addEventListener("input", renderRuns);
 for (const b of document.querySelectorAll("[data-tab]"))
   b.addEventListener("click", () => setTab(b.dataset.tab));
 $("graph-select").addEventListener("change", () => {
-  state.transition = null;
-  state.graph = $("graph-select").value;
-  state.scope = "";
-  state.node = null;
-  renderPanel();
+  navigate({ graph: $("graph-select").value, tab: state.tab });
 });
 $("scope-select").addEventListener("change", () => {
-  state.transition = null;
-  state.scope = $("scope-select").value;
-  renderPanel();
+  navigate({ graph: state.graph, scope: $("scope-select").value, node: state.node, tab: state.tab });
 });
 $("fit").addEventListener("click", fit);
 $("zoom-in").addEventListener("click", () => zoom(0.8));
@@ -1698,23 +1674,44 @@ $("graph").addEventListener(
   },
   { passive: false },
 );
+$("graph").setAttribute("tabindex", "0");
+$("graph").addEventListener("keydown", e => {
+  if (e.target !== $("graph") || !camera) return;
+  if (["+", "=", "-", "Home"].includes(e.key)) {
+    e.preventDefault();
+    if (e.key === "Home") fit(); else zoom(e.key === "-" ? 1.2 : 0.8);
+    return;
+  }
+  if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
+  e.preventDefault();
+  camera = { ...camera, x: camera.x + (e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0) * camera.width / 8,
+    y: camera.y + (e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0) * camera.height / 8 };
+  state.cameras.set(cameraKey(), camera); applyCamera();
+});
 new ResizeObserver(() => {
   if (state.tab === "graph" && camera) {
     const box = $("graph").getBoundingClientRect();
     if (box.width && box.height) {
+      const center = camera.x + camera.width / 2;
+      camera.width *= box.width / (camera.viewportWidth || box.width);
+      camera.x = center - camera.width / 2;
       camera.height = (camera.width * box.height) / box.width;
+      camera.viewportWidth = box.width;
+      state.cameras.set(cameraKey(), camera);
+      const selected = layout?.positions.get(state.node);
+      if (selected) revealGraphNode(selected);
       applyCamera();
     }
   }
 }).observe($("graph"));
 window.addEventListener("popstate", () => {
-  const id = new URL(window.location.href).searchParams.get("run");
-  if (id) void selectRun(id, "none");
-  else {
-    closeCancelDialog();
-    beginRunSelection(state, null);
-    void refreshRuns();
-  }
+  state.navigationRevision++;
+  state.pendingActivation = null;
+  const route = readLocation(window.location.href);
+  closeCancelDialog();
+  if (route.id && route.id === state.id && state.run) { Object.assign(state, resolveLocation(state.run, route), { transition: null }); renderPanel(); }
+  else if (route.id) void selectRun(route.id, "pop");
+  else { beginRunSelection(state, null); state.pendingTaskReconcile = null; hideNavigation(); void refreshRuns(); }
 });
 await refreshRuns();
 let tick = 0;

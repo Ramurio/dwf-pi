@@ -32,11 +32,27 @@ npm test
 | SDK и провайдеры | `pi-worker`, `native-xai`, `image-boundary`, `capabilities`, `provider-response` |
 | Восстановление и Git | `recovery-inspection`, `reconciliation`, `continuation`, `allocation-recovery`, `git-recovery-crash`, `workspaces` |
 | Расход и попытки | `usage-pages`, `usage-boundary`, `usage-contract`, `attempt-history`, `task-usage`, `retry-policy-contract` |
-| Интерфейсы | `dashboard`, `graph-view`, `graph-view-task-scope`, `graph-transition-scope`, `graph-node-accessibility`, `active-work-index`, `monitor`, `terminal`, `terminal-retries` |
+| Интерфейсы | `dashboard`, `graph-view`, `graph-view-task-scope`, `graph-transition-scope`, `graph-node-accessibility`, `graph-workspace`, `graph-view-observation`, `active-work-index`, `monitor`, `terminal`, `terminal-retries` |
 
 В таблице указаны основы имён файлов; запускайте нужные файлы через
 `node --import tsx --test tests/<name>.test.ts`. Полный набор нужен после изменений
 общих контрактов/процессов; для текста достаточно проверить ссылки и команды.
+
+### Устройство браузерного frontend
+
+Панель остаётся на JS/DOM/SVG без сборки и внешних ресурсов. `execution-data.js`
+индексирует публичный снимок, `navigation.js` отвечает за URL и идентичность,
+`view-state.js` — за раскрытие/фокус/прокрутку, `workspace.js` — за дерево/крошки,
+`execution-details.js` — за попытки и формы восстановления. `app.js` связывает загрузку,
+управление и представления; `layout.js` размещает SVG. Серверный `execution-order.ts`
+проецирует только номера событий, не приватное содержимое. Новые браузерные модули
+нужно добавлять в allowlist сервера и изолированные HTTP fixtures тестов.
+
+React и библиотеки эффектов не требуются для навигации и наблюдения. Анимация не
+подменяет реальное состояние; поддерживается `prefers-reduced-motion`. Проверяйте
+изменённый сервер после перезапуска: уже запущенный процесс держит прежние ресурсы.
+Для управляющих сценариев используйте временную БД (`tests/helpers/workspace-fixture.ts`),
+а не пользовательские запуски. Скриншоты и отчёты отдельных проверок остаются в `scratch/`.
 
 <a id="локальный-sdk-patch"></a>
 ## Локальное исправление SDK
