@@ -123,6 +123,7 @@ function navigate(target) {
   writeLocation(); renderPanel();
 }
 function hideNavigation() {
+  setGraphExpanded(false);
   for (const name of ["outline", "breadcrumbs", "selection-context"]) $(name).hidden = true;
 }
 let navigationRender = 0;
@@ -136,6 +137,9 @@ function renderNavigation() {
       renderWorkspace({ state, el, button, title, names, memory, document, graphForScope: selectedGraph,
         navigate: target => { if (current()) navigate(target); },
         openActivation: activation => { if (current()) void openActivation(activation); } })));
+  // The breadcrumb already identifies an unselected diagram. Keep the extra row
+  // for an execution, an archived attempt, or an unavailable navigation target.
+  $("selection-context").hidden = state.tab === "graph" && !state.node && !state.key && !state.missing;
 }
 const number = (value) => new Intl.NumberFormat("ru-RU").format(value);
 const duration = (ms) => {
@@ -465,13 +469,18 @@ function renderHeader() {
 function renderSummary() {
   const r = state.run, panel = $("run-summary");
   panel.className = `run-summary ${r.status}`;
+  // Terminal outcomes already have a badge above and their full reason/evidence
+  // in run details. Reserve the banner for a next action or a failure.
+  panel.hidden = finished.has(r.status) && !r.failure && !r.lineage?.successorRunId;
   $("task-context").textContent = r.lineage?.taskId ? `ЗАДАЧА ${r.lineage.taskId.slice(-8)} · ${r.lineage.parentRunId ? "ПРОДОЛЖЕНИЕ" : "ЗАПУСК"} ${r.id.slice(-8)}` : `ЗАПУСК ${r.id.slice(-8)} · БЕЗ СВЯЗАННОЙ ЗАДАЧИ`;
   panel.replaceChildren();
   const text = el("div", "summary-copy");
   const waits = (r.waits ?? []).filter(w => w.status === "open");
   const active = allActivations().filter(a => r.activeKeys?.includes(a.key));
   const heading = r.failure ? "Требуется разбор сбоя" : waits.length && !waitResponseBlocker(r) ? `Нужен ответ · ${waits.length}` : r.presentation.outcomeLabel ?? r.presentation.statusLabel;
-  text.append(el("strong", "", heading), el("p", "", r.failure?.message ?? r.taskOutcome?.reason ?? (waits.length && !waitResponseBlocker(r) ? waits.map(w => w.reason).join(" · ") : r.status === "paused" ? "Работа приостановлена. Для следующего шага нажмите «Продолжить»." : active.length ? active.map(a => `${title(a.node)} · ${a.node.id}`).join(" · ") : r.presentation.liveness.label)));
+  const description = r.failure?.message ?? r.taskOutcome?.reason ?? (waits.length && !waitResponseBlocker(r) ? waits.map(w => w.reason).join(" · ") : r.status === "paused" ? "Работа приостановлена. Для следующего шага нажмите «Продолжить»." : active.length ? active.map(a => `${title(a.node)} · ${a.node.id}`).join(" · ") : r.presentation.liveness.label);
+  const detail = el("p", "", description); detail.title = description;
+  text.append(el("strong", "", heading), detail);
   panel.append(text);
   if (waits.length && !waitResponseBlocker(r)) panel.append(button("Ответить", () => setTab("now"), "primary"));
   else if (r.failure) panel.append(button("Разобрать сбой", () => { $("run-details").open = true; setTab("now"); }, "primary"));
@@ -484,6 +493,7 @@ function renderHeaderBody() {
   $("workspace").hidden = false;
   $("empty").hidden = true;
   $("run-name").textContent = r.name;
+  $("run-name").title = r.name;
   $("run-id").textContent = r.id;
   $("cwd").textContent = r.cwd;
   $("cwd").title = r.cwd;
@@ -590,6 +600,7 @@ function setTab(tab) {
 }
 function renderPanel() {
   if (!state.run) return; // A background completion cannot draw an unloaded visit.
+  if (state.tab !== "graph") setGraphExpanded(false);
   const context = JSON.stringify([state.id, state.tab, state.graph, state.scope, state.node, state.key, state.attempt]);
   remember($("content-panel"), context, renderPanelBody);
   renderNavigation();
@@ -831,11 +842,14 @@ function cameraKey() {
   return JSON.stringify([state.id, state.graph, state.scope]);
 }
 function applyCamera() {
-  if (camera)
+  if (camera) {
     $("graph").setAttribute(
       "viewBox",
       `${camera.x} ${camera.y} ${camera.width} ${camera.height}`,
     );
+    const width = $("graph").getBoundingClientRect().width;
+    $("actual-size").textContent = `${Math.round((width || camera.viewportWidth) / camera.width * 100)}%`;
+  }
 }
 function fit() {
   if (!layout) return;
@@ -844,11 +858,37 @@ function fit() {
   const width = Math.max(layout.width, layout.height * ratio),
     height = width / ratio;
   camera = {
+    mode: "fit",
     viewportWidth: box.width,
     x: (layout.width - width) / 2,
     y: (layout.height - height) / 2,
     width,
     height,
+  };
+  state.cameras.set(cameraKey(), camera);
+  applyCamera();
+}
+function readableCamera() {
+  if (!layout) return;
+  const box = $("graph").getBoundingClientRect();
+  const width = box.width || 700, height = box.height || 500;
+  const graph = selectedGraph();
+  const target = state.node ?? graph?.nodes.find(n => n.status === "running")?.id;
+  const pos = layout.positions.get(target);
+  // Layout reserves routing space after its last row. Center the visible content
+  // of a short graph, so that unused trailing space cannot push its last node out.
+  const extents = [...layout.positions.values()].flatMap(p => [p.y, p.y + p.height]);
+  for (const edge of layout.edges) {
+    extents.push(...edge.points.map(p => p.y));
+    if (edge.label) extents.push(edge.labelBox.y, edge.labelBox.y + edge.labelBox.height);
+  }
+  const top = Math.min(0, ...extents), bottom = Math.max(0, ...extents);
+  const contentTop = extents.length ? Math.min(...extents) : top;
+  camera = {
+    mode: "read", viewportWidth: box.width,
+    x: pos && layout.width > width ? pos.x + pos.width / 2 - width / 2 : (layout.width - width) / 2,
+    y: bottom - contentTop + 48 <= height ? (contentTop + bottom - height) / 2 : pos ? Math.max(0, pos.y - height / 3) : top,
+    width, height,
   };
   state.cameras.set(cameraKey(), camera);
   applyCamera();
@@ -860,6 +900,7 @@ function zoom(factor) {
   const height = (width / camera.width) * camera.height;
   camera = {
     ...camera,
+    mode: "manual",
     x: camera.x + (camera.width - width) / 2,
     y: camera.y + (camera.height - height) / 2,
     width,
@@ -876,7 +917,7 @@ function revealGraphNode(pos) {
   const y = pos.height + 2 * pad > camera.height ? pos.y - pad
     : Math.min(Math.max(camera.y, pos.y + pos.height + pad - camera.height), pos.y - pad);
   if (x !== camera.x || y !== camera.y) {
-    camera = { ...camera, x, y }; state.cameras.set(cameraKey(), camera); applyCamera();
+    camera = { ...camera, mode: "manual", x, y }; state.cameras.set(cameraKey(), camera); applyCamera();
   }
 }
 function renderGraph() {
@@ -893,7 +934,7 @@ function renderGraph() {
   }
   $("graph-context").textContent = state.key && state.attempt !== allActivations().find(a => a.key === state.key)?.attempt
     ? "Выбрана архивная попытка. Схема показывает последнее состояние узлов, не результат архивной попытки."
-    : "Схема показывает последнее состояние узлов; конкретные попытки доступны в дереве и последовательности.";
+    : "Последнее состояние узлов · попытки — в дереве и последовательности";
   const graphIdentity = JSON.stringify([state.id, state.runSelection, graph.id, state.scope]);
   const focusedNode = document.activeElement?.dataset?.graphIdentity === graphIdentity ? document.activeElement.dataset.nodeId : null;
   let restoreFocus = null;
@@ -1049,23 +1090,7 @@ function renderGraph() {
     }
   }
   camera = state.cameras.get(cameraKey());
-  if (!camera) {
-    const box = svg.getBoundingClientRect();
-    // Fit small diagrams on entry; keep large ones readable and navigable.
-    const scale = Math.max(0.55, Math.min(0.9, (box.width || 700) / layout.width, (box.height || 500) / layout.height));
-    const width = (box.width || 700) / scale,
-      height = (box.height || 500) / scale;
-    const active = graph.nodes.find((n) => n.status === "running");
-    const pos = active ? layout.positions.get(active.id) : null;
-    camera = {
-      viewportWidth: box.width,
-      x: (layout.width - width) / 2,
-      y: pos ? Math.max(0, pos.y - height / 3) : Math.min(0, (layout.height - height) / 2),
-      width,
-      height,
-    };
-    state.cameras.set(cameraKey(), camera);
-  }
+  if (!camera) readableCamera();
   applyCamera();
   if (restoreFocus) restoreFocus.focus({ preventScroll: true });
 }
@@ -1277,14 +1302,18 @@ function renderHistory() {
 }
 function renderActivityStrip() {
   const panel = $("activity-strip");
-  remember(panel, JSON.stringify([state.id, state.graph, state.scope, "activity"]), () => {
+  const context = JSON.stringify([state.id, state.graph, state.scope, "activity"]);
+  remember(panel, context, () => {
+    if (panel.dataset.context !== context) panel.open = false;
+    const list = $("activity-list");
     const heading = sectionHeading("Выполнения в этом графе");
     heading.append(button("Вся последовательность →", () => setTab("history")));
-    panel.replaceChildren(heading);
+    list.replaceChildren(heading);
     const records = allActivations().filter(a => a.graphId === state.graph && (!state.scope || a.scope === state.scope)).sort((a,b) => executionSequence(b,a));
-    for (const a of records.slice(0, 20)) panel.append(taskRow(a));
-    if (records.length > 20) panel.append(el("p", "muted", `Последние 20 из ${records.length}. Все проходы доступны в последовательности.`));
-    if (!records.length) panel.append(el("p", "muted", "Вызовы ещё не записаны. Граф выше показывает план."));
+    $("activity-count").textContent = number(records.length);
+    for (const a of records.slice(0, 20)) list.append(taskRow(a));
+    if (records.length > 20) list.append(el("p", "muted", `Последние 20 из ${records.length}. Все проходы доступны в последовательности.`));
+    if (!records.length) list.append(el("p", "muted", "Вызовы ещё не записаны. Граф выше показывает план."));
   });
 }
 function traceLoader() {
@@ -1625,6 +1654,20 @@ $("scope-select").addEventListener("change", () => {
   navigate({ graph: state.graph, scope: $("scope-select").value, node: state.node, tab: state.tab });
 });
 $("fit").addEventListener("click", fit);
+$("actual-size").addEventListener("click", readableCamera);
+function setGraphExpanded(expanded) {
+  document.body.dataset.graphExpanded = String(expanded);
+  $("expand-graph").setAttribute("aria-pressed", String(expanded));
+  $("expand-graph").textContent = expanded ? "↙ Вернуться к обзору" : "На всё окно ↗";
+}
+$("expand-graph").addEventListener("click", () => setGraphExpanded(document.body.dataset.graphExpanded !== "true"));
+window.addEventListener("keydown", e => {
+  if (e.key === "Escape" && document.body.dataset.graphExpanded === "true") {
+    e.preventDefault();
+    setGraphExpanded(false);
+    $("expand-graph").focus({ preventScroll: true });
+  }
+});
 $("zoom-in").addEventListener("click", () => zoom(0.8));
 $("zoom-out").addEventListener("click", () => zoom(1.25));
 $("pause").addEventListener("click", () => control("pause"));
@@ -1655,6 +1698,7 @@ $("graph").addEventListener("pointermove", (e) => {
   const box = $("graph").getBoundingClientRect();
   camera = {
     ...drag.camera,
+    mode: "manual",
     x: drag.camera.x - ((e.clientX - drag.x) * drag.camera.width) / box.width,
     y: drag.camera.y - ((e.clientY - drag.y) * drag.camera.height) / box.height,
   };
@@ -1684,7 +1728,7 @@ $("graph").addEventListener("keydown", e => {
   }
   if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) return;
   e.preventDefault();
-  camera = { ...camera, x: camera.x + (e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0) * camera.width / 8,
+  camera = { ...camera, mode: "manual", x: camera.x + (e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0) * camera.width / 8,
     y: camera.y + (e.key === "ArrowDown" ? 1 : e.key === "ArrowUp" ? -1 : 0) * camera.height / 8 };
   state.cameras.set(cameraKey(), camera); applyCamera();
 });
@@ -1692,10 +1736,13 @@ new ResizeObserver(() => {
   if (state.tab === "graph" && camera) {
     const box = $("graph").getBoundingClientRect();
     if (box.width && box.height) {
+      if (camera.mode === "fit") { fit(); return; }
       const center = camera.x + camera.width / 2;
+      const middle = camera.y + camera.height / 2;
       camera.width *= box.width / (camera.viewportWidth || box.width);
       camera.x = center - camera.width / 2;
       camera.height = (camera.width * box.height) / box.width;
+      camera.y = middle - camera.height / 2;
       camera.viewportWidth = box.width;
       state.cameras.set(cameraKey(), camera);
       const selected = layout?.positions.get(state.node);

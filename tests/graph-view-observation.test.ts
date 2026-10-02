@@ -879,7 +879,7 @@ test("archive selection keeps latest rows unselected and labels the graph as lat
     assert.match(rows[0].textContent,/последняя попытка 2 · выбрана архивная попытка 1/);
     state.tab='graph'; renderPanel();
     assert.match($('graph-context').textContent,/последнее состояние узлов, не результат архивной попытки/);
-    const activity=descendants($('activity-strip')).find(n=>n.className==='task-row');
+    const activity=descendants($('activity-list')).find(n=>n.className==='task-row');
     assert.equal(activity.getAttribute('data-selected'),'false');
     assert.match(activity.textContent,/LATEST_RESULT/);
     assert.match(descendants($('graph')).find(n=>n.getAttribute('role')==='button').getAttribute('aria-label'),/последнее состояние узла/);

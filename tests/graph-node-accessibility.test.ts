@@ -251,6 +251,7 @@ window.harvestQA = () => {
   nodes[10].focus({preventScroll:true});
   const node=nodes[10].getBoundingClientRect(), frame=$('graph').getBoundingClientRect();
   const visible=node.top>=frame.top&&node.bottom<=frame.bottom&&node.left>=frame.left&&node.right<=frame.right;
+  if(!visible) throw new Error(JSON.stringify({node:node.toJSON(),frame:frame.toJSON(),camera}));
   renderPanel(); const kept=document.activeElement.dataset.nodeId==='n10';
   camera={x:0,y:0,width:50000,height:40000,viewportWidth:700}; zoom(1.25);
   const outward=camera.width; zoom(0.8); const inward=camera.width;
@@ -407,6 +408,33 @@ window.checkWaitQA = () => {
   const submit=$('wait-submit-native-wait');submit.focus();renderPanel();
   return {trusted:window.waitTrusted,kept,scrolled:before.scroll>0,submitKept:document.activeElement===$('wait-submit-native-wait')};
 };
+window.prepareCanvasQA = (count = 2) => {
+  document.body.style.removeProperty('height');document.body.style.removeProperty('overflow');
+  document.documentElement.style.removeProperty('overflow');window.scrollTo(0,0);
+  const graph=state.run.graphs[0];state.graph=graph.id;state.scope='';state.node=null;state.key=null;state.attempt=null;state.tab='graph';
+  state.run={...state.run,name:'Вертикальный процесс',status:'succeeded',failure:null,waits:[],activeKeys:[]};
+  graph.nodes=Array.from({length:count},(_,i)=>({id:'vertical-'+i,label:'Этап '+(i+1),kind:'check',status:'succeeded',children:[],activations:[]}));
+  graph.entry=graph.nodes[0].id;graph.edges=graph.nodes.slice(1).map((n,i)=>({from:graph.nodes[i].id,to:n.id}));
+  $('run-details').open=false;$('activity-strip').open=false;setGraphExpanded(false);state.cameras.clear();renderHeader();renderPanel();
+};
+window.measureCanvasQA = () => {
+  const frame=$('graph').getBoundingClientRect(), main=document.querySelector('main');
+  const nodes=Array.from(document.querySelectorAll('#graph .graph-node'));
+  return {height:frame.height,bottom:frame.bottom,width:frame.width,
+    pageOverflow:main.scrollHeight-main.clientHeight,
+    scale:nodes[0].getScreenCTM().a,
+    visible:nodes.every(n=>{const box=n.getBoundingClientRect();return box.top>=frame.top&&box.bottom<=frame.bottom&&box.left>=frame.left&&box.right<=frame.right;}),
+    drawerOpen:$('activity-strip').open,expanded:document.body.dataset.graphExpanded==='true'};
+};
+window.canvasActionQA = action => {
+  if(action==='drawer') { $('activity-strip').querySelector('summary').click();return $('activity-strip').open; }
+  if(action==='poll') { renderPanel();return; }
+  if(action==='pan-and-poll') {
+    $('actual-size').click();$('graph').focus();$('graph').dispatchEvent(new KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true}));
+    window.cameraBeforePoll=$('graph').getAttribute('viewBox');renderPanel();return;
+  }
+  $(action).click();
+};
 await fetch('/replay-result', { method: 'POST', body: document.body.getAttribute('data-replay') });` : readFileSync(new URL(name, root)));
   });
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -452,9 +480,14 @@ await fetch('/replay-result', { method: 'POST', body: document.body.getAttribute
     let sequence = 0;
     const send = (method: string, params: Record<string, unknown> = {}) => new Promise<any>((resolve, reject) => {
       const id = ++sequence;
+      const timeout = setTimeout(() => {
+        socket.removeEventListener("message", listener);
+        reject(new Error(`Chrome did not answer ${method}: ${JSON.stringify(params)}`));
+      }, 5000);
       const listener = (event: MessageEvent) => {
         const message = JSON.parse(String(event.data));
         if (message.id !== id) return;
+        clearTimeout(timeout);
         socket.removeEventListener("message", listener);
         if (message.error) reject(new Error(JSON.stringify(message.error))); else resolve(message.result);
       };
@@ -485,6 +518,7 @@ await fetch('/replay-result', { method: 'POST', body: document.body.getAttribute
       assert.equal(observation.result.value.pressed, "true");
       assert.equal(observation.result.value.focused, true);
       const harvest = await send("Runtime.evaluate", { expression: "window.harvestQA()", returnByValue: true });
+      assert.ok(!harvest.exceptionDetails,JSON.stringify(harvest.exceptionDetails));
       assert.deepEqual(harvest.result.value, {visible:true,kept:true,outward:62500,inward:50000,retainedViewport:true,textFits:true,fullName:true});
       const outlineQA=await send("Runtime.evaluate",{expression:"window.checkOutlineQA()",awaitPromise:true,returnByValue:true});
       assert.deepEqual(outlineQA.result.value,{immediate:true,afterToggle:true,connected:true,open:true,schemaFocused:true});
@@ -521,6 +555,41 @@ await fetch('/replay-result', { method: 'POST', body: document.body.getAttribute
       })()`});
       const filterQA=await send("Runtime.evaluate",{expression:"window.checkHistoryFilterQA()",returnByValue:true});
       assert.deepEqual(filterQA.result.value,{trustedKey:true,changeDelivered:true,changed:true,focused:true,selected:'issues',scroll:true,oldRemoved:true});
+      // Real geometry, not CSS string checks: the default vertical graph gets at
+      // least half the viewport, both short-chain nodes are readable and visible.
+      const measureCanvas = async () => {
+        // Headless/background Chrome may suspend animation frames after emulation.
+        const result=await send('Runtime.evaluate',{expression:'new Promise(resolve=>setTimeout(()=>resolve(window.measureCanvasQA()),80))',awaitPromise:true,returnByValue:true});
+        assert.ok(!result.exceptionDetails,JSON.stringify(result.exceptionDetails));return result.result.value;
+      };
+      for (const [width,height] of [[1440,900],[1280,800],[1512,679]] as const) {
+        await send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+        await send('Runtime.evaluate',{expression:'window.prepareCanvasQA()'});
+        const normal=await measureCanvas();
+        assert.ok(normal.height>=height*.5,JSON.stringify(normal));
+        assert.ok(normal.bottom<=height,JSON.stringify(normal));
+        assert.ok(normal.pageOverflow<=2,JSON.stringify(normal));
+        assert.ok(normal.scale>=.99 && normal.scale<=1.01,JSON.stringify(normal));
+        assert.equal(normal.visible,true);assert.equal(normal.drawerOpen,false);
+        const opened=await send('Runtime.evaluate',{expression:`window.canvasActionQA('drawer')`,returnByValue:true});assert.equal(opened.result.value,true);
+        await send('Runtime.evaluate',{expression:`window.canvasActionQA('poll')`});
+        const drawer=await measureCanvas();assert.equal(drawer.drawerOpen,true,JSON.stringify(drawer));assert.equal(drawer.height,normal.height);
+        await send('Runtime.evaluate',{expression:`window.canvasActionQA('drawer');window.canvasActionQA('expand-graph')`});
+        const expanded=await measureCanvas();assert.equal(expanded.expanded,true);
+        assert.ok(expanded.height>=height*.75,JSON.stringify(expanded));assert.equal(expanded.scale,normal.scale);
+        await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27,nativeVirtualKeyCode:27});
+        await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27,nativeVirtualKeyCode:27});
+        const restored=await measureCanvas();assert.equal(restored.expanded,false);assert.equal(restored.height,normal.height);
+        const focus=await send('Runtime.evaluate',{expression:`document.activeElement===document.getElementById('expand-graph')`,returnByValue:true});assert.equal(focus.result.value,true);
+      }
+      await send('Runtime.evaluate',{expression:`window.prepareCanvasQA(12);window.canvasActionQA('fit')`});
+      const fitted=await measureCanvas();assert.equal(fitted.visible,true);assert.ok(fitted.scale<.5);
+      await send('Runtime.evaluate',{expression:`window.canvasActionQA('expand-graph')`});
+      const refitted=await measureCanvas();assert.equal(refitted.visible,true);assert.ok(refitted.scale>fitted.scale);
+      await send('Runtime.evaluate',{expression:`window.canvasActionQA('pan-and-poll')`});
+      const read=await measureCanvas();assert.equal(read.scale,1);
+      const keptCamera=await send('Runtime.evaluate',{expression:`window.cameraBeforePoll===document.getElementById('graph').getAttribute('viewBox')`,returnByValue:true});assert.equal(keptCamera.result.value,true);
+      await send('Runtime.evaluate',{expression:`window.canvasActionQA('expand-graph')`});
       // Real CSS cascade at mobile/zoom widths. A stacked sidebar must not trap main
       // below a 100dvh body with scrolling disabled (notably 651–700px).
       for (const width of [650, 680, 700, 701]) {

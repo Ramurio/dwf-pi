@@ -93,13 +93,14 @@
                   aria-label="Ветка или вызов графа"
                   hidden
                 ></select>
-                <div>
+                <div class="graph-actions">
                   <button id="zoom-out" aria-label="Уменьшить масштаб">−</button
+                  ><button id="actual-size" aria-label="Масштаб 100%" title="Вернуть масштаб 100%">100%</button
                   ><button id="zoom-in" aria-label="Увеличить масштаб">+</button
                   ><button id="fit">Вместить</button>
+                  <button id="expand-graph" aria-pressed="false" title="Развернуть граф; Esc — вернуться">На всё окно ↗</button>
                 </div>
               </div>
-              <p id="graph-context" class="selection-context" role="status"></p>
               <div class="canvas">
                 <svg
                   id="graph"
@@ -107,18 +108,27 @@
                   aria-description="Стрелки показывают возможные переходы, цвет блоков — состояние по журналу. Колесо и +/− меняют масштаб, стрелки и перетаскивание фона перемещают схему, Home вмещает её целиком."
                 ></svg>
               </div>
+              <div class="graph-footer">
+                <p id="graph-context" class="selection-context" role="status"></p>
+                <details class="graph-key">
+                  <summary>Как читать граф</summary>
               <div class="graph-legend">
                 <span><i class="running"></i>В работе</span
                 ><span><i class="succeeded"></i>Готово</span
                 ><span><i class="failed"></i>Ошибка</span
                 ><span><i class="unvisited"></i>Не запускался</span
                 ><span>Зелёная связь — записанный выбор · синяя — выбранная запись трассы</span
-                ><span class="legend-note"
-                  >Колесо — масштаб · тяни, чтобы переместить</span
+                ><span
+                  >Колесо — масштаб · перетаскивание фона — перемещение · Home — весь граф</span
                 >
               </div>
+                </details>
+              </div>
             </div>
-            <section id="activity-strip" aria-label="Выполнения текущего графа"></section>
+            <details id="activity-strip" aria-label="Выполнения текущего графа">
+              <summary>Выполнения в этом графе <span id="activity-count"></span><small>Раскрыть список</small></summary>
+              <div id="activity-list"></div>
+            </details>
             <div id="content-panel" hidden></div>
           </section>
           <aside
